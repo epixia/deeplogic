@@ -1,0 +1,57 @@
+:root {
+  --bg: #070b12;
+  --card: #0e1726;
+  --line: rgba(120, 180, 220, 0.14);
+  --cyan: #6fe3f0;
+  --ink: #eaf3fb;
+  --mut: #8ea3b8;
+  --grad: linear-gradient(120deg, #6fe3f0 0%, #49a0e6 45%, #5560e8 100%);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+.wrap { max-width: 1040px; margin: 0 auto; padding: 40px 24px; }
+
+header { display: flex; align-items: baseline; gap: 8px; margin-bottom: 28px; }
+.brand { font-weight: 800; letter-spacing: 0.14em; font-size: 18px; }
+.sub { color: var(--mut); font-size: 14px; }
+
+.error {
+  border: 1px solid #e0566f;
+  background: rgba(224, 86, 111, 0.08);
+  color: #ffb3c0;
+  border-radius: 10px;
+  padding: 12px 16px;
+  margin-bottom: 20px;
+  font-size: 14px;
+}
+
+.kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  margin-bottom: 24px;
+}
+.kpi { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+.kpi .k { font-size: 12px; color: var(--mut); }
+.kpi .v { font-size: 24px; font-weight: 800; margin-top: 4px; }
+.kpi .d { font-size: 12px; margin-top: 2px; }
+.kpi .d.up { color: #5fcf8a; }
+.kpi .d.down { color: #6fe3f0; }
+
+.panel { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 18px; }
+.ph { font-size: 12px; color: var(--mut); margin-bottom: 14px; text-transform: uppercase; letter-spacing: 0.1em; }
+.agent { display: flex; align-items: center; gap: 12px; padding: 9px 0; border-bottom: 1px dashed var(--line); font-size: 14px; color: var(--mut); }
+.agent:last-child { border: 0; }
+.agent .ic { width: 20px; height: 20px; border-radius: 6px; background: var(--grad); color: #04121b; font-size: 11px; font-weight: 800; display: grid; place-items: center; flex: none; }
+.agent .ok { margin-left: auto; color: #5fcf8a; font-size: 12px; }
+.agent .run { margin-left: auto; color: var(--cyan); font-size: 12px; }
+
+footer { margin-top: 28px; color: var(--mut); font-size: 12px; }

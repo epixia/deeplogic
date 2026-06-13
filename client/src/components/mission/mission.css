@@ -1,0 +1,505 @@
+/* ============================================================
+   Mission Control — control-room styling.
+   Builds on theme.css tokens; mirrors the landing console mockup.
+   ============================================================ */
+
+.mc-page {
+  position: relative;
+  z-index: 1;
+  padding: 28px 0 80px;
+}
+
+/* ---------- header ---------- */
+.mc-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px;
+  flex-wrap: wrap;
+  margin-bottom: 22px;
+}
+.mc-head h1 {
+  font-size: clamp(24px, 3vw, 34px);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin-top: 6px;
+}
+.mc-head .mc-sub {
+  color: var(--mut);
+  font-size: 14px;
+  margin-top: 4px;
+}
+.mc-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--cyan);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 7px 13px;
+  background: rgba(111, 227, 240, 0.06);
+}
+.mc-live .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--cyan);
+  box-shadow: 0 0 10px var(--cyan);
+  animation: mc-pulse 1.6s ease-in-out infinite;
+}
+.mc-live.off {
+  color: var(--mut2);
+}
+.mc-live.off .dot {
+  background: var(--mut2);
+  box-shadow: none;
+  animation: none;
+}
+@keyframes mc-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* ---------- KPI strip ---------- */
+.mc-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  margin-bottom: 22px;
+}
+.mc-kpi {
+  border-radius: 14px;
+  background: linear-gradient(180deg, var(--card2), var(--card));
+  border: 1px solid var(--line);
+  padding: 14px 16px;
+}
+.mc-kpi .k {
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--mut2);
+}
+.mc-kpi .v {
+  font-size: 22px;
+  font-weight: 800;
+  margin-top: 4px;
+  letter-spacing: -0.01em;
+}
+.mc-kpi .v.up {
+  color: var(--cyan);
+}
+.mc-kpi .d {
+  font-size: 12px;
+  margin-top: 3px;
+  font-weight: 600;
+}
+.mc-kpi .d.good {
+  color: var(--good);
+}
+.mc-kpi .d.bad {
+  color: var(--bad);
+}
+
+/* ---------- main grid ---------- */
+.mc-grid {
+  display: grid;
+  grid-template-columns: 1fr 360px;
+  gap: 18px;
+  align-items: start;
+}
+@media (max-width: 960px) {
+  .mc-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.mc-col {
+  display: grid;
+  gap: 18px;
+}
+
+/* ---------- console panel (shared shell) ---------- */
+.mc-panel {
+  position: relative;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: linear-gradient(
+    180deg,
+    rgba(18, 30, 50, 0.55),
+    rgba(10, 17, 30, 0.55)
+  );
+  overflow: hidden;
+}
+[data-theme='light'] .mc-panel {
+  background: var(--card);
+}
+.mc-panel-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.mc-panel-top i {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #2a3a4f;
+  display: inline-block;
+}
+.mc-panel-top i:nth-child(1) {
+  background: var(--bad);
+}
+.mc-panel-top i:nth-child(2) {
+  background: var(--warn);
+}
+.mc-panel-top i:nth-child(3) {
+  background: #28c840;
+}
+.mc-panel-title {
+  margin-left: 8px;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  color: var(--mut);
+  font-weight: 600;
+}
+.mc-panel-top .right {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--mut2);
+}
+.mc-panel-body {
+  padding: 14px 16px;
+}
+
+/* ---------- live feed ---------- */
+.mc-feed {
+  max-height: 360px;
+  overflow-y: auto;
+  font-family: 'SFMono-Regular', ui-monospace, 'Cascadia Code', Consolas,
+    'Liberation Mono', monospace;
+}
+.mc-feed-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  padding: 9px 0;
+  border-bottom: 1px dashed var(--line);
+  font-size: 12.5px;
+  animation: mc-fade-in 0.32s ease both;
+}
+.mc-feed-row:last-child {
+  border-bottom: 0;
+}
+@keyframes mc-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+.mc-feed-row .ic {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  font-weight: 800;
+  color: #04121b;
+  background: var(--grad);
+}
+.mc-feed-row.alert .ic {
+  background: var(--bad);
+  color: #fff;
+}
+.mc-feed-row .body {
+  flex: 1;
+  min-width: 0;
+}
+.mc-feed-row .agent {
+  color: var(--cyan);
+  font-weight: 700;
+}
+.mc-feed-row .msg {
+  color: var(--ink);
+}
+.mc-feed-row .meta {
+  color: var(--mut2);
+  font-size: 10.5px;
+  margin-top: 2px;
+}
+.mc-status {
+  margin-left: auto;
+  flex: none;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  align-self: center;
+}
+.mc-status.running {
+  color: var(--cyan);
+  background: rgba(111, 227, 240, 0.1);
+}
+.mc-status.done {
+  color: var(--good);
+  background: rgba(95, 207, 138, 0.12);
+}
+.mc-status.alert {
+  color: var(--bad);
+  background: rgba(255, 95, 87, 0.14);
+}
+
+/* ---------- anomaly alert cards ---------- */
+.mc-alerts {
+  display: grid;
+  gap: 16px;
+}
+.mc-alert {
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  overflow: hidden;
+  position: relative;
+}
+.mc-alert::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--warn);
+}
+.mc-alert.sev-high::before {
+  background: var(--bad);
+}
+.mc-alert.sev-medium::before {
+  background: var(--warn);
+}
+.mc-alert.sev-low::before {
+  background: var(--cyan);
+}
+.mc-alert-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 18px 12px;
+  flex-wrap: wrap;
+}
+.mc-alert-head .title {
+  font-size: 16px;
+  font-weight: 700;
+}
+.mc-alert-head .sub {
+  font-size: 12px;
+  color: var(--mut2);
+  margin-top: 2px;
+}
+.mc-sev {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+.mc-sev.high {
+  color: var(--bad);
+  background: rgba(255, 95, 87, 0.14);
+  border: 1px solid rgba(255, 95, 87, 0.3);
+}
+.mc-sev.medium {
+  color: var(--warn);
+  background: rgba(254, 188, 46, 0.14);
+  border: 1px solid rgba(254, 188, 46, 0.3);
+}
+.mc-sev.low {
+  color: var(--cyan);
+  background: rgba(111, 227, 240, 0.12);
+  border: 1px solid rgba(111, 227, 240, 0.28);
+}
+
+.mc-metrics {
+  display: flex;
+  gap: 22px;
+  padding: 0 18px 12px;
+  flex-wrap: wrap;
+}
+.mc-metric .ml {
+  font-size: 10.5px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--mut2);
+}
+.mc-metric .mv {
+  font-size: 17px;
+  font-weight: 800;
+  margin-top: 2px;
+}
+
+.mc-brief {
+  margin: 0 18px 12px;
+  padding: 13px 14px;
+  border-radius: 12px;
+  background: var(--card2);
+  border: 1px solid var(--line);
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--ink);
+}
+.mc-root {
+  display: flex;
+  gap: 9px;
+  align-items: baseline;
+  padding: 0 18px 14px;
+  font-size: 13px;
+  color: var(--mut);
+}
+.mc-root b {
+  color: var(--ink);
+}
+.mc-root .rc-chip {
+  color: var(--cyan);
+  font-weight: 700;
+}
+
+.mc-rec {
+  margin: 0 18px 16px;
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px dashed var(--line);
+  background: rgba(63, 134, 224, 0.05);
+}
+.mc-rec .rec-eyebrow {
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--cyan);
+  font-weight: 800;
+}
+.mc-rec .rec-title {
+  font-weight: 700;
+  font-size: 14.5px;
+  margin-top: 5px;
+}
+.mc-rec .rec-detail {
+  color: var(--mut);
+  font-size: 13px;
+  margin-top: 4px;
+  line-height: 1.55;
+}
+.mc-rec-foot {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 13px;
+  flex-wrap: wrap;
+}
+.mc-rec-foot .action-code {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 11.5px;
+  color: var(--mut2);
+  background: var(--bg2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 4px 9px;
+}
+.mc-approved {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--good);
+}
+
+/* ---------- audit log ---------- */
+.mc-audit {
+  display: grid;
+  gap: 0;
+  max-height: 320px;
+  overflow-y: auto;
+}
+.mc-audit-row {
+  display: flex;
+  gap: 11px;
+  align-items: flex-start;
+  padding: 11px 0;
+  border-bottom: 1px dashed var(--line);
+  font-size: 13px;
+}
+.mc-audit-row:last-child {
+  border-bottom: 0;
+}
+.mc-audit-row .who {
+  flex: none;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  margin-top: 1px;
+}
+.mc-audit-row .who.user {
+  color: var(--cyan);
+  background: rgba(111, 227, 240, 0.1);
+}
+.mc-audit-row .who.agent {
+  color: var(--good);
+  background: rgba(95, 207, 138, 0.12);
+}
+.mc-audit-row .a-body {
+  flex: 1;
+  min-width: 0;
+}
+.mc-audit-row .a-summary {
+  color: var(--ink);
+}
+.mc-audit-row .a-ts {
+  color: var(--mut2);
+  font-size: 11px;
+  margin-top: 2px;
+}
+
+/* ---------- empty / loading states ---------- */
+.mc-empty {
+  text-align: center;
+  color: var(--mut);
+  font-size: 13.5px;
+  padding: 26px 10px;
+}
+.mc-skel {
+  height: 78px;
+  border-radius: 14px;
+  background: linear-gradient(
+    90deg,
+    var(--card) 25%,
+    var(--card2) 50%,
+    var(--card) 75%
+  );
+  background-size: 200% 100%;
+  animation: mc-shimmer 1.3s ease infinite;
+}
+@keyframes mc-shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}

@@ -1,0 +1,35 @@
+<svg width="600" height="200" viewBox="0 0 600 200" xmlns="http://www.w3.org/2000/svg" font-family="'Segoe UI',Inter,Arial,sans-serif">
+  <defs>
+    <linearGradient id="dlg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7ff0fb"/>
+      <stop offset="0.5" stop-color="#49a0e6"/>
+      <stop offset="1" stop-color="#5560e8"/>
+    </linearGradient>
+    <radialGradient id="bgg" cx="30%" cy="20%" r="90%">
+      <stop offset="0" stop-color="#0e1a2c"/>
+      <stop offset="1" stop-color="#070b12"/>
+    </radialGradient>
+    <filter id="glow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="3" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <rect x="0" y="0" width="600" height="200" rx="26" fill="url(#bgg)"/>
+
+  <!-- mark -->
+  <g transform="translate(40,40) scale(1.0)">
+    <g fill="none" stroke="url(#dlg)" stroke-linejoin="round" stroke-linecap="round" filter="url(#glow)">
+      <path d="M60 22 L92 78 L28 78 Z" stroke-width="9"/>
+      <path d="M60 42 L77 71 L43 71 Z" stroke-width="5" opacity="0.5"/>
+    </g>
+    <circle cx="60" cy="22" r="6.4" fill="url(#dlg)"/>
+    <circle cx="92" cy="78" r="6.4" fill="url(#dlg)"/>
+    <circle cx="28" cy="78" r="6.4" fill="url(#dlg)"/>
+    <circle cx="57.4" cy="19.4" r="2" fill="#eafdff" opacity="0.85"/>
+  </g>
+
+  <!-- wordmark -->
+  <text x="196" y="98" fill="#eaf3fb" font-size="44" font-weight="700" letter-spacing="6">DEEP<tspan fill="url(#dlg)">LOGIC</tspan></text>
+  <text x="198" y="126" fill="#7e93a8" font-size="13.5" font-weight="600" letter-spacing="4.5">AGENTIC&#160;&#160;MISSION&#160;&#160;CONTROL</text>
+</svg>

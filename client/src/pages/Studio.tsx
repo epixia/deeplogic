@@ -1,0 +1,436 @@
+// Studio — home for DeepLogic Studio (the Lovable/Replit-style report builder).
+// Tabs: "My reports" (the caller's private silo), "Shared" (org/published from
+// others), and the Context Library manager. A "New report" modal seeds a project
+// from blank, an uploaded .html, or a grounding semantic model, then opens it.
+
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+} from 'react'
+import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useAuth } from '../auth/AuthContext'
+import {
+  createStudioProject,
+  deleteStudioProject,
+  listModels,
+  listStudioProjects,
+  type StudioProjectListItem,
+  type StudioVisibility,
+} from '../lib/api'
+import type { ModelListItem } from '../types'
+import ContextLibrary from '../components/studio/ContextLibrary'
+import ReportThumb from '../components/studio/ReportThumb'
+import '../components/studio/studio.css'
+
+type Tab = 'mine' | 'shared' | 'context'
+type StartMode = 'blank' | 'upload' | 'model'
+
+function visibilityPill(v: StudioVisibility) {
+  if (v === 'published')
+    return <span className="studio-pill studio-pill-published">Published</span>
+  if (v === 'org')
+    return <span className="studio-pill studio-pill-org">Org</span>
+  return <span className="studio-pill studio-pill-private">Private</span>
+}
+
+function fmtDate(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  return d.toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  })
+}
+
+export default function Studio() {
+  const { orgId = '' } = useParams<{ orgId: string }>()
+  const { getAccessToken } = useAuth()
+  const navigate = useNavigate()
+
+  const [tab, setTab] = useState<Tab>('mine')
+  const [projects, setProjects] = useState<StudioProjectListItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [busyId, setBusyId] = useState<string | null>(null)
+
+  // new-report modal
+  const [showNew, setShowNew] = useState(false)
+  const [name, setName] = useState('')
+  const [startMode, setStartMode] = useState<StartMode>('blank')
+  const [seedHtml, setSeedHtml] = useState('')
+  const [seedFileName, setSeedFileName] = useState('')
+  const [models, setModels] = useState<ModelListItem[]>([])
+  const [modelId, setModelId] = useState<string>('')
+  const [creating, setCreating] = useState(false)
+  const [formError, setFormError] = useState<string | null>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  const load = useCallback(async () => {
+    setError(null)
+    try {
+      const token = await getAccessToken()
+      if (!token) throw new Error('Session expired — please sign in again.')
+      setProjects(await listStudioProjects(token, orgId))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load reports.')
+    } finally {
+      setLoading(false)
+    }
+  }, [getAccessToken, orgId])
+
+  useEffect(() => {
+    setLoading(true)
+    void load()
+  }, [load])
+
+  const mine = useMemo(() => projects.filter((p) => p.isOwner), [projects])
+  const shared = useMemo(
+    () =>
+      projects.filter((p) => !p.isOwner && p.visibility !== 'private'),
+    [projects],
+  )
+
+  function openNew() {
+    setName('')
+    setStartMode('blank')
+    setSeedHtml('')
+    setSeedFileName('')
+    setModelId('')
+    setFormError(null)
+    if (fileRef.current) fileRef.current.value = ''
+    setShowNew(true)
+    // lazy-load models for the grounding option
+    void (async () => {
+      try {
+        const token = await getAccessToken()
+        if (!token) return
+        setModels(await listModels(token, orgId))
+      } catch {
+        /* grounding optional */
+      }
+    })()
+  }
+
+  async function onSeedFile(file: File) {
+    try {
+      const text = await file.text()
+      setSeedHtml(text)
+      setSeedFileName(file.name)
+      if (!name) setName(file.name.replace(/\.html?$/i, ''))
+    } catch {
+      setFormError('Could not read that .html file.')
+    }
+  }
+
+  async function submitNew(e: FormEvent) {
+    e.preventDefault()
+    setFormError(null)
+    if (!name.trim()) {
+      setFormError('Give your report a name.')
+      return
+    }
+    if (startMode === 'upload' && !seedHtml) {
+      setFormError('Upload an .html file to seed from.')
+      return
+    }
+    if (startMode === 'model' && !modelId) {
+      setFormError('Pick a model to ground in.')
+      return
+    }
+    setCreating(true)
+    try {
+      const token = await getAccessToken()
+      if (!token) throw new Error('Session expired — please sign in again.')
+      const project = await createStudioProject(token, orgId, {
+        name: name.trim(),
+        seedHtml: startMode === 'upload' ? seedHtml : undefined,
+        modelId: startMode === 'model' ? modelId : undefined,
+      })
+      navigate(`/app/${orgId}/studio/${project.id}`)
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : 'Could not create report.')
+      setCreating(false)
+    }
+  }
+
+  async function remove(p: StudioProjectListItem) {
+    if (!p.isOwner) return
+    setBusyId(p.id)
+    try {
+      const token = await getAccessToken()
+      if (!token) throw new Error('Session expired.')
+      await deleteStudioProject(token, orgId, p.id)
+      setProjects((prev) => prev.filter((x) => x.id !== p.id))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Delete failed.')
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  function ProjectCard({
+    p,
+    canDelete,
+  }: {
+    p: StudioProjectListItem
+    canDelete: boolean
+  }) {
+    return (
+      <div className="studio-card">
+        <Link
+          to={`/app/${orgId}/studio/${p.id}`}
+          className="studio-card-link"
+          style={{ display: 'flex', flexDirection: 'column', gap: 10 }}
+        >
+          <ReportThumb html={p.html} />
+          <h3>{p.name}</h3>
+          <div className="studio-card-meta">
+            {visibilityPill(p.visibility)}
+            <span>Updated {fmtDate(p.updatedAt)}</span>
+          </div>
+          <div className="studio-card-owner">
+            <span className="studio-owner-av">
+              {(p.isOwner ? 'You' : p.ownerEmail || '?').charAt(0).toUpperCase()}
+            </span>
+            <span className="studio-owner-name">
+              {p.isOwner ? 'Owned by you' : `Owned by ${p.ownerEmail || 'a teammate'}`}
+            </span>
+          </div>
+        </Link>
+        <div className="studio-card-foot">
+          <Link
+            to={`/app/${orgId}/studio/${p.id}`}
+            className="btn btn-ghost btn-xs"
+          >
+            {p.isOwner ? 'Open' : 'View'}
+          </Link>
+          {canDelete && (
+            <button
+              type="button"
+              className="btn btn-danger btn-xs"
+              disabled={busyId === p.id}
+              onClick={() => void remove(p)}
+            >
+              Delete
+            </button>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <main className="wrap studio">
+      <header className="studio-head">
+        <div>
+          <span className="eyebrow">Reports</span>
+          <h1>
+            Vibecode a <span className="grad-text">report</span>.
+          </h1>
+          <p className="studio-lead">
+            Chat to generate self-contained HTML reports with live preview, code,
+            and versions. Ground them in your real KPIs and an augmented context
+            library. Share to your org or publish.
+          </p>
+        </div>
+        <button type="button" className="btn btn-primary" onClick={openNew}>
+          + New report
+        </button>
+      </header>
+
+      <div className="studio-tabs">
+        <button
+          type="button"
+          className={`studio-tab ${tab === 'mine' ? 'active' : ''}`}
+          onClick={() => setTab('mine')}
+        >
+          My reports<span className="count">{mine.length}</span>
+        </button>
+        <button
+          type="button"
+          className={`studio-tab ${tab === 'shared' ? 'active' : ''}`}
+          onClick={() => setTab('shared')}
+        >
+          Shared<span className="count">{shared.length}</span>
+        </button>
+        <button
+          type="button"
+          className={`studio-tab ${tab === 'context' ? 'active' : ''}`}
+          onClick={() => setTab('context')}
+        >
+          Context Library
+        </button>
+      </div>
+
+      {error && <div className="studio-error">{error}</div>}
+
+      {tab === 'context' ? (
+        <ContextLibrary orgId={orgId} />
+      ) : tab === 'mine' ? (
+        loading ? (
+          <div className="studio-empty">Loading your reports…</div>
+        ) : (
+          <div className="studio-grid">
+            <button
+              type="button"
+              className="studio-card studio-card-new"
+              onClick={openNew}
+            >
+              <span className="plus">+</span>
+              New report
+            </button>
+            {mine.map((p) => (
+              <ProjectCard key={p.id} p={p} canDelete />
+            ))}
+          </div>
+        )
+      ) : loading ? (
+        <div className="studio-empty">Loading shared reports…</div>
+      ) : shared.length === 0 ? (
+        <div className="studio-empty">
+          No shared reports yet. When teammates share to the org or publish,
+          they appear here.
+        </div>
+      ) : (
+        <div className="studio-grid">
+          {shared.map((p) => (
+            <ProjectCard key={p.id} p={p} canDelete={false} />
+          ))}
+        </div>
+      )}
+
+      {showNew && (
+        <div
+          className="studio-modal-backdrop"
+          onClick={() => !creating && setShowNew(false)}
+        >
+          <form
+            className="studio-modal"
+            onClick={(e) => e.stopPropagation()}
+            onSubmit={submitNew}
+          >
+            <h2>New report</h2>
+            <p className="studio-modal-sub">
+              Start blank, seed from an existing HTML report, or ground in one of
+              your org&apos;s semantic models.
+            </p>
+
+            <label className="studio-field">
+              <span>Name</span>
+              <input
+                className="studio-input"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Q3 Revenue Review"
+                autoFocus
+              />
+            </label>
+
+            <label className="studio-field">
+              <span>Start from</span>
+              <div className="studio-seg">
+                <button
+                  type="button"
+                  className={`studio-seg-btn ${
+                    startMode === 'blank' ? 'active' : ''
+                  }`}
+                  onClick={() => setStartMode('blank')}
+                >
+                  Blank
+                </button>
+                <button
+                  type="button"
+                  className={`studio-seg-btn ${
+                    startMode === 'upload' ? 'active' : ''
+                  }`}
+                  onClick={() => setStartMode('upload')}
+                >
+                  Upload .html
+                </button>
+                <button
+                  type="button"
+                  className={`studio-seg-btn ${
+                    startMode === 'model' ? 'active' : ''
+                  }`}
+                  onClick={() => setStartMode('model')}
+                >
+                  From a model
+                </button>
+              </div>
+            </label>
+
+            {startMode === 'upload' && (
+              <label className="studio-field">
+                <span>HTML file</span>
+                <input
+                  ref={fileRef}
+                  className="studio-file"
+                  type="file"
+                  accept=".html,.htm"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0]
+                    if (f) void onSeedFile(f)
+                  }}
+                />
+                {seedFileName && (
+                  <p className="studio-file" style={{ marginTop: 6 }}>
+                    {seedFileName} · {seedHtml.length.toLocaleString()} chars
+                  </p>
+                )}
+              </label>
+            )}
+
+            {startMode === 'model' && (
+              <label className="studio-field">
+                <span>Grounding model</span>
+                <select
+                  className="studio-select"
+                  value={modelId}
+                  onChange={(e) => setModelId(e.target.value)}
+                >
+                  <option value="">Select a model…</option>
+                  {models.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name}
+                    </option>
+                  ))}
+                </select>
+                {models.length === 0 && (
+                  <p className="studio-file" style={{ marginTop: 6 }}>
+                    No models ingested yet — ingest one first to ground reports
+                    in real KPIs.
+                  </p>
+                )}
+              </label>
+            )}
+
+            {formError && <div className="studio-error">{formError}</div>}
+
+            <div className="studio-modal-actions">
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => setShowNew(false)}
+                disabled={creating}
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="btn btn-primary"
+                disabled={creating}
+              >
+                {creating ? 'Creating…' : 'Create & open'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+    </main>
+  )
+}

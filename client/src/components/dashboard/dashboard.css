@@ -1,0 +1,296 @@
+/* ============================================================
+   DeepLogic — Dashboard page styles (owned by the dashboard agent).
+   Uses design tokens from theme.css (--bg, --card, --line, --grad, etc.).
+   ============================================================ */
+
+.dl-dash {
+  position: relative;
+  z-index: 1;
+  padding: 28px 0 80px;
+}
+
+/* ---------- page header ---------- */
+.dl-dash__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 22px;
+}
+.dl-dash__title {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.dl-dash__title .mark {
+  flex: none;
+}
+.dl-dash__title h1 {
+  font-size: clamp(24px, 3vw, 34px);
+  letter-spacing: -0.02em;
+  font-weight: 800;
+  line-height: 1.1;
+}
+.dl-dash__sub {
+  color: var(--mut);
+  font-size: 13.5px;
+  margin-top: 4px;
+}
+.dl-dash__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* ---------- connectors strip ---------- */
+.dl-connstrip {
+  margin-bottom: 22px;
+  padding: 16px 18px;
+  border-radius: 14px;
+  background: var(--card);
+  border: 1px solid var(--line);
+}
+.dl-connstrip__lbl {
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--mut2);
+  margin-bottom: 12px;
+}
+.dl-connstrip__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.dl-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--card2);
+  font-size: 13px;
+  color: var(--ink);
+}
+.dl-chip__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--good);
+  box-shadow: 0 0 8px var(--good);
+  flex: none;
+}
+.dl-chip__dot.is-syncing {
+  background: var(--warn);
+  box-shadow: 0 0 8px var(--warn);
+  animation: dl-pulse 1.4s ease-in-out infinite;
+}
+@keyframes dl-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+.dl-chip__name {
+  font-weight: 600;
+}
+.dl-chip__kind {
+  color: var(--mut);
+}
+.dl-chip__tables {
+  color: var(--mut2);
+  font-size: 11.5px;
+  padding: 1px 7px;
+  border-radius: 6px;
+  background: rgba(120, 180, 220, 0.08);
+}
+
+/* ---------- filters ---------- */
+.dl-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 16px;
+  padding: 16px 18px;
+  margin-bottom: 20px;
+}
+.dl-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 150px;
+}
+.dl-filter label {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--mut2);
+}
+.dl-select {
+  height: 38px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--bg2);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.dl-select:hover {
+  border-color: rgba(120, 180, 220, 0.32);
+}
+.dl-select:focus-visible {
+  outline: none;
+  border-color: var(--cyan);
+  box-shadow: 0 0 0 2px rgba(111, 227, 240, 0.25);
+}
+.dl-filters__reset {
+  margin-left: auto;
+}
+
+/* ---------- KPI cards ---------- */
+.dl-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 14px;
+  margin-bottom: 22px;
+}
+.dl-kpi-card {
+  text-align: left;
+  padding: 16px 18px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+.dl-kpi-card:hover {
+  transform: translateY(-3px);
+  border-color: rgba(120, 180, 220, 0.35);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.3);
+}
+[data-theme='light'] .dl-kpi-card:hover {
+  box-shadow: 0 12px 30px rgba(20, 55, 90, 0.1);
+}
+.dl-kpi-card.is-active {
+  border-color: transparent;
+  box-shadow: 0 0 0 1.5px var(--cyan), 0 14px 36px rgba(0, 0, 0, 0.32);
+}
+.dl-kpi-card:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--cyan);
+}
+.dl-kpi-card__name {
+  font-size: 12px;
+  color: var(--mut2);
+  letter-spacing: 0.02em;
+}
+.dl-kpi-card__value {
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin-top: 4px;
+  color: var(--ink);
+}
+.dl-kpi-card__delta {
+  font-size: 12.5px;
+  font-weight: 600;
+  margin-top: 4px;
+}
+.dl-kpi-card__delta-cmp {
+  color: var(--mut2);
+  font-weight: 500;
+}
+
+/* ---------- charts ---------- */
+.dl-charts {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 18px;
+  margin-bottom: 22px;
+}
+@media (max-width: 900px) {
+  .dl-charts {
+    grid-template-columns: 1fr;
+  }
+}
+.dl-chart-card {
+  padding: 18px 18px 8px;
+}
+.dl-chart-card__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.dl-chart-card__title {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin-top: 4px;
+}
+.dl-chart-card__meta {
+  font-size: 12px;
+  color: var(--mut2);
+  white-space: nowrap;
+}
+.dl-chart-empty {
+  padding: 48px 12px;
+  text-align: center;
+  color: var(--mut2);
+  font-size: 14px;
+}
+
+/* recharts text inherits the family */
+.dl-chart-card text {
+  font-family: inherit;
+}
+
+/* ---------- ask panel slot ---------- */
+.dl-ask-slot {
+  margin-bottom: 8px;
+}
+
+/* ---------- loading / error states ---------- */
+.dl-dash__state {
+  position: relative;
+  z-index: 1;
+  margin: 80px auto;
+  max-width: 480px;
+  text-align: center;
+  padding: 44px 28px;
+  border-radius: 16px;
+  background: var(--card);
+  border: 1px solid var(--line);
+}
+.dl-dash__state h2 {
+  font-size: 20px;
+  font-weight: 800;
+  margin-bottom: 8px;
+}
+.dl-dash__state p {
+  color: var(--mut);
+  font-size: 14px;
+  margin-bottom: 18px;
+}
+.dl-spinner {
+  width: 30px;
+  height: 30px;
+  margin: 0 auto 16px;
+  border-radius: 50%;
+  border: 3px solid var(--line);
+  border-top-color: var(--cyan);
+  animation: dl-spin 0.8s linear infinite;
+}
+@keyframes dl-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

@@ -1,0 +1,607 @@
+{
+  "C:\\sites\\deeplogic\\.claude\\settings.json": {
+    "mtime": 1781364853.1614742,
+    "ast_hash": "e1073342e958ac9f00716938c8f165e3",
+    "semantic_hash": "e1073342e958ac9f00716938c8f165e3"
+  },
+  "C:\\sites\\deeplogic\\.claude\\settings.local.json": {
+    "mtime": 1781290496.188749,
+    "ast_hash": "b98327005dba12bb4dcead847d2b4c84",
+    "semantic_hash": "b98327005dba12bb4dcead847d2b4c84"
+  },
+  "C:\\sites\\deeplogic\\.claude\\workflows\\build-deeplogic-saas.mjs": {
+    "mtime": 1781277073.7714999,
+    "ast_hash": "d6d59b66485547471f0db786773e66f2",
+    "semantic_hash": "d6d59b66485547471f0db786773e66f2"
+  },
+  "C:\\sites\\deeplogic\\.claude\\workflows\\build-deeplogic-studio.mjs": {
+    "mtime": 1781286657.6677873,
+    "ast_hash": "b0c5ff5c14deebb8d0ee01cf862daf09",
+    "semantic_hash": "b0c5ff5c14deebb8d0ee01cf862daf09"
+  },
+  "C:\\sites\\deeplogic\\.claude\\workflows\\build-deeplogic.mjs": {
+    "mtime": 1781274297.6761265,
+    "ast_hash": "c63305b12bb3cc738d1dac0f16ccce3d",
+    "semantic_hash": "c63305b12bb3cc738d1dac0f16ccce3d"
+  },
+  "C:\\sites\\deeplogic\\.vscode\\launch.json": {
+    "mtime": 1781271868.8785305,
+    "ast_hash": "8536c0b1b0a5a6da1637feed7ca91d43",
+    "semantic_hash": "8536c0b1b0a5a6da1637feed7ca91d43"
+  },
+  "C:\\sites\\deeplogic\\client\\package.json": {
+    "mtime": 1781277115.9052477,
+    "ast_hash": "557d176f521ee9df4b4eae88c8b16865",
+    "semantic_hash": "557d176f521ee9df4b4eae88c8b16865"
+  },
+  "C:\\sites\\deeplogic\\client\\src\\App.tsx": {
+    "mtime": 1781290752.1693888,
+    "ast_hash": "83c0f40651bac445cd4900de10a862a2",
+    "semantic_hash": "83c0f40651bac445cd4900de10a862a2"
+  },
+  "C:\\sites\\deeplogic\\client\\src\\auth\\AuthContext.tsx": {
+    "mtime": 1781277177.5829408,
+    "ast_hash": "797583208a3ee7132d45ff807b224741",
+    "semantic_hash": "797583208a3ee7132d45ff807b224741"
+  },
+  "C:\\sites\\deeplogic\\client\\src\\auth\\RequireAuth.tsx": {
+    "mtime": 1781277183.878992,
+    "ast_hash": "bbe67a115ef2ed98bc42d74dee39e517",
+    "semantic_hash": "bbe67a115ef2ed98bc42d74dee39e517"
+  },
+  "C:\\sites\\deeplogic\\client\\src\\components\\AskPanel.tsx": {
+    "mtime": 1781279128.5148697,
+    "ast_hash": "2f8c007c79c67c2481cb385be39b99c4",
+    "semantic_hash": "2f8c007c79c67c2481cb385be39b99c4"
+  },
+  "C:\\sites\\deeplogic\\client\\src\\components\\Logo.tsx": {
+    "mtime": 1781274452.3995788,
+    "ast_hash": "1b02338508a87e55111f2e62cefc693e",
+    "semantic_hash": "1b02338508a87e55111f2e62cefc693e"
+  },
+  "C:\\sites\\deeplogic\\client\\src\\components\\Nav.tsx": {
+    "mtime": 1781290760.9128695,
+    "ast_hash": "ab8c56337a886e79e3ae6ae1e8cf0d97",
+    "semantic_hash": "ab8c56337a886e79e3ae6ae1e8cf0d97"
+  },
+  "C:\\sites\\deeplogic\\client\\src\\components\\OrgSwitcher.tsx": {
+    "mtime": 1781277249.067747,
+    "ast_hash": "788fd3796b18bab7d48014a59ac43bde",
+    "semantic_hash": "788fd3796b18bab7d48014a59ac43bde"
+  },
+  "C:\\sites\\deeplogic\\client\\src\\components\\ThemeToggle.tsx": {
+    "mtime": 1781274459.255409,
+    "ast_hash": "5ecf3938d0e95df72b721e6ec23b3e8c",
+    "semantic_hash": "5ecf3938d0e95df72b721e6ec23b3e8c"
+  },
+  "C:\\sites\\deeplogic\\client\\src\\components\\dashboard\\ConnectorsStrip.tsx": {
+    "mtime": 1781274604.9247096,
+    "ast_hash": "0f01dbb4acd16ccf964e06ab4d4cfa0c",
+    "semantic_hash": "0f01dbb4acd16ccf964e06ab4d4cfa0c"
+  },
+  "C:\\sites\\deeplogic\\client\\src\\components\\dashboard\\DimensionBreakdown.tsx": {
+    "mtime": 1781274749.760964,
+    "ast_hash": "062f8e5f971c37fc10605f97a318dfe7",
+    "semantic_hash": "062f8e5f971c37fc10605f97a318dfe7"
+  },
+  "C:\\sites\\deeplogic\\client\\src\\components\\dashboard\\Filters.tsx": {
+    "mtime": 1781274616.9453535,
+    "ast_hash": "44708b4b9784dd91815a5471fc94c448",
+    "semantic_hash": "44708b4b9784dd91815a5471fc94c448"
+  },
+  "C:\\sites\\deeplogic\\client\\src\\components\\dashboard\\KpiCards.tsx": {
+    "mtime": 1781274626.6871452,
+    "ast_hash": "6ae04eda3261f6bedbc62edc33eeea5d",
+    "semantic_hash": "6ae04eda3261f6bedbc62edc33eeea5d"
+  },
+  "C:\\sites\\deeplogic\\client\\src\\components\\dashboard\\TimeSeriesChart.tsx": {
+    "mtime": 1781274743.8310637,
+    "ast_hash": "8eb4fc63ebf740568e45e1a808af7ff0",
+    "semantic_hash": "8eb4fc63ebf740568e45e1a808af7ff0"
+  },
+  "C:\\sites\\deeplogic\\client\\src\\components\\dashboard\\format.ts": {
+    "mtime": 1781274596.071939,
+    "ast_hash": "1ca3a06892e87be4227d85b0f8918e86",
+    "semantic_hash": "1ca3a06892e87be4227d85b0f8918e86"
+  },
+  "C:\\sites\\deeplogic\\client\\src\\components\\ingest\\DropZone.tsx": {
+    "mtime": 1781287622.6728919,
+    "ast_hash": "5357d6fc8ab1a57062f9c5678fa7fc40",
+    "semantic_hash": "5357d6fc8ab1a57062f9c5678fa7fc40"
+  },
+  "C:\\sites\\deeplogic\\client\\src\\components\\ingest\\PipelineConsole.tsx": {
+    "mtime": 1781277459.1195827,
+    "ast_hash": "dcdbb729f560739560a16b2a09af4394",
+    "semantic_hash": "dcdbb729f560739560a16b2a09af4394"
+  },
+  "C:\\sites\\deeplogic\\client\\src\\components\\ingest\\SamplePicker.tsx": {
+    "mtime": 1781287682.8670945,
+    "ast_hash": "5c84a5b715a5f7704aa6347f09a22c54",
+    "semantic_hash": "5c84a5b715a5f7704aa6347f09a22c54"
+  },
+  "C:\\sites\\deeplogic\\client\\src\\components\\mission\\AnomalyCard.tsx": {
+    "mtime": 1781274665.0608292,
+    "ast_hash": "92735bd655ac9e42f014ee4892a435db",
+    "semantic_hash": "92735bd655ac9e42f014ee4892a435db"
+  },
+  "C:\\sites\\deeplogic\\client\\src\\components\\mission\\AuditLog.tsx": {
+    "mtime": 1781274703.0439854,
+    "ast_hash": "aaf909efd5c7ed30f0ae5d1e017a1fd0",
+    "semantic_hash": "aaf909efd5c7ed30f0ae5d1e017a1fd0"
+  },
+  "C:\\sites\\deeplogic\\client\\src\\components\\mission\\KpiStrip.tsx": {
+    "mtime": 1781274639.935463,
+    "ast_hash": "6c9fb2f54694e21db86da77ce10669cb",
+    "semantic_hash": "6c9fb2f54694e21db86da77ce10669cb"
+  },
+  "C:\\sites\\deeplogic\\client\\src\\components\\mission\\LiveFeed.tsx": {
+    "mtime": 1781274650.702837,
+    "ast_hash": "f5fc12b3cdc2e62f3165ce1d4bbdc3c7",
+    "semantic_hash": "f5fc12b3cdc2e62f3165ce1d4bbdc3c7"
+  },
+  "C:\\sites\\deeplogic\\client\\src\\components\\mission\\format.ts": {
+    "mtime": 1781274631.1694503,
+    "ast_hash": "efd53db285c79bddac0b2105e9ae4a34",
+    "semantic_hash": "efd53db285c79bddac0b2105e9ae4a34"
+  },
+  "C:\\sites\\deeplogic\\client\\src\\components\\studio\\AiSettingsCard.tsx": {
+    "mtime": 1781291684.209208,
+    "ast_hash": "c62e9492eaff2301d2f5ed5a02d3bd46",
+    "semantic_hash": "c62e9492eaff2301d2f5ed5a02d3bd46"
+  },
+  "C:\\sites\\deeplogic\\client\\src\\components\\studio\\ChatPanel.tsx": {
+    "mtime": 1781291457.2558064,
+    "ast_hash": "4709d3694ad60f1d2d2a4f4d10ef9192",
+    "semantic_hash": "4709d3694ad60f1d2d2a4f4d10ef9192"
+  },
+  "C:\\sites\\deeplogic\\client\\src\\components\\studio\\ContextLibrary.tsx": {
+    "mtime": 1781286813.899163,
+    "ast_hash": "4309a36a6ec4bcff5c0eed1be608bf5a",
+    "semantic_hash": "4309a36a6ec4bcff5c0eed1be608bf5a"
+  },
+  "C:\\sites\\deeplogic\\client\\src\\components\\studio\\DataVault.tsx": {
+    "mtime": 1781289545.15774,
+    "ast_hash": "920e402e1e6538ebe7e59f79caf2f7bd",
+    "semantic_hash": "920e402e1e6538ebe7e59f79caf2f7bd"
+  },
+  "C:\\sites\\deeplogic\\client\\src\\components\\studio\\PreviewPane.tsx": {
+    "mtime": 1781291971.9210372,
+    "ast_hash": "197a44c8737f46cf765e8bb563a8757d",
+    "semantic_hash": "197a44c8737f46cf765e8bb563a8757d"
+  },
+  "C:\\sites\\deeplogic\\client\\src\\components\\studio\\ReportThumb.tsx": {
+    "mtime": 1781291889.990518,
+    "ast_hash": "df8c3c3c53e7c5d104e4144bded34e45",
+    "semantic_hash": "df8c3c3c53e7c5d104e4144bded34e45"
+  },
+  "C:\\sites\\deeplogic\\client\\src\\components\\studio\\reportTheme.ts": {
+    "mtime": 1781291879.0327086,
+    "ast_hash": "931ea1f72d1ce69222003762fd2d87c9",
+    "semantic_hash": "931ea1f72d1ce69222003762fd2d87c9"
+  },
+  "C:\\sites\\deeplogic\\client\\src\\lib\\api.ts": {
+    "mtime": 1781291838.1738348,
+    "ast_hash": "d168f9a795d115553b74c953643749a4",
+    "semantic_hash": "d168f9a795d115553b74c953643749a4"
+  },
+  "C:\\sites\\deeplogic\\client\\src\\lib\\supabase.ts": {
+    "mtime": 1781277123.2980351,
+    "ast_hash": "8b2f94e12415e4cf9f89676827faa3b5",
+    "semantic_hash": "8b2f94e12415e4cf9f89676827faa3b5"
+  },
+  "C:\\sites\\deeplogic\\client\\src\\main.tsx": {
+    "mtime": 1781274380.4825234,
+    "ast_hash": "bc981330f92e9ff12aa9c1e684d34aab",
+    "semantic_hash": "bc981330f92e9ff12aa9c1e684d34aab"
+  },
+  "C:\\sites\\deeplogic\\client\\src\\pages\\Dashboard.tsx": {
+    "mtime": 1781277539.387072,
+    "ast_hash": "7c7453b232054500986578c5d9ceb75c",
+    "semantic_hash": "7c7453b232054500986578c5d9ceb75c"
+  },
+  "C:\\sites\\deeplogic\\client\\src\\pages\\Demo.tsx": {
+    "mtime": 1781287640.7669785,
+    "ast_hash": "c2beab3a2445fe322dc6ec1436f7acc2",
+    "semantic_hash": "c2beab3a2445fe322dc6ec1436f7acc2"
+  },
+  "C:\\sites\\deeplogic\\client\\src\\pages\\Home.tsx": {
+    "mtime": 1781288159.6866047,
+    "ast_hash": "ce60bdacb08c4c02a4ef80134b3fda1b",
+    "semantic_hash": "ce60bdacb08c4c02a4ef80134b3fda1b"
+  },
+  "C:\\sites\\deeplogic\\client\\src\\pages\\Ingest.tsx": {
+    "mtime": 1781364549.1970124,
+    "ast_hash": "a8fa967a92f16f03c1195962242c0d0f",
+    "semantic_hash": "a8fa967a92f16f03c1195962242c0d0f"
+  },
+  "C:\\sites\\deeplogic\\client\\src\\pages\\Login.tsx": {
+    "mtime": 1781277208.5724964,
+    "ast_hash": "02fe99cecab3410c701194631ee1d9a5",
+    "semantic_hash": "02fe99cecab3410c701194631ee1d9a5"
+  },
+  "C:\\sites\\deeplogic\\client\\src\\pages\\Mission.tsx": {
+    "mtime": 1781277588.176436,
+    "ast_hash": "dff7307b8618f0a191e987789875efd9",
+    "semantic_hash": "dff7307b8618f0a191e987789875efd9"
+  },
+  "C:\\sites\\deeplogic\\client\\src\\pages\\Onboarding.tsx": {
+    "mtime": 1781287663.307839,
+    "ast_hash": "1719a6aa8fabb6914a8c8b8db1116283",
+    "semantic_hash": "1719a6aa8fabb6914a8c8b8db1116283"
+  },
+  "C:\\sites\\deeplogic\\client\\src\\pages\\Pricing.tsx": {
+    "mtime": 1781291037.1212885,
+    "ast_hash": "b4e338a65b7f50b38d238c72ab06d029",
+    "semantic_hash": "b4e338a65b7f50b38d238c72ab06d029"
+  },
+  "C:\\sites\\deeplogic\\client\\src\\pages\\Settings.tsx": {
+    "mtime": 1781289961.9755921,
+    "ast_hash": "f772dcdeefefd58bcc3cffbe1ac3cbff",
+    "semantic_hash": "f772dcdeefefd58bcc3cffbe1ac3cbff"
+  },
+  "C:\\sites\\deeplogic\\client\\src\\pages\\Signup.tsx": {
+    "mtime": 1781277219.6741683,
+    "ast_hash": "1696e2213f9a4641b7929d9d3517fca6",
+    "semantic_hash": "1696e2213f9a4641b7929d9d3517fca6"
+  },
+  "C:\\sites\\deeplogic\\client\\src\\pages\\Studio.tsx": {
+    "mtime": 1781291902.316657,
+    "ast_hash": "39d803b3e15560b9abb77a3a493d0da5",
+    "semantic_hash": "39d803b3e15560b9abb77a3a493d0da5"
+  },
+  "C:\\sites\\deeplogic\\client\\src\\pages\\StudioEditor.tsx": {
+    "mtime": 1781291564.603195,
+    "ast_hash": "3d18b83c789bc507d78bd373e9177b25",
+    "semantic_hash": "3d18b83c789bc507d78bd373e9177b25"
+  },
+  "C:\\sites\\deeplogic\\client\\src\\pages\\Vault.tsx": {
+    "mtime": 1781290711.3944297,
+    "ast_hash": "28fa91423cd01fa7c42f57666a2fb235",
+    "semantic_hash": "28fa91423cd01fa7c42f57666a2fb235"
+  },
+  "C:\\sites\\deeplogic\\client\\src\\types.ts": {
+    "mtime": 1781274392.164938,
+    "ast_hash": "31dc55844e10b83efa23c5c12e387ef6",
+    "semantic_hash": "31dc55844e10b83efa23c5c12e387ef6"
+  },
+  "C:\\sites\\deeplogic\\client\\src\\vite-env.d.ts": {
+    "mtime": 1781274343.0000105,
+    "ast_hash": "0352474ba2918efe13895edbc3780d94",
+    "semantic_hash": "0352474ba2918efe13895edbc3780d94"
+  },
+  "C:\\sites\\deeplogic\\client\\tsconfig.json": {
+    "mtime": 1781275665.853618,
+    "ast_hash": "1a2980dd30d979f557f2f68b4ccc6c9f",
+    "semantic_hash": "1a2980dd30d979f557f2f68b4ccc6c9f"
+  },
+  "C:\\sites\\deeplogic\\client\\tsconfig.node.json": {
+    "mtime": 1781274376.1985064,
+    "ast_hash": "d343084e5b66fcb209adee783e809230",
+    "semantic_hash": "d343084e5b66fcb209adee783e809230"
+  },
+  "C:\\sites\\deeplogic\\client\\vite.config.ts": {
+    "mtime": 1781274377.4105754,
+    "ast_hash": "038c625515854a1c21c2069bfeff8938",
+    "semantic_hash": "038c625515854a1c21c2069bfeff8938"
+  },
+  "C:\\sites\\deeplogic\\package.json": {
+    "mtime": 1781290507.3319945,
+    "ast_hash": "f996b99bbf7eac58ed193e9ec8223d39",
+    "semantic_hash": "f996b99bbf7eac58ed193e9ec8223d39"
+  },
+  "C:\\sites\\deeplogic\\scripts\\smoke.mjs": {
+    "mtime": 1781277800.7043612,
+    "ast_hash": "833d4a4d15631430d779ba8629b526e8",
+    "semantic_hash": "833d4a4d15631430d779ba8629b526e8"
+  },
+  "C:\\sites\\deeplogic\\scripts\\studio-smoke.mjs": {
+    "mtime": 1781287298.7631152,
+    "ast_hash": "d40c9433757cf5d782986a04e2d7c3b2",
+    "semantic_hash": "d40c9433757cf5d782986a04e2d7c3b2"
+  },
+  "C:\\sites\\deeplogic\\scripts\\studio2-smoke.mjs": {
+    "mtime": 1781290316.5998497,
+    "ast_hash": "96278d5f1a76f227b58e401d74bed38b",
+    "semantic_hash": "96278d5f1a76f227b58e401d74bed38b"
+  },
+  "C:\\sites\\deeplogic\\server\\package.json": {
+    "mtime": 1781277752.6506479,
+    "ast_hash": "976d09d821fe33ed772af1ec76e7353b",
+    "semantic_hash": "976d09d821fe33ed772af1ec76e7353b"
+  },
+  "C:\\sites\\deeplogic\\server\\src\\auth.ts": {
+    "mtime": 1781277142.542719,
+    "ast_hash": "868badacbac6e1040f0bf9304b1b9b39",
+    "semantic_hash": "868badacbac6e1040f0bf9304b1b9b39"
+  },
+  "C:\\sites\\deeplogic\\server\\src\\data\\_generator.ts": {
+    "mtime": 1781274419.1444628,
+    "ast_hash": "00df11adb8b529f8a3304bd330c58b5b",
+    "semantic_hash": "00df11adb8b529f8a3304bd330c58b5b"
+  },
+  "C:\\sites\\deeplogic\\server\\src\\data\\atlasRetail.ts": {
+    "mtime": 1781274443.0580864,
+    "ast_hash": "c854ce5dd29ada66dbfca6c35e1766e1",
+    "semantic_hash": "c854ce5dd29ada66dbfca6c35e1766e1"
+  },
+  "C:\\sites\\deeplogic\\server\\src\\data\\index.ts": {
+    "mtime": 1781274471.6626353,
+    "ast_hash": "429a4d4ed8ca3d53339146fe8526d4a5",
+    "semantic_hash": "429a4d4ed8ca3d53339146fe8526d4a5"
+  },
+  "C:\\sites\\deeplogic\\server\\src\\data\\northwindSaas.ts": {
+    "mtime": 1781274464.4527915,
+    "ast_hash": "c0a0a2a94de2280a420b902d4e35c4c2",
+    "semantic_hash": "c0a0a2a94de2280a420b902d4e35c4c2"
+  },
+  "C:\\sites\\deeplogic\\server\\src\\engine\\anomalyDetector.ts": {
+    "mtime": 1781274682.5554354,
+    "ast_hash": "4d7ff4d4c72d53bd58e418a616299860",
+    "semantic_hash": "4d7ff4d4c72d53bd58e418a616299860"
+  },
+  "C:\\sites\\deeplogic\\server\\src\\engine\\ask.ts": {
+    "mtime": 1781274703.9637282,
+    "ast_hash": "93d5bb35c2014eece7d5a1dad99031fc",
+    "semantic_hash": "93d5bb35c2014eece7d5a1dad99031fc"
+  },
+  "C:\\sites\\deeplogic\\server\\src\\engine\\briefWriter.ts": {
+    "mtime": 1781275630.6428099,
+    "ast_hash": "7d9eb6b79c0695795d8683597db971a7",
+    "semantic_hash": "7d9eb6b79c0695795d8683597db971a7"
+  },
+  "C:\\sites\\deeplogic\\server\\src\\engine\\connectorMapper.ts": {
+    "mtime": 1781274599.0884662,
+    "ast_hash": "2509e53075b5dafa4fd6f273984f461b",
+    "semantic_hash": "2509e53075b5dafa4fd6f273984f461b"
+  },
+  "C:\\sites\\deeplogic\\server\\src\\engine\\events.ts": {
+    "mtime": 1781274724.2607102,
+    "ast_hash": "13b8a42e868e051f196a1bda0cbc9152",
+    "semantic_hash": "13b8a42e868e051f196a1bda0cbc9152"
+  },
+  "C:\\sites\\deeplogic\\server\\src\\engine\\index.ts": {
+    "mtime": 1781275572.8323293,
+    "ast_hash": "8c258e479ef3833038dcebb26a37344b",
+    "semantic_hash": "8c258e479ef3833038dcebb26a37344b"
+  },
+  "C:\\sites\\deeplogic\\server\\src\\engine\\kpiExtractor.ts": {
+    "mtime": 1781274606.217769,
+    "ast_hash": "21522d8183a297a5c88281f414ab4b1e",
+    "semantic_hash": "21522d8183a297a5c88281f414ab4b1e"
+  },
+  "C:\\sites\\deeplogic\\server\\src\\engine\\recommender.ts": {
+    "mtime": 1781274641.1779532,
+    "ast_hash": "c00a5422e173449dfe2eb08a04069bd5",
+    "semantic_hash": "c00a5422e173449dfe2eb08a04069bd5"
+  },
+  "C:\\sites\\deeplogic\\server\\src\\engine\\rootCause.ts": {
+    "mtime": 1781274621.0651631,
+    "ast_hash": "cba35fb1beee05502b1a7a9291481234",
+    "semantic_hash": "cba35fb1beee05502b1a7a9291481234"
+  },
+  "C:\\sites\\deeplogic\\server\\src\\engine\\util.ts": {
+    "mtime": 1781274583.3866613,
+    "ast_hash": "bb87ef9a491be27e99a2ee76c515c7b5",
+    "semantic_hash": "bb87ef9a491be27e99a2ee76c515c7b5"
+  },
+  "C:\\sites\\deeplogic\\server\\src\\express.d.ts": {
+    "mtime": 1781277125.749349,
+    "ast_hash": "38930b0ba4cf5968d478c4fb0b82ef1b",
+    "semantic_hash": "38930b0ba4cf5968d478c4fb0b82ef1b"
+  },
+  "C:\\sites\\deeplogic\\server\\src\\index.ts": {
+    "mtime": 1781291302.9687,
+    "ast_hash": "80a897109b682275c042d4a64d249343",
+    "semantic_hash": "80a897109b682275c042d4a64d249343"
+  },
+  "C:\\sites\\deeplogic\\server\\src\\ingestParse.ts": {
+    "mtime": 1781278682.833596,
+    "ast_hash": "f1aada42cf56d702a0775004cd0331e7",
+    "semantic_hash": "f1aada42cf56d702a0775004cd0331e7"
+  },
+  "C:\\sites\\deeplogic\\server\\src\\repo.ts": {
+    "mtime": 1781277186.8760283,
+    "ast_hash": "1b218673480a71658d75938e6f60de01",
+    "semantic_hash": "1b218673480a71658d75938e6f60de01"
+  },
+  "C:\\sites\\deeplogic\\server\\src\\routes\\demo.ts": {
+    "mtime": 1781278818.944075,
+    "ast_hash": "bac9b7601d2980908e2ff291907f2340",
+    "semantic_hash": "bac9b7601d2980908e2ff291907f2340"
+  },
+  "C:\\sites\\deeplogic\\server\\src\\routes\\ingest.ts": {
+    "mtime": 1781292506.4408453,
+    "ast_hash": "ab98fbcd54298ac54582908154051313",
+    "semantic_hash": "ab98fbcd54298ac54582908154051313"
+  },
+  "C:\\sites\\deeplogic\\server\\src\\routes\\me.ts": {
+    "mtime": 1781277195.4646652,
+    "ast_hash": "a372dfe1c78e68a6abbab36970e970b5",
+    "semantic_hash": "a372dfe1c78e68a6abbab36970e970b5"
+  },
+  "C:\\sites\\deeplogic\\server\\src\\routes\\mission.ts": {
+    "mtime": 1781277275.2351828,
+    "ast_hash": "9b9c267e32ed1362485485e03725b00a",
+    "semantic_hash": "9b9c267e32ed1362485485e03725b00a"
+  },
+  "C:\\sites\\deeplogic\\server\\src\\routes\\models.ts": {
+    "mtime": 1781277237.1195076,
+    "ast_hash": "452025a7b63ba0a78714e3dc90e23539",
+    "semantic_hash": "452025a7b63ba0a78714e3dc90e23539"
+  },
+  "C:\\sites\\deeplogic\\server\\src\\routes\\orgs.ts": {
+    "mtime": 1781277215.831411,
+    "ast_hash": "5bc247b6530dc5330d071d14ad715255",
+    "semantic_hash": "5bc247b6530dc5330d071d14ad715255"
+  },
+  "C:\\sites\\deeplogic\\server\\src\\routes\\studio.ts": {
+    "mtime": 1781291829.9015207,
+    "ast_hash": "9b9782c3f572235de9977c235816b62a",
+    "semantic_hash": "9b9782c3f572235de9977c235816b62a"
+  },
+  "C:\\sites\\deeplogic\\server\\src\\sse.ts": {
+    "mtime": 1781274586.5058494,
+    "ast_hash": "f4e1e252243948605d736f13734a0a5c",
+    "semantic_hash": "f4e1e252243948605d736f13734a0a5c"
+  },
+  "C:\\sites\\deeplogic\\server\\src\\studio\\context.ts": {
+    "mtime": 1781289068.8522623,
+    "ast_hash": "20f27302598c29370663f02d60582cd2",
+    "semantic_hash": "20f27302598c29370663f02d60582cd2"
+  },
+  "C:\\sites\\deeplogic\\server\\src\\studio\\generator.ts": {
+    "mtime": 1781292207.4911435,
+    "ast_hash": "78b5e68506efa5f293bc00efa8e71c3c",
+    "semantic_hash": "78b5e68506efa5f293bc00efa8e71c3c"
+  },
+  "C:\\sites\\deeplogic\\server\\src\\studio\\pbix.ts": {
+    "mtime": 1781292215.4086685,
+    "ast_hash": "a1b9f97c6147451c4d35cb705960d7a5",
+    "semantic_hash": "a1b9f97c6147451c4d35cb705960d7a5"
+  },
+  "C:\\sites\\deeplogic\\server\\src\\supabase.ts": {
+    "mtime": 1781277737.8717558,
+    "ast_hash": "f21bd7dbaadce5044950b3916ca25e2b",
+    "semantic_hash": "f21bd7dbaadce5044950b3916ca25e2b"
+  },
+  "C:\\sites\\deeplogic\\server\\src\\types.ts": {
+    "mtime": 1781289982.7762034,
+    "ast_hash": "1f094a9869a2a9bab8cfcdab0e8a9860",
+    "semantic_hash": "1f094a9869a2a9bab8cfcdab0e8a9860"
+  },
+  "C:\\sites\\deeplogic\\server\\tsconfig.json": {
+    "mtime": 1781274385.639418,
+    "ast_hash": "61dad2086276916d640396c2d33b00f6",
+    "semantic_hash": "61dad2086276916d640396c2d33b00f6"
+  },
+  "C:\\sites\\deeplogic\\supabase\\migrations\\20260612000001_init.sql": {
+    "mtime": 1781276199.604638,
+    "ast_hash": "deaa1d05c9fac8fa2d43b15a4edcb237",
+    "semantic_hash": "deaa1d05c9fac8fa2d43b15a4edcb237"
+  },
+  "C:\\sites\\deeplogic\\supabase\\migrations\\20260612000002_studio.sql": {
+    "mtime": 1781282344.2809317,
+    "ast_hash": "0123a068b3a8bcd4102503e0ff324290",
+    "semantic_hash": "0123a068b3a8bcd4102503e0ff324290"
+  },
+  "C:\\sites\\deeplogic\\supabase\\migrations\\20260612000003_studio_vault.sql": {
+    "mtime": 1781289000.141185,
+    "ast_hash": "68d3243ebf918b5657b6d7cc2e9be089",
+    "semantic_hash": "68d3243ebf918b5657b6d7cc2e9be089"
+  },
+  "C:\\sites\\deeplogic\\supabase\\migrations\\20260612000004_ai_settings.sql": {
+    "mtime": 1781289815.9232132,
+    "ast_hash": "56ea4ba851139771455b0a494c8f2b72",
+    "semantic_hash": "56ea4ba851139771455b0a494c8f2b72"
+  },
+  "C:\\sites\\deeplogic\\supabase\\migrations\\20260612000005_ai_providers.sql": {
+    "mtime": 1781290171.5397787,
+    "ast_hash": "cd1d33d444cf9f00eec1d72e1c41aa05",
+    "semantic_hash": "cd1d33d444cf9f00eec1d72e1c41aa05"
+  },
+  "C:\\sites\\deeplogic\\tsconfig.base.json": {
+    "mtime": 1781274350.2064576,
+    "ast_hash": "e0c58cea284e8b5b2731a9d1f26ca957",
+    "semantic_hash": "e0c58cea284e8b5b2731a9d1f26ca957"
+  },
+  "C:\\sites\\deeplogic\\.claude\\CLAUDE.md": {
+    "mtime": 1781364853.134773,
+    "ast_hash": "db73b0edd7ffbc61ceac177130730865",
+    "semantic_hash": "db73b0edd7ffbc61ceac177130730865"
+  },
+  "C:\\sites\\deeplogic\\.claude\\skills\\graphify\\SKILL.md": {
+    "mtime": 1781364853.1155963,
+    "ast_hash": "97c2755905a5a0e53b96b31c725a7010",
+    "semantic_hash": "97c2755905a5a0e53b96b31c725a7010"
+  },
+  "C:\\sites\\deeplogic\\.claude\\skills\\graphify\\references\\add-watch.md": {
+    "mtime": 1781364750.0,
+    "ast_hash": "0df0589623217ca38a12bdcabfb42f4c",
+    "semantic_hash": "0df0589623217ca38a12bdcabfb42f4c"
+  },
+  "C:\\sites\\deeplogic\\.claude\\skills\\graphify\\references\\exports.md": {
+    "mtime": 1781364750.0,
+    "ast_hash": "c04ddf8f1f5ef5e262ebec491a523c74",
+    "semantic_hash": "c04ddf8f1f5ef5e262ebec491a523c74"
+  },
+  "C:\\sites\\deeplogic\\.claude\\skills\\graphify\\references\\extraction-spec.md": {
+    "mtime": 1781364750.0,
+    "ast_hash": "24808b03abfeaf5f6435bb69c0125b2c",
+    "semantic_hash": "24808b03abfeaf5f6435bb69c0125b2c"
+  },
+  "C:\\sites\\deeplogic\\.claude\\skills\\graphify\\references\\github-and-merge.md": {
+    "mtime": 1781364750.0,
+    "ast_hash": "cde13df085e4c492aeb7ba298a996d0d",
+    "semantic_hash": "cde13df085e4c492aeb7ba298a996d0d"
+  },
+  "C:\\sites\\deeplogic\\.claude\\skills\\graphify\\references\\hooks.md": {
+    "mtime": 1781364750.0,
+    "ast_hash": "3f545db6ce646650bb9de588f5512a27",
+    "semantic_hash": "3f545db6ce646650bb9de588f5512a27"
+  },
+  "C:\\sites\\deeplogic\\.claude\\skills\\graphify\\references\\query.md": {
+    "mtime": 1781364750.0,
+    "ast_hash": "8b40ed8c9e9060fc215219a8fc964091",
+    "semantic_hash": "8b40ed8c9e9060fc215219a8fc964091"
+  },
+  "C:\\sites\\deeplogic\\.claude\\skills\\graphify\\references\\transcribe.md": {
+    "mtime": 1781364750.0,
+    "ast_hash": "70f6aa30d6211f3a2c7e9fc45479f50c",
+    "semantic_hash": "70f6aa30d6211f3a2c7e9fc45479f50c"
+  },
+  "C:\\sites\\deeplogic\\.claude\\skills\\graphify\\references\\update.md": {
+    "mtime": 1781364750.0,
+    "ast_hash": "0dad167a95bdb389f02fecffb60b1bc8",
+    "semantic_hash": "0dad167a95bdb389f02fecffb60b1bc8"
+  },
+  "C:\\sites\\deeplogic\\.github\\agents\\debugger.agent.md": {
+    "mtime": 1781271992.044028,
+    "ast_hash": "a0dbee0ad105e105520cb2e22c956487",
+    "semantic_hash": "a0dbee0ad105e105520cb2e22c956487"
+  },
+  "C:\\sites\\deeplogic\\.github\\agents\\implementer.agent.md": {
+    "mtime": 1781271991.9728453,
+    "ast_hash": "60a2134f816df362433f9dff5bb54d6f",
+    "semantic_hash": "60a2134f816df362433f9dff5bb54d6f"
+  },
+  "C:\\sites\\deeplogic\\.github\\agents\\planner.agent.md": {
+    "mtime": 1781271991.8891087,
+    "ast_hash": "579b17fc9d37d6c1f5e60b3e3c9d520f",
+    "semantic_hash": "579b17fc9d37d6c1f5e60b3e3c9d520f"
+  },
+  "C:\\sites\\deeplogic\\.github\\agents\\reviewer.agent.md": {
+    "mtime": 1781271992.0928414,
+    "ast_hash": "3e838fdc5ce1b2999e937a910334696c",
+    "semantic_hash": "3e838fdc5ce1b2999e937a910334696c"
+  },
+  "C:\\sites\\deeplogic\\CLAUDE.md": {
+    "mtime": 1781364853.149773,
+    "ast_hash": "82efb97a359f5c7290bf2513d14686be",
+    "semantic_hash": "82efb97a359f5c7290bf2513d14686be"
+  },
+  "C:\\sites\\deeplogic\\PRD.md": {
+    "mtime": 1781286704.0783951,
+    "ast_hash": "865a336f132b0580110848d70dcdda4d",
+    "semantic_hash": "865a336f132b0580110848d70dcdda4d"
+  },
+  "C:\\sites\\deeplogic\\README.md": {
+    "mtime": 1781287335.5344117,
+    "ast_hash": "0b50b2e1ae8649f5aa30c15670ed6784",
+    "semantic_hash": "0b50b2e1ae8649f5aa30c15670ed6784"
+  },
+  "C:\\sites\\deeplogic\\client\\index.html": {
+    "mtime": 1781274378.9265907,
+    "ast_hash": "a1d3de51633d889ef169b4e22b9b4da3",
+    "semantic_hash": "a1d3de51633d889ef169b4e22b9b4da3"
+  },
+  "C:\\sites\\deeplogic\\deeplogic-landing.html": {
+    "mtime": 1781287742.1882088,
+    "ast_hash": "3c2c9db9df6835cbae4c52c568093c7e",
+    "semantic_hash": "3c2c9db9df6835cbae4c52c568093c7e"
+  },
+  "C:\\sites\\deeplogic\\deeplogic-logo.svg": {
+    "mtime": 1781271574.1384027,
+    "ast_hash": "0424e53f143ade7c17db4f598df5e393",
+    "semantic_hash": "0424e53f143ade7c17db4f598df5e393"
+  }
+}

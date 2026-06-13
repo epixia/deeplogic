@@ -1,0 +1,201 @@
+/* Settings / member management — dark/cyan cards, hairline borders. */
+
+.dl-settings {
+  position: relative;
+  z-index: 1;
+  padding-top: 40px;
+  padding-bottom: 80px;
+  max-width: 880px;
+}
+
+.dl-set__head {
+  margin-bottom: 26px;
+}
+
+.dl-set__head h1 {
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin: 8px 0 8px;
+}
+
+.dl-set__sub {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  font-size: 14px;
+  color: var(--mut);
+}
+
+.dl-set__slug {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--cyan);
+}
+
+.dl-set__role {
+  text-transform: capitalize;
+}
+
+.dl-set__card {
+  padding: 22px 24px;
+  margin-bottom: 22px;
+}
+
+.dl-set__cardhead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.dl-set__cardhead h2 {
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.dl-set__count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 22px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: rgba(111, 227, 240, 0.12);
+  color: var(--cyan);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.dl-set__hint {
+  color: var(--mut);
+  font-size: 13px;
+  margin-bottom: 14px;
+}
+
+.dl-set__table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.dl-set__table th {
+  text-align: left;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--mut2);
+  font-weight: 600;
+  padding: 0 12px 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.dl-set__table td {
+  padding: 14px 12px;
+  border-bottom: 1px solid var(--line);
+  font-size: 14px;
+  vertical-align: middle;
+}
+
+.dl-set__table tr:last-child td {
+  border-bottom: none;
+}
+
+.dl-set__you {
+  margin-left: 8px;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--mut2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 1px 6px;
+}
+
+.dl-set__select {
+  height: 34px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--bg2);
+  color: var(--ink);
+  padding: 0 10px;
+  font-size: 13px;
+  font-family: inherit;
+  text-transform: capitalize;
+  cursor: pointer;
+}
+
+.dl-set__select:focus {
+  outline: none;
+  border-color: var(--cyan);
+}
+
+.dl-set__rolebadge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: capitalize;
+  border: 1px solid var(--line);
+  color: var(--mut);
+}
+
+.dl-set__rolebadge.role-owner {
+  color: var(--cyan);
+  border-color: rgba(111, 227, 240, 0.35);
+  background: rgba(111, 227, 240, 0.08);
+}
+
+.dl-set__rolebadge.role-admin {
+  color: var(--blue);
+  border-color: rgba(63, 134, 224, 0.35);
+}
+
+.dl-set__actions {
+  text-align: right;
+}
+
+.dl-set__remove {
+  height: 32px;
+  font-size: 13px;
+  color: var(--bad);
+  border-color: rgba(255, 95, 87, 0.3);
+}
+
+.dl-set__remove:hover {
+  background: rgba(255, 95, 87, 0.08);
+  border-color: rgba(255, 95, 87, 0.5);
+}
+
+.dl-set__invite {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.dl-set__inviteemail {
+  flex: 1;
+  min-width: 220px;
+}
+
+.dl-set__invite .dl-set__select {
+  height: 42px;
+}
+
+.dl-set__empty {
+  color: var(--mut);
+  font-size: 14px;
+  padding: 8px 0;
+}
+
+.dl-set__error {
+  border-radius: 10px;
+  border: 1px solid rgba(255, 95, 87, 0.35);
+  background: rgba(255, 95, 87, 0.08);
+  color: var(--bad);
+  font-size: 13px;
+  padding: 10px 14px;
+  margin-bottom: 18px;
+}

@@ -1,0 +1,26 @@
+{
+  "name": "deeplogic",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "server",
+    "client"
+  ],
+  "scripts": {
+    "dev": "concurrently -n server,client -c cyan,blue \"npm:dev:server\" \"npm:dev:client\"",
+    "dev:server": "npm -w server run dev",
+    "dev:client": "npm -w client run dev",
+    "build": "npm -w server run build && npm -w client run build",
+    "typecheck": "npm -w server run typecheck && npm -w client run typecheck",
+    "supabase:start": "supabase start",
+    "supabase:stop": "supabase stop",
+    "db:reset": "supabase db reset",
+    "smoke": "node scripts/smoke.mjs",
+    "smoke:studio": "node scripts/studio-smoke.mjs",
+    "smoke:studio2": "node scripts/studio2-smoke.mjs"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}

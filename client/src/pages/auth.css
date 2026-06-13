@@ -1,0 +1,121 @@
+/* Shared styles for Login / Signup / Onboarding — matches the dark/cyan
+   design system (rounded cards, hairline borders, gradient accents). */
+
+.dl-auth {
+  position: relative;
+  z-index: 1;
+  max-width: 460px;
+  margin: 72px auto;
+  padding: 0 24px;
+}
+
+.dl-auth__card {
+  border-radius: 18px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  padding: 36px 32px;
+  box-shadow: 0 24px 60px -30px rgba(0, 0, 0, 0.6);
+}
+
+.dl-auth__head {
+  text-align: center;
+  margin-bottom: 26px;
+}
+
+.dl-auth__head h1 {
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin: 12px 0 6px;
+}
+
+.dl-auth__head p {
+  color: var(--mut);
+  font-size: 14px;
+}
+
+.dl-auth__form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.dl-field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.dl-field label {
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--mut);
+  font-weight: 600;
+}
+
+.dl-input {
+  height: 42px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--bg2);
+  color: var(--ink);
+  padding: 0 14px;
+  font-size: 15px;
+  font-family: inherit;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.dl-input:focus {
+  outline: none;
+  border-color: var(--cyan);
+  box-shadow: 0 0 0 3px rgba(111, 227, 240, 0.15);
+}
+
+.dl-auth__form .btn {
+  height: 44px;
+  font-size: 15px;
+  margin-top: 4px;
+}
+
+.dl-auth__error {
+  border-radius: 10px;
+  border: 1px solid rgba(255, 95, 87, 0.35);
+  background: rgba(255, 95, 87, 0.08);
+  color: var(--bad);
+  font-size: 13px;
+  padding: 10px 14px;
+}
+
+.dl-auth__foot {
+  margin-top: 22px;
+  text-align: center;
+  font-size: 14px;
+  color: var(--mut);
+}
+
+.dl-auth__foot a {
+  color: var(--cyan);
+  font-weight: 600;
+}
+
+.dl-auth__foot a:hover {
+  text-decoration: underline;
+}
+
+/* lightweight spinner reused across guarded routes + auth */
+.dl-spinner {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 3px solid var(--line);
+  border-top-color: var(--cyan);
+  margin: 0 auto 14px;
+  animation: dl-spin 0.8s linear infinite;
+}
+
+@keyframes dl-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

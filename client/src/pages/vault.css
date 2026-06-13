@@ -1,0 +1,214 @@
+/* Workspace Vault page */
+.vault-page {
+  padding: 40px 0 80px;
+}
+.vault-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+.vault-head h1 {
+  font-size: clamp(26px, 3.4vw, 38px);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+.vault-lead {
+  color: var(--mut);
+  font-size: 15px;
+  margin-top: 8px;
+  max-width: 62ch;
+}
+.vault-search {
+  height: 40px;
+  width: 280px;
+  max-width: 100%;
+  padding: 0 14px;
+  border-radius: 9px;
+  border: 1px solid var(--line);
+  background: var(--card2);
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  outline: none;
+}
+.vault-search:focus {
+  border-color: var(--cyan);
+  box-shadow: 0 0 0 3px rgba(111, 227, 240, 0.14);
+}
+
+.vault-error {
+  margin-top: 18px;
+  color: var(--bad);
+  font-size: 13px;
+  border: 1px solid var(--line);
+  background: var(--card2);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.vault-section {
+  margin-top: 34px;
+}
+.vault-section-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.vault-section-head h2 {
+  font-size: 19px;
+  font-weight: 800;
+}
+.vault-count {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--cyan);
+  background: rgba(111, 227, 240, 0.1);
+  border-radius: 999px;
+  padding: 2px 9px;
+}
+.vault-empty {
+  color: var(--mut);
+  font-size: 14px;
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+  padding: 22px;
+  text-align: center;
+}
+
+/* connector cards */
+.vault-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 14px;
+}
+.vault-card {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--card);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.vault-card-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.vault-card-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.vault-card-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.vault-src {
+  font-size: 12px;
+  color: var(--mut2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* document rows */
+.vault-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.vault-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--card);
+  padding: 12px 14px;
+}
+.vault-row-main {
+  flex: 1;
+  min-width: 0;
+}
+.vault-row-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.vault-row-sub {
+  font-size: 12px;
+  color: var(--mut2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vault-ic {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  font-size: 15px;
+  background: var(--card2);
+  border: 1px solid var(--line);
+}
+.vault-kind {
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--cyan);
+  background: rgba(111, 227, 240, 0.1);
+  padding: 3px 8px;
+  border-radius: 999px;
+  flex: none;
+}
+
+/* owner */
+.vault-owner {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  color: var(--mut);
+  flex: none;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.vault-owner-av {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  flex: none;
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  font-weight: 800;
+  color: #04121b;
+  background: var(--grad);
+}
+[data-theme='light'] .vault-owner-av {
+  color: #fff;
+}
+
+/* Use more of the screen */
+.wrap.vault-page { max-width: 1480px; }
