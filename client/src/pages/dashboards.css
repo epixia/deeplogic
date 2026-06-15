@@ -475,12 +475,70 @@
 }
 .wg-drag-handle:hover .wg-cell-actions { display: flex; }
 
-/* resize handles — let the library control show/hide; just theme the corner arrow */
-.react-grid-item > .react-resizable-handle::after {
-  border-right-color: var(--cyan);
-  border-bottom-color: var(--cyan);
+/* resize handles — hide until cell hovered, theme all 8 directions */
+.react-grid-item > .react-resizable-handle {
+  background-image: none;
+  opacity: 0;
+  transition: opacity 0.15s;
 }
-.react-grid-item > .react-resizable-handle { background-image: none; }
+.react-grid-item:hover .react-resizable-handle { opacity: 1; }
+
+/* Corner handles — L-shaped cyan border, one rule per corner for correct positioning */
+.react-grid-item > .react-resizable-handle-se::after,
+.react-grid-item > .react-resizable-handle-sw::after,
+.react-grid-item > .react-resizable-handle-ne::after,
+.react-grid-item > .react-resizable-handle-nw::after {
+  content: '';
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border-color: var(--cyan);
+  border-style: solid;
+  border-width: 0;
+}
+.react-grid-item > .react-resizable-handle-se::after {
+  bottom: 3px; right: 3px;
+  border-right-width: 2px; border-bottom-width: 2px;
+}
+.react-grid-item > .react-resizable-handle-sw::after {
+  bottom: 3px; left: 3px;
+  border-left-width: 2px; border-bottom-width: 2px;
+}
+.react-grid-item > .react-resizable-handle-ne::after {
+  top: 3px; right: 3px;
+  border-right-width: 2px; border-top-width: 2px;
+}
+.react-grid-item > .react-resizable-handle-nw::after {
+  top: 3px; left: 3px;
+  border-left-width: 2px; border-top-width: 2px;
+}
+
+/* Edge handles — short centred bar */
+.react-grid-item > .react-resizable-handle-e::after,
+.react-grid-item > .react-resizable-handle-w::after,
+.react-grid-item > .react-resizable-handle-s::after,
+.react-grid-item > .react-resizable-handle-n::after {
+  content: '';
+  position: absolute;
+  background: var(--cyan);
+  border-radius: 2px;
+}
+.react-grid-item > .react-resizable-handle-e::after {
+  top: 50%; transform: translateY(-50%);
+  right: 3px; width: 2px; height: 24px;
+}
+.react-grid-item > .react-resizable-handle-w::after {
+  top: 50%; transform: translateY(-50%);
+  left: 3px; width: 2px; height: 24px;
+}
+.react-grid-item > .react-resizable-handle-s::after {
+  left: 50%; transform: translateX(-50%);
+  bottom: 3px; height: 2px; width: 24px;
+}
+.react-grid-item > .react-resizable-handle-n::after {
+  left: 50%; transform: translateX(-50%);
+  top: 3px; height: 2px; width: 24px;
+}
 
 .wg-action-btn {
   padding: 4px 8px;
