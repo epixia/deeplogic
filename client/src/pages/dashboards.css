@@ -483,6 +483,17 @@
 }
 .react-grid-item:hover .react-resizable-handle { opacity: 1; }
 
+/* Cancel library rotation — we provide our own ::after visuals */
+.react-grid-item > .react-resizable-handle-sw,
+.react-grid-item > .react-resizable-handle-nw,
+.react-grid-item > .react-resizable-handle-ne,
+.react-grid-item > .react-resizable-handle-e,
+.react-grid-item > .react-resizable-handle-w,
+.react-grid-item > .react-resizable-handle-n,
+.react-grid-item > .react-resizable-handle-s {
+  transform: none;
+}
+
 /* Corner handles — L-shaped cyan border, one rule per corner for correct positioning */
 .react-grid-item > .react-resizable-handle-se::after,
 .react-grid-item > .react-resizable-handle-sw::after,
@@ -522,6 +533,7 @@
   position: absolute;
   background: var(--cyan);
   border-radius: 2px;
+  border: none;
 }
 .react-grid-item > .react-resizable-handle-e::after {
   top: 50%; transform: translateY(-50%);
