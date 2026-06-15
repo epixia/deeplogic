@@ -836,6 +836,7 @@
   position: absolute;
   bottom: 8px;
   right: 8px;
+  z-index: 10;
   background: rgba(4, 18, 27, 0.85);
   border: 1px solid rgba(111, 227, 240, 0.4);
   color: var(--cyan);
@@ -846,4 +847,8 @@
   pointer-events: none;
   letter-spacing: 0.04em;
   backdrop-filter: blur(4px);
+}
+[data-theme='light'] .wg-size-badge {
+  background: rgba(250, 249, 248, 0.92);
+  border-color: rgba(15, 108, 189, 0.4);
 }
