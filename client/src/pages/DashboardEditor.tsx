@@ -44,6 +44,7 @@ export default function DashboardEditor() {
   const orgName = orgs.find((o) => o.id === orgId)?.name ?? ''
 
   const [board, setBoard] = useState<Dashboard | null>(null)
+  const boardRef = useRef<Dashboard | null>(null)
   const [loading, setLoading] = useState(true)
   const [gridWidth, setGridWidth] = useState(900)
   const gridRef = useRef<HTMLDivElement>(null)
@@ -74,6 +75,7 @@ export default function DashboardEditor() {
       listContext(token, orgId).catch(() => []),
     ]).then(([d, items]) => {
       setBoard(d)
+      boardRef.current = d
       setLibrary((items ?? []).map((i: { id: string; name: string; kind: string }) => ({
         id: i.id, name: i.name, kind: i.kind,
       })))
@@ -91,6 +93,9 @@ export default function DashboardEditor() {
     if (gridRef.current) ro.observe(gridRef.current)
     return () => ro.disconnect()
   }, [])
+
+  // Keep boardRef in sync with board state so callbacks always see the latest board
+  useEffect(() => { boardRef.current = board }, [board])
 
   // Sync localLayout when the widget set changes (load, add, remove) — not on position updates
   const widgetKey = useMemo(() => (board?.widgets ?? []).map((w) => w.id).join(','), [board?.widgets])
@@ -111,7 +116,7 @@ export default function DashboardEditor() {
 
   // Persist final positions to server after drag/resize completes
   const saveLayoutItems = useCallback(async (layout: Layout) => {
-    if (!board || !orgId || !dashboardId) return
+    if (!boardRef.current || !orgId || !dashboardId) return
     const items = layout as unknown as LayoutItem[]
     setBoard((prev) => {
       if (!prev) return prev
@@ -125,14 +130,14 @@ export default function DashboardEditor() {
       }
     })
     for (const l of items) {
-      const orig = board.widgets.find((w) => w.id === l.i)
+      const orig = boardRef.current?.widgets.find((w) => w.id === l.i)
       if (!orig) continue
       if (orig.gridX === l.x && orig.gridY === l.y && orig.gridW === l.w && orig.gridH === l.h) continue
       await updateWidget(token, orgId, dashboardId, l.i, {
         gridX: l.x, gridY: l.y, gridW: l.w, gridH: l.h,
       }).catch(console.error)
     }
-  }, [board, token, orgId, dashboardId])
+  }, [token, orgId, dashboardId])
 
   const onDragStop = useCallback((layout: Layout) => { void saveLayoutItems(layout) }, [saveLayoutItems])
   const onResize = useCallback((_layout: Layout, _old: LayoutItem | null, newItem: LayoutItem | null) => {
@@ -173,6 +178,9 @@ export default function DashboardEditor() {
           ...prev,
           widgets: prev.widgets.map((x) => x.id === w.id ? w : x),
         } : prev)
+        setLocalLayout((prev) => prev.map((l) =>
+          l.i === w.id ? { ...l, w: w.gridW, h: w.gridH } : l
+        ))
       } else {
         const maxY = board?.widgets.reduce((m, w) => Math.max(m, w.gridY + w.gridH - 1), -1) ?? -1
         const w = await createWidget(token, orgId, dashboardId, {
