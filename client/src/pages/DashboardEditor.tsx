@@ -311,18 +311,22 @@ export default function DashboardEditor() {
                 <div className="wg-drag-handle">
                   <span className="wg-drag-dots">⋮⋮</span>
                   <span className="wg-drag-name">{w.name}</span>
-                  <div className="wg-preset-btns" onClick={(e) => e.stopPropagation()}>
-                    {PRESETS.map((p) => (
-                      <button
-                        key={p.label}
-                        type="button"
-                        className={`wg-preset-btn${w.gridW === p.w && w.gridH === p.h ? ' active' : ''}`}
-                        onClick={() => void applyPreset(w.id, p.w, p.h)}
-                        title={`${p.label}: ${p.w}×${p.h}`}
-                      >
-                        {p.label}
-                      </button>
-                    ))}
+                  <div className="wg-preset-btns" onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
+                    {PRESETS.map((p) => {
+                      const liveW = resizing?.i === w.id ? resizing.w : w.gridW
+                      const liveH = resizing?.i === w.id ? resizing.h : w.gridH
+                      return (
+                        <button
+                          key={p.label}
+                          type="button"
+                          className={`wg-preset-btn${liveW === p.w && liveH === p.h ? ' active' : ''}`}
+                          onClick={() => void applyPreset(w.id, p.w, p.h)}
+                          title={`${p.label}: ${p.w}×${p.h}`}
+                        >
+                          {p.label}
+                        </button>
+                      )
+                    })}
                   </div>
                   <div className="wg-cell-actions" onClick={(e) => e.stopPropagation()}>
                     <button
