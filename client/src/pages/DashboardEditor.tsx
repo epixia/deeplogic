@@ -266,9 +266,6 @@ export default function DashboardEditor() {
     return <div style={{ padding: 40, color: '#e07a8a' }}>Dashboard not found.</div>
   }
 
-  // Referenced by widget preset controls (wired in subsequent task)
-  void PRESETS; void resizing; void applyPreset
-
   return (
     <div className="dbe-layout">
       <main className="dbe-main">
@@ -314,6 +311,19 @@ export default function DashboardEditor() {
                 <div className="wg-drag-handle">
                   <span className="wg-drag-dots">⋮⋮</span>
                   <span className="wg-drag-name">{w.name}</span>
+                  <div className="wg-preset-btns" onClick={(e) => e.stopPropagation()}>
+                    {PRESETS.map((p) => (
+                      <button
+                        key={p.label}
+                        type="button"
+                        className={`wg-preset-btn${w.gridW === p.w && w.gridH === p.h ? ' active' : ''}`}
+                        onClick={() => void applyPreset(w.id, p.w, p.h)}
+                        title={`${p.label}: ${p.w}×${p.h}`}
+                      >
+                        {p.label}
+                      </button>
+                    ))}
+                  </div>
                   <div className="wg-cell-actions" onClick={(e) => e.stopPropagation()}>
                     <button
                       type="button"
@@ -343,6 +353,16 @@ export default function DashboardEditor() {
 
                 {/* Widget content */}
                 <div className="wg-content">
+                  {resizing?.i === w.id && (
+                    <div className="wg-size-badge">
+                      {(() => {
+                        const match = PRESETS.find((p) => p.w === resizing.w && p.h === resizing.h)
+                        return match
+                          ? `${match.label} (${resizing.w}×${resizing.h})`
+                          : `${resizing.w}×${resizing.h}`
+                      })()}
+                    </div>
+                  )}
                   {generating[w.id] ? (
                     <div className="wg-placeholder">
                       <div className="wg-generating">
