@@ -253,7 +253,7 @@ export default function DashboardEditor() {
     try {
       const all = await listOrgWidgets(token, orgId!)
       const inBoard = new Set(board?.widgets.map((w) => w.id) ?? [])
-      setPickerWidgets(all.filter((w) => !inBoard.has(w.id)))
+      setPickerWidgets(all.filter((w) => !inBoard.has(w.id) && !!w.html))
     } catch { /* silent */ }
     finally { setPickLoading(false) }
   }
@@ -466,7 +466,7 @@ export default function DashboardEditor() {
                     </div>
                     <div className="dpicker-info">
                       <div className="dpicker-name">{w.name}</div>
-                      <div className="dpicker-type">{TYPE_ICONS[w.type]} {w.type}{!w.html && <span className="dpicker-badge-draft"> · not generated</span>}</div>
+                      <div className="dpicker-type">{TYPE_ICONS[w.type]} {w.type}</div>
                     </div>
                     <button
                       type="button"
@@ -480,7 +480,7 @@ export default function DashboardEditor() {
                 ))}
 
                 {pickerWidgets.length === 0 && (
-                  <p className="dpicker-hint">No other widgets yet — create one above or visit the Widgets page.</p>
+                  <p className="dpicker-hint">No generated widgets available yet — build one above or generate a widget on the Widgets page first.</p>
                 )}
               </div>
             )}
