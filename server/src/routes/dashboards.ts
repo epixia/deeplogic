@@ -436,7 +436,7 @@ dashboardsRouter.patch('/orgs/:orgId/widgets/:wid', requireMember(), async (req:
   }
 });
 
-// POST /orgs/:orgId/widgets/:wid/generate { prompt? }
+// POST /orgs/:orgId/widgets/:wid/generate { prompt?, history?, currentHtml? }
 dashboardsRouter.post('/orgs/:orgId/widgets/:wid/generate', requireMember(), checkTokenBudget(), async (req: Request, res: Response) => {
   const { orgId, wid } = req.params;
   try {
@@ -448,11 +448,27 @@ dashboardsRouter.post('/orgs/:orgId/widgets/:wid/generate', requireMember(), che
       widget.prompt = inlinePrompt;
     }
     if (!widget.prompt) { res.status(400).json({ error: 'Widget has no prompt' }); return; }
+
+    // Client passes conversation history and the current HTML so the AI can
+    // iterate on the widget rather than rebuilding from scratch each time.
+    const history = Array.isArray(req.body?.history) ? req.body.history : undefined;
+    const currentHtml: string | undefined =
+      typeof req.body?.currentHtml === 'string' && req.body.currentHtml.trim()
+        ? req.body.currentHtml
+        : (widget.html ?? undefined);
+
     const context = await buildWidgetContext(req.db, orgId, widget.sources ?? []);
     const ai = await loadAiConfig(orgId);
     const sizeHint = `Grid size: ${widget.grid_w} columns × ${widget.grid_h} rows. `;
     const fullPrompt = `${sizeHint}${widget.type.toUpperCase()} WIDGET: ${widget.prompt}`;
-    const result = await generateReport({ prompt: fullPrompt, context, ai, systemOverride: WIDGET_SYSTEM });
+    const result = await generateReport({
+      prompt: fullPrompt,
+      currentHtml,
+      history,
+      context,
+      ai,
+      systemOverride: WIDGET_SYSTEM,
+    });
     const now = new Date().toISOString();
     const { data: updated, error: uErr } = await req.db!.from('widgets').update({ html: result.html, last_refreshed: now, updated_at: now }).eq('id', wid).select('*').maybeSingle();
     if (uErr) throw new Error(uErr.message);

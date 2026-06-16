@@ -12,6 +12,7 @@ import {
   type WidgetType,
   type WidgetSource,
   type ContextItem,
+  type StudioMessage,
 } from '../lib/api'
 import '../components/studio/studio.css'
 import './dashboards.css'
@@ -34,11 +35,7 @@ const STARTERS: Record<WidgetType, string[]> = {
   news:    ['Latest cannabis industry headlines from Google News', 'Top business news for the Canadian cannabis sector today', 'Recent regulatory updates and policy news for cannabis producers'],
 }
 
-interface ChatMessage {
-  role: 'user' | 'assistant'
-  content: string
-  ts: string
-}
+type ChatMessage = StudioMessage
 
 export default function WidgetEditor() {
   const { orgId = '', widgetId = '' } = useParams<{
@@ -290,7 +287,7 @@ export default function WidgetEditor() {
     setMessages((prev) => [...prev, { role: 'user', content: prompt, ts: new Date().toISOString() }])
     try {
       const t = await token()
-      const { widget: updated } = await generateOrgWidget(t, orgId, widgetId, fullPrompt)
+      const { widget: updated } = await generateOrgWidget(t, orgId, widgetId, fullPrompt, messages, html)
       setHtml(updated.html ?? '')
       setWidget(updated)
       setMessages((prev) => [...prev, { role: 'assistant', content: '✓ Widget generated successfully', ts: new Date().toISOString() }])

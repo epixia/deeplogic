@@ -1351,10 +1351,12 @@ export function generateOrgWidget(
   orgId: string,
   widgetId: string,
   prompt?: string,
+  history?: StudioMessage[],
+  currentHtml?: string,
 ): Promise<{ widget: Widget; usedAI: boolean }> {
   return jsonFetch(token, `/orgs/${enc(orgId)}/widgets/${enc(widgetId)}/generate`, {
     method: 'POST',
-    body: prompt ? JSON.stringify({ prompt }) : undefined,
+    body: JSON.stringify({ prompt, history, currentHtml }),
   })
 }
 
