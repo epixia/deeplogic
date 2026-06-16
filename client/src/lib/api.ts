@@ -1491,3 +1491,14 @@ export function checkAlert(token: string, orgId: string, alertId: string): Promi
 export function listAlertEvents(token: string, orgId: string, alertId: string): Promise<AlertEvent[]> {
   return jsonFetch(token, `/orgs/${enc(orgId)}/alerts/${enc(alertId)}/events`)
 }
+
+
+// ---------------------------------------------------------------------------
+// Web search
+// ---------------------------------------------------------------------------
+
+export interface SearchResult { title: string; url: string; snippet: string }
+
+export function searchWeb(token: string, orgId: string, q: string, count = 5): Promise<{ results: SearchResult[] }> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/search?q=${encodeURIComponent(q)}&count=${count}`)
+}

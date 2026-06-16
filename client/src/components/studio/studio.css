@@ -962,6 +962,11 @@
   background: var(--bg3, rgba(111,227,240,.08));
 }
 .chat-attach-btn:disabled { opacity: 0.35; cursor: default; }
+.chat-web-btn.active {
+  color: var(--acc);
+  background: rgba(111, 227, 240, 0.12);
+}
+.chat-web-btn.active:hover:not(:disabled) { background: rgba(111, 227, 240, 0.18); }
 .chat-mic-btn {
   flex-shrink: 0;
   width: 32px;

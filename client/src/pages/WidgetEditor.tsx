@@ -7,6 +7,7 @@ import {
   generateOrgWidget,
   listContext,
   createContext,
+  searchWeb,
   type Widget,
   type WidgetType,
   type WidgetSource,
@@ -54,6 +55,8 @@ export default function WidgetEditor() {
   const [generating, setGenerating] = useState(false)
   const [genError, setGenError] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
+  const [webSearch, setWebSearch] = useState(false)
+  const [searching, setSearching] = useState(false)
   const [listening, setListening] = useState(false)
   const [sources, setSources] = useState<WidgetSource[]>([])
   const [showPicker, setShowPicker] = useState(false)
@@ -262,14 +265,32 @@ export default function WidgetEditor() {
   async function onSend() {
     stopVoice()
     const prompt = draft.trim()
-    if (!prompt || generating) return
+    if (!prompt || generating || searching) return
     setDraft('')
     setGenError(null)
+
+    // Optionally prepend web search results to the prompt.
+    let fullPrompt = prompt
+    if (webSearch) {
+      setSearching(true)
+      try {
+        const t = await token()
+        const { results } = await searchWeb(t, orgId, prompt.slice(0, 300), 5)
+        if (results.length > 0) {
+          const resText = results
+            .map((r, i) => `${i + 1}. ${r.title}\n   ${r.url}\n   ${r.snippet}`)
+            .join('\n\n')
+          fullPrompt = `[Web research for: "${prompt.slice(0, 120)}"]\n\n${resText}\n\n---\n\n${prompt}`
+        }
+      } catch { /* degrade silently */ }
+      finally { setSearching(false) }
+    }
+
     setGenerating(true)
     setMessages((prev) => [...prev, { role: 'user', content: prompt, ts: new Date().toISOString() }])
     try {
       const t = await token()
-      const { widget: updated } = await generateOrgWidget(t, orgId, widgetId, prompt)
+      const { widget: updated } = await generateOrgWidget(t, orgId, widgetId, fullPrompt)
       setHtml(updated.html ?? '')
       setWidget(updated)
       setMessages((prev) => [...prev, { role: 'assistant', content: '✓ Widget generated successfully', ts: new Date().toISOString() }])
@@ -535,15 +556,29 @@ export default function WidgetEditor() {
                 )}
                 <button
                   type="button"
-                  className={`wg-send-btn${draft.trim() && !generating ? ' active' : ''}`}
+                  className={`chat-attach-btn chat-web-btn${webSearch ? ' active' : ''}`}
+                  onClick={() => setWebSearch((v) => !v)}
+                  disabled={generating || searching}
+                  title={webSearch ? 'Web research ON — click to disable' : 'Enable web research for this prompt'}
+                >
+                  🔍
+                </button>
+                <button
+                  type="button"
+                  className={`wg-send-btn${draft.trim() && !generating && !searching ? ' active' : ''}`}
                   onClick={() => void onSend()}
-                  disabled={generating || !draft.trim()}
+                  disabled={generating || searching || !draft.trim()}
                   title={generating ? 'Generating…' : 'Generate widget'}
                 >
-                  {generating ? <span className="chat-send-spinner" /> : '↑'}
+                  {generating || searching ? <span className="chat-send-spinner" /> : '↑'}
                 </button>
               </div>
-              <div className="wg-composer-hint">↵ send · ⇧↵ newline{voiceSupported ? ' · 🎙 voice' : ''}</div>
+              <div className="wg-composer-hint">
+                {searching
+                  ? '🔍 Searching the web…'
+                  : `↵ send · ⇧↵ newline${voiceSupported ? ' · 🎙 voice' : ''}${webSearch ? ' · 🔍 web research on' : ''}`
+                }
+              </div>
             </div>
           </div>
         </div>

@@ -21,6 +21,7 @@ import { sandboxRouter } from './routes/sandbox.js';
 import { dashboardsRouter } from './routes/dashboards.js';
 import { agentsRouter } from './routes/agents.js';
 import { alertsRouter } from './routes/alerts.js';
+import { searchRouter } from './routes/search.js';
 
 const PORT = Number(process.env.PORT) || 8787;
 
@@ -65,6 +66,7 @@ app.use('/api', sandboxRouter);
 app.use('/api', dashboardsRouter);
 app.use('/api', agentsRouter);
 app.use('/api', alertsRouter);
+app.use('/api', searchRouter);
 
 app.listen(PORT, () => {
   console.log(`DeepLogic API listening on http://localhost:${PORT}`);

@@ -5,7 +5,7 @@
 import { useEffect, useRef, useState, useCallback, type ClipboardEvent, type DragEvent, type JSX, type KeyboardEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../../auth/AuthContext'
-import { createContext } from '../../lib/api'
+import { createContext, searchWeb } from '../../lib/api'
 import type { ModelListItem } from '../../types'
 import type { PromptAttachment, StudioMessage } from '../../lib/api'
 
@@ -250,11 +250,31 @@ export default function ChatPanel({
     }
   }
 
-  function send(text: string) {
+  async function send(text: string) {
     stopVoice()
     const prompt = text.trim()
     if ((!prompt && attachments.length === 0) || generating) return
-    onSend(prompt || 'Use the attached file(s) to build/update this report.', attachments)
+
+    let allAtts: PromptAttachment[] = [...attachments]
+
+    if (webSearch && prompt) {
+      setSearching(true)
+      try {
+        const token = await getAccessToken()
+        if (token) {
+          const { results } = await searchWeb(token, orgId!, prompt.slice(0, 300), 5)
+          if (results.length > 0) {
+            const text =
+              `Web research for: "${prompt.slice(0, 120)}"\n\n` +
+              results.map((r, i) => `${i + 1}. ${r.title}\n   ${r.url}\n   ${r.snippet}`).join('\n\n')
+            allAtts = [{ kind: 'text', name: 'Web research results', text }, ...allAtts]
+          }
+        }
+      } catch { /* silently degrade — don't block generation on a search failure */ }
+      finally { setSearching(false) }
+    }
+
+    onSend(prompt || 'Use the attached file(s) to build/update this report.', allAtts)
     setDraft('')
     setAttachments([])
     setAttachError(null)
@@ -264,7 +284,7 @@ export default function ChatPanel({
   function onKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
-      send(draft)
+      void send(draft)
     }
   }
 
@@ -276,6 +296,9 @@ export default function ChatPanel({
     }
   }
 
+  const [webSearch, setWebSearch] = useState(false)
+  const [searching, setSearching] = useState(false)
+
   const [dragOver, setDragOver] = useState(false)
   function onDrop(e: DragEvent<HTMLDivElement>) {
     e.preventDefault()
@@ -284,7 +307,7 @@ export default function ChatPanel({
   }
 
   const showEmpty = !hasHtml && messages.length === 0 && !pendingPrompt
-  const canSend = !generating && (!!draft.trim() || attachments.length > 0)
+  const canSend = !generating && !searching && (!!draft.trim() || attachments.length > 0)
 
   return (
     <section className="studio-panel chat-col">
@@ -385,6 +408,15 @@ export default function ChatPanel({
             >
               📎
             </button>
+            <button
+              type="button"
+              className={`chat-attach-btn chat-web-btn${webSearch ? ' active' : ''}`}
+              onClick={() => setWebSearch((v) => !v)}
+              disabled={generating || searching}
+              title={webSearch ? 'Web research ON — click to disable' : 'Enable web research for this prompt'}
+            >
+              🔍
+            </button>
             <textarea
               ref={textareaRef}
               value={draft}
@@ -409,14 +441,19 @@ export default function ChatPanel({
             <button
               type="button"
               className={`chat-send-btn ${canSend ? 'active' : ''}`}
-              onClick={() => send(draft)}
+              onClick={() => void send(draft)}
               disabled={!canSend}
               title={generating ? 'Building…' : hasHtml ? 'Update report' : 'Build report'}
             >
-              {generating ? <span className="chat-send-spinner" /> : '↑'}
+              {generating || searching ? <span className="chat-send-spinner" /> : '↑'}
             </button>
           </div>
-          <div className="chat-composer-hint">↵ send · ⇧↵ newline{voiceSupported ? ' · 🎙 voice' : ''}</div>
+          <div className="chat-composer-hint">
+            {searching
+              ? '🔍 Searching the web…'
+              : `↵ send · ⇧↵ newline${voiceSupported ? ' · 🎙 voice' : ''}${webSearch ? ' · 🔍 web research on' : ''}`
+            }
+          </div>
         </div>
       </div>
     </section>
