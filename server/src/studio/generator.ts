@@ -207,7 +207,7 @@ function templateReport(args: GenerateArgs): string {
       <div class="eyebrow">Request</div>
       <p>${escapeHtml(args.prompt || '')}</p>
     </div>
-    <div class="note">Template mode — connect an AI provider in Settings → AI providers for full AI generation.</div>
+    <div class="note">⚠ Template mode — no AI provider configured. Add <code>ANTHROPIC_API_KEY</code> to server/.env or go to <strong>Settings → AI providers</strong> to connect Claude, OpenAI, or OpenRouter.</div>
   </div>
 </body>
 </html>`;
@@ -421,9 +421,23 @@ function resolveAi(args: GenerateArgs): AiConfig | null {
  * provider/key (Claude, OpenAI, or OpenRouter) when present, else the
  * ANTHROPIC_API_KEY env, else a deterministic template. Never throws.
  */
+/** Template placeholder rendered inside a widget iframe when no AI is configured. */
+function templateWidget(args: GenerateArgs): string {
+  const label = (args.prompt || 'Widget').trim().slice(0, 80);
+  return `<div class="wg" style="width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;background:#0a1628;color:#6b7f96;font-family:system-ui,sans-serif;text-align:center;padding:20px;box-sizing:border-box">
+  <div style="font-size:28px;opacity:.4">📊</div>
+  <div style="font-size:13px;font-weight:600;color:#e8f4f8;max-width:280px">${escapeHtml(label)}</div>
+  <div style="font-size:12px;line-height:1.5;max-width:300px">⚠ Template mode — add <code style="background:#0d1e35;padding:1px 5px;border-radius:4px">ANTHROPIC_API_KEY</code> to server/.env or configure an AI provider in <strong>Settings → AI providers</strong>.</div>
+</div>`;
+}
+
 export async function generateReport(args: GenerateArgs): Promise<GenerateResult> {
   const ai = resolveAi(args);
-  if (!ai) return { html: templateReport(args), usedAI: false, tokensUsed: 0 };
+  // Use a widget-specific placeholder when called from the widget system (has systemOverride)
+  if (!ai) {
+    const html = args.systemOverride ? templateWidget(args) : templateReport(args);
+    return { html, usedAI: false, tokensUsed: 0 };
+  }
 
   try {
     const model = ai.model || DEFAULT_MODEL[ai.provider];
@@ -439,7 +453,7 @@ export async function generateReport(args: GenerateArgs): Promise<GenerateResult
     let html = stripFences(result.text);
     if (!html) {
       return {
-        html: templateReport(args),
+        html: args.systemOverride ? templateWidget(args) : templateReport(args),
         usedAI: false,
         tokensUsed: 0,
         aiError: `${ai.provider} returned an empty response`,
@@ -454,7 +468,7 @@ export async function generateReport(args: GenerateArgs): Promise<GenerateResult
   } catch (err) {
     console.error('Studio AI generation failed; falling back to template', err);
     return {
-      html: templateReport(args),
+      html: args.systemOverride ? templateWidget(args) : templateReport(args),
       usedAI: false,
       tokensUsed: 0,
       aiError: err instanceof Error ? err.message : 'AI request failed',
