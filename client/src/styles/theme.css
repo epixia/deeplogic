@@ -82,10 +82,10 @@ button {
 
 /* ---------- helpers ---------- */
 .grad-text {
-  background: var(--grad);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  background: none;
+  -webkit-background-clip: unset;
+  background-clip: unset;
+  color: #fff;
 }
 [data-theme='light'] .grad-text {
   background: none;
