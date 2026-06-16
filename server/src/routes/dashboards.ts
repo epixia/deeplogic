@@ -227,6 +227,27 @@ Widget type rules:
 
 Return ONLY the HTML starting with <div class="wg". No markdown fences, no explanation.`;
 
+/** Parse the URL from a connector content block ("API Endpoint: https://..."). */
+function parseConnectorUrl(content: string): string | null {
+  const m = /^API Endpoint:\s*(\S+)/im.exec(content);
+  return m ? m[1] : null;
+}
+
+/** Fetch a URL for a connector and return the body, truncated to 5000 chars. */
+async function fetchConnectorData(url: string): Promise<string> {
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
+    const r = await fetch(url, { method: 'GET', signal: controller.signal, headers: { Accept: 'application/json, text/plain, */*' } });
+    clearTimeout(timer);
+    if (!r.ok) return `[fetch failed: ${r.status} ${r.statusText}]`;
+    const raw = await r.text();
+    try { return JSON.stringify(JSON.parse(raw) as unknown, null, 2).slice(0, 5000); } catch { return raw.slice(0, 5000); }
+  } catch (e) {
+    return `[fetch failed: ${e instanceof Error ? e.message : 'error'}]`;
+  }
+}
+
 async function buildWidgetContext(
   db: Request['db'],
   orgId: string,
@@ -239,6 +260,15 @@ async function buildWidgetContext(
       if (data?.content) {
         parts.push(`## ${data.name} (${data.kind})`);
         parts.push(data.content.slice(0, 4000));
+        // For MCP/API connectors, also fetch the live data from the URL.
+        if ((data.kind === 'mcp' || data.kind === 'api') && data.content) {
+          const url = parseConnectorUrl(data.content as string);
+          if (url) {
+            const live = await fetchConnectorData(url);
+            parts.push('### Live data');
+            parts.push('```json\n' + live + '\n```');
+          }
+        }
       }
     } else if (src.type === 'model') {
       const { data } = await db!.from('models').select('name, data').eq('id', src.ref).eq('org_id', orgId).maybeSingle();
