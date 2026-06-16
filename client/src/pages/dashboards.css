@@ -376,11 +376,6 @@
   line-height: 1;
 }
 .dpicker-close:hover { color: var(--ink); }
-.dpicker-sub {
-  font-size: 13px;
-  color: var(--mut2);
-  margin: 6px 24px 16px;
-}
 .dpicker-empty {
   padding: 40px 24px;
   text-align: center;
@@ -389,7 +384,7 @@
 }
 .dpicker-grid {
   overflow-y: auto;
-  padding: 0 24px 24px;
+  padding: 16px 24px 24px;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -402,7 +397,17 @@
   background: var(--card2);
   border: 1px solid var(--line);
   border-radius: 10px;
+  text-align: left;
+  width: 100%;
+  cursor: default;
 }
+.dpicker-card-new {
+  border-color: var(--acc);
+  background: none;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.dpicker-card-new:hover { background: rgba(111, 227, 240, 0.06); }
 .dpicker-thumb {
   width: 80px;
   height: 52px;
@@ -413,6 +418,19 @@
   display: flex;
   align-items: center;
   justify-content: center;
+}
+.dpicker-thumb-new {
+  border: 1.5px dashed var(--acc);
+  background: none;
+}
+.dpicker-new-plus {
+  font-size: 26px;
+  color: var(--acc);
+  line-height: 1;
+}
+.dpicker-thumb-icon {
+  font-size: 24px;
+  opacity: 0.4;
 }
 .dpicker-info {
   flex: 1;
@@ -426,10 +444,22 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.dpicker-card-new .dpicker-name { color: var(--acc); }
 .dpicker-type {
   font-size: 12px;
   color: var(--mut2);
   margin-top: 3px;
+}
+.dpicker-badge-draft {
+  color: var(--mut2);
+  font-style: italic;
+}
+.dpicker-hint {
+  font-size: 12px;
+  color: var(--mut2);
+  text-align: center;
+  padding: 8px 0;
+  margin: 0;
 }
 
 /* ── Widget grid ───────────────────────────────────────────── */

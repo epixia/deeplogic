@@ -252,7 +252,7 @@ export default function DashboardEditor() {
     try {
       const all = await listOrgWidgets(token, orgId!)
       const inBoard = new Set(board?.widgets.map((w) => w.id) ?? [])
-      setPickerWidgets(all.filter((w) => !inBoard.has(w.id) && w.html))
+      setPickerWidgets(all.filter((w) => !inBoard.has(w.id)))
     } catch { /* silent */ }
     finally { setPickLoading(false) }
   }
@@ -427,21 +427,28 @@ export default function DashboardEditor() {
         <div className="dpicker-backdrop" onClick={() => !adding && setShowPicker(false)}>
           <div className="dpicker-modal" onClick={(e) => e.stopPropagation()}>
             <div className="dpicker-header">
-              <h2 className="dpicker-title">Add widget</h2>
+              <h2 className="dpicker-title">Add widget to dashboard</h2>
               <button type="button" className="dpicker-close" onClick={() => setShowPicker(false)}>✕</button>
             </div>
-            <div className="dpicker-tabs">
-              <button type="button" className="dpicker-tab active" onClick={() => { setShowPicker(false); setShowBuilder(true) }}>
-                ✦ Build new
-              </button>
-            </div>
-            <p className="dpicker-sub">Or pick an existing generated widget:</p>
             {pickLoading ? (
               <div className="dpicker-empty">Loading widgets…</div>
-            ) : pickerWidgets.length === 0 ? (
-              <div className="dpicker-empty">No generated widgets available. Create one in the Widgets page first.</div>
             ) : (
               <div className="dpicker-grid">
+                {/* Create-new card always first */}
+                <button
+                  type="button"
+                  className="dpicker-card dpicker-card-new"
+                  onClick={() => { setShowPicker(false); setShowBuilder(true) }}
+                >
+                  <div className="dpicker-thumb dpicker-thumb-new">
+                    <span className="dpicker-new-plus">+</span>
+                  </div>
+                  <div className="dpicker-info">
+                    <div className="dpicker-name">Build new widget</div>
+                    <div className="dpicker-type">Configure &amp; generate</div>
+                  </div>
+                </button>
+
                 {pickerWidgets.map((w) => (
                   <div key={w.id} className="dpicker-card">
                     <div className="dpicker-thumb">
@@ -453,12 +460,12 @@ export default function DashboardEditor() {
                           style={{ width: '100%', height: '100%', border: 'none' }}
                         />
                       ) : (
-                        <span style={{ fontSize: 28, opacity: 0.4 }}>{TYPE_ICONS[w.type] ?? '📊'}</span>
+                        <span className="dpicker-thumb-icon">{TYPE_ICONS[w.type] ?? '📊'}</span>
                       )}
                     </div>
                     <div className="dpicker-info">
                       <div className="dpicker-name">{w.name}</div>
-                      <div className="dpicker-type">{TYPE_ICONS[w.type]} {w.type}</div>
+                      <div className="dpicker-type">{TYPE_ICONS[w.type]} {w.type}{!w.html && <span className="dpicker-badge-draft"> · not generated</span>}</div>
                     </div>
                     <button
                       type="button"
@@ -470,6 +477,10 @@ export default function DashboardEditor() {
                     </button>
                   </div>
                 ))}
+
+                {pickerWidgets.length === 0 && (
+                  <p className="dpicker-hint">No other widgets yet — create one above or visit the Widgets page.</p>
+                )}
               </div>
             )}
           </div>
