@@ -181,12 +181,12 @@ export default function PreviewPane({ orgId, html, generating, fileBase }: Props
             className="studio-preview"
             src={sandboxUrl}
             title="Report preview (sandboxed)"
-            sandbox="allow-scripts allow-forms"
+            sandbox="allow-scripts allow-forms allow-popups"
           />
         ) : (
           <iframe
             className="studio-preview"
-            sandbox="allow-scripts"
+            sandbox="allow-scripts allow-popups"
             srcDoc={fallbackSrcDoc}
             title="Report preview"
           />

@@ -286,7 +286,7 @@ function WidgetThumb({ html, type }: { html: string | null; type: string }) {
         className="studio-thumb-frame"
         title="widget preview"
         srcDoc={`<!doctype html><html><head><meta charset="utf-8"><style>*{box-sizing:border-box}html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#0a1628}</style></head><body>${html}</body></html>`}
-        sandbox="allow-scripts"
+        sandbox="allow-scripts allow-popups"
         loading="lazy"
         style={{ width: '100%', height: '100%', transform: 'none', border: 'none' }}
       />

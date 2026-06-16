@@ -680,7 +680,7 @@ export default function Vault() {
                   return <img src={content} alt={preview.name} className="vault-preview-img" />
                 }
                 if (kind === 'html' || content.startsWith('<!')) {
-                  return <iframe srcDoc={content} sandbox="allow-scripts" className="vault-preview-frame" title={preview.name} />
+                  return <iframe srcDoc={content} sandbox="allow-scripts allow-popups" className="vault-preview-frame" title={preview.name} />
                 }
                 if (content.startsWith('data:application/pdf;base64,')) {
                   return pdfBlobUrl

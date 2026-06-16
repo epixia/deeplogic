@@ -554,7 +554,7 @@ export default function WidgetEditor() {
             <iframe
               className="wg-iframe"
               srcDoc={`<!doctype html><html><head><meta charset="utf-8"><style>*{box-sizing:border-box}html,body{margin:0;padding:0;width:100%;height:100%;background:#060d1a;color:#e8f4f8;font-family:system-ui,sans-serif}</style></head><body>${html}</body></html>`}
-              sandbox="allow-scripts"
+              sandbox="allow-scripts allow-popups"
               title="Widget preview"
               style={{ width: '100%', height: '100%', border: 'none', background: '#060d1a' }}
             />
