@@ -87,6 +87,12 @@ button {
   background-clip: text;
   color: transparent;
 }
+[data-theme='light'] .grad-text {
+  background: none;
+  -webkit-background-clip: unset;
+  background-clip: unset;
+  color: #000;
+}
 
 /* rounded card + hairline border utilities */
 .rounded-card {
@@ -249,6 +255,83 @@ nav.dl-nav {
   align-items: center;
   gap: 10px;
 }
+
+/* ---------- user menu ---------- */
+.dl-user-btn {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 10px 4px 4px;
+  border-radius: 99px;
+  border: 1px solid var(--line);
+  background: transparent;
+  cursor: pointer;
+  color: var(--ink);
+  font-size: 13px;
+  transition: background 0.15s;
+}
+.dl-user-btn:hover { background: var(--bg2); }
+.dl-user-avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #6fe3f0, #5560e8);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.dl-user-email {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dl-user-caret { color: var(--mut); font-size: 10px; }
+
+.dl-user-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 220px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0,0,0,.25);
+  padding: 6px;
+  z-index: 200;
+}
+.dl-user-dropdown-email {
+  padding: 8px 12px 6px;
+  font-size: 12px;
+  color: var(--mut);
+  word-break: break-all;
+}
+.dl-user-dropdown-divider {
+  height: 1px;
+  background: var(--line);
+  margin: 4px 0;
+}
+.dl-user-dropdown-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--ink);
+  text-decoration: none;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.dl-user-dropdown-item:hover { background: var(--bg2); }
+.dl-user-dropdown-item--admin { color: var(--cyan); }
+.dl-user-dropdown-item--danger { color: #e07a8a; }
 @media (max-width: 820px) {
   .links {
     display: none;
@@ -259,15 +342,6 @@ nav.dl-nav {
   padding: 9px 12px;
   font-size: 16px;
   line-height: 1;
-}
-
-/* ---------- generic typography helpers ---------- */
-.eyebrow {
-  font-size: 12px;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--cyan);
-  font-weight: 700;
 }
 
 /* a generic "coming soon" placeholder panel (used by stub pages) */

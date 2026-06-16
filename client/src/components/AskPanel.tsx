@@ -86,7 +86,7 @@ export default function AskPanel(props: {
       <style>{askStyles}</style>
 
       <header className="ask-head">
-        <span className="ask-eyebrow eyebrow">Ask DeepLogic</span>
+        <span className="ask-eyebrow">Ask DeepLogic</span>
         <p className="ask-sub">
           Natural-language questions over this model — number, trend &amp; cause.
         </p>

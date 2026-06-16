@@ -10,7 +10,8 @@ const MAX_CHARS = 16000;
 /** Render the per-report Data Vault (files / MCP / APIs / notes) as markdown. */
 function renderVault(vault: VaultItem[]): string[] {
   const parts: string[] = [];
-  const items = vault ?? [];
+  // enabled defaults to true for backwards-compat (items created before the field existed)
+  const items = (vault ?? []).filter((i) => i.enabled !== false);
   if (items.length === 0) return parts;
 
   const files = items.filter((i) => i.kind === 'file');

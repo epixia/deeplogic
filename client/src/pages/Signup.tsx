@@ -4,14 +4,17 @@
 // /app resolves the first one.
 
 import { useState, type FormEvent } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
+import { acceptInviteToken } from '../lib/api'
 import Logo from '../components/Logo'
 import './auth.css'
 
 export default function Signup() {
-  const { signUp } = useAuth()
+  const { signUp, getAccessToken, refreshOrgs } = useAuth()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const inviteToken = searchParams.get('invite')
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -27,12 +30,26 @@ export default function Signup() {
     }
     setBusy(true)
     const { error } = await signUp(email.trim(), password)
-    setBusy(false)
     if (error) {
+      setBusy(false)
       setError(error)
       return
     }
-    // Fresh accounts have no orgs yet → onboarding creates the first one.
+    // If there's an invite token, accept it immediately after signup.
+    if (inviteToken) {
+      try {
+        const accessToken = await getAccessToken()
+        if (accessToken) {
+          const { orgId } = await acceptInviteToken(accessToken, inviteToken)
+          await refreshOrgs()
+          navigate(`/app/${orgId}/ingest`, { replace: true })
+          return
+        }
+      } catch {
+        // If acceptance fails, fall through to onboarding; they can retry via invite link.
+      }
+    }
+    setBusy(false)
     navigate('/onboarding', { replace: true })
   }
 

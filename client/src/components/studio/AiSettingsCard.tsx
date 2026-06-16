@@ -143,7 +143,6 @@ export default function AiSettingsCard({
       <style>{styles}</style>
       <div className="ais-head">
         <div>
-          <span className="eyebrow">AI providers</span>
           <h2>Bring your own model keys</h2>
           <p className="ais-sub">
             Add a key for any provider; pick which one is used to generate

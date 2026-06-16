@@ -131,7 +131,6 @@ export default function Mission() {
     return (
       <main className="wrap">
         <div className="placeholder-panel">
-          <span className="eyebrow">Mission Control</span>
           <h2>No model selected</h2>
           <p>
             Choose a model from{' '}
@@ -151,7 +150,6 @@ export default function Mission() {
         {/* header */}
         <div className="mc-head">
           <div>
-            <span className="eyebrow">Mission Control</span>
             <h1>{model ? model.name : 'Loading…'}</h1>
             <div className="mc-sub">
               Always-on agent crew watching {model?.kpis.length ?? 0} KPIs
@@ -199,7 +197,6 @@ export default function Mission() {
                   marginBottom: 12,
                 }}
               >
-                <span className="eyebrow">Anomaly Alerts</span>
                 <span style={{ fontSize: 12, color: 'var(--mut2)' }}>
                   {anomalyList.length} active
                 </span>

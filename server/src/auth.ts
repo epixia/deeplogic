@@ -8,6 +8,7 @@
 
 import type { Request, Response, NextFunction } from 'express';
 import { getUserFromToken, userClientFor, serviceClient } from './supabase.js';
+import { getOrgLimits, getMonthlyTokens, type PlanLimits } from './billing.js';
 
 /** Pull the JWT from Authorization: Bearer or the ?token query (for SSE). */
 function readToken(req: Request): string {
@@ -56,6 +57,16 @@ async function lookupRole(orgId: string, userId: string): Promise<string | null>
   return (data as { role: string }).role;
 }
 
+/** Fetch the org row and stash it on req.org. */
+async function loadOrg(orgId: string, req: Request): Promise<void> {
+  const { data } = await serviceClient
+    .from('organizations')
+    .select('id, name, slug')
+    .eq('id', orgId)
+    .maybeSingle();
+  if (data) req.org = data as { id: string; name: string; slug: string };
+}
+
 /**
  * Middleware: require the caller to be a member of req.params.orgId.
  * Stashes the resolved role on req for downstream role checks.
@@ -72,7 +83,8 @@ export function requireMember() {
       res.status(403).json({ error: 'Not a member of this organization' });
       return;
     }
-    (req as Request & { orgRole?: string }).orgRole = role;
+    req.orgRole = role;
+    await loadOrg(orgId, req);
     next();
   };
 }
@@ -97,12 +109,125 @@ export function requireRole(roles: string[]) {
       res.status(403).json({ error: 'Insufficient role for this action' });
       return;
     }
-    (req as Request & { orgRole?: string }).orgRole = role;
+    req.orgRole = role;
+    await loadOrg(orgId, req);
     next();
   };
 }
 
 /** Read the role resolved by requireMember/requireRole (or null). */
 export function callerRole(req: Request): string | null {
-  return (req as Request & { orgRole?: string }).orgRole ?? null;
+  return req.orgRole ?? null;
+}
+
+// ---------------------------------------------------------------------------
+// Plan enforcement middleware
+// ---------------------------------------------------------------------------
+
+/**
+ * requireFeature('byok') — 402 if the org's effective plan doesn't include
+ * the feature. Must run after requireMember/requireRole.
+ */
+export function requireFeature(feature: keyof PlanLimits) {
+  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const limits = await getOrgLimits(serviceClient, req.params.orgId);
+      if (!limits[feature]) {
+        res.status(402).json({
+          error: `This feature requires a higher plan`,
+          feature,
+          upgrade: true,
+        });
+        return;
+      }
+      next();
+    } catch (err) {
+      console.error('requireFeature failed', err);
+      res.status(500).json({ error: 'Failed to check plan limits' });
+    }
+  };
+}
+
+/**
+ * checkMemberLimit — 402 if the org is at its member cap.
+ * Must run after requireRole.
+ */
+export function checkMemberLimit() {
+  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const orgId = req.params.orgId;
+      const limits = await getOrgLimits(serviceClient, orgId);
+      if (limits.members === Infinity) { next(); return; }
+      const { count } = await serviceClient
+        .from('org_members')
+        .select('*', { count: 'exact', head: true })
+        .eq('org_id', orgId);
+      if ((count ?? 0) >= limits.members) {
+        res.status(402).json({
+          error: `Your plan allows a maximum of ${limits.members} members`,
+          upgrade: true,
+        });
+        return;
+      }
+      next();
+    } catch (err) {
+      console.error('checkMemberLimit failed', err);
+      res.status(500).json({ error: 'Failed to check member limit' });
+    }
+  };
+}
+
+/**
+ * checkReportLimit — 402 if the org is at its studio project cap.
+ * Must run after requireMember.
+ */
+export function checkReportLimit() {
+  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const orgId = req.params.orgId;
+      const limits = await getOrgLimits(serviceClient, orgId);
+      if (limits.reports === Infinity) { next(); return; }
+      const { count } = await serviceClient
+        .from('studio_projects')
+        .select('*', { count: 'exact', head: true })
+        .eq('org_id', orgId);
+      if ((count ?? 0) >= limits.reports) {
+        res.status(402).json({
+          error: `Your plan allows a maximum of ${limits.reports} reports`,
+          upgrade: true,
+        });
+        return;
+      }
+      next();
+    } catch (err) {
+      console.error('checkReportLimit failed', err);
+      res.status(500).json({ error: 'Failed to check report limit' });
+    }
+  };
+}
+
+/**
+ * checkTokenBudget — 402 if the org has exhausted its monthly token allowance.
+ * Must run after requireMember.
+ */
+export function checkTokenBudget() {
+  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const orgId = req.params.orgId;
+      const limits = await getOrgLimits(serviceClient, orgId);
+      if (limits.tokensPerMonth === Infinity) { next(); return; }
+      const used = await getMonthlyTokens(serviceClient, orgId);
+      if (used >= limits.tokensPerMonth) {
+        res.status(402).json({
+          error: `You've used all ${limits.tokensPerMonth.toLocaleString()} AI tokens for this month`,
+          upgrade: true,
+        });
+        return;
+      }
+      next();
+    } catch (err) {
+      console.error('checkTokenBudget failed', err);
+      res.status(500).json({ error: 'Failed to check token budget' });
+    }
+  };
 }

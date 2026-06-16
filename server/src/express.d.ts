@@ -7,6 +7,8 @@ declare global {
       user?: { id: string; email: string };
       token?: string;
       db?: SupabaseClient;
+      orgRole?: string;
+      org?: { id: string; name: string; slug: string };
     }
   }
 }

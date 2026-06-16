@@ -52,7 +52,6 @@ export default function SamplePicker({ onPick, disabled, busyId }: Props) {
   return (
     <div className="dli-samples">
       <div className="dli-section-head">
-        <span className="eyebrow">Pick a sample</span>
         <p className="dli-section-sub">
           Pre-built sample reports — ingested instantly, no upload required.
         </p>

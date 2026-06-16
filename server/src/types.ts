@@ -122,6 +122,7 @@ export interface VaultItem {
   name: string;
   content: string; // file text / note body (empty for mcp/api)
   meta: Record<string, unknown>; // mcp/api: { url, description, auth }, files: { filename, size }
+  enabled: boolean; // whether this item is included in the AI's compiled context
   ts: string;
 }
 
@@ -144,7 +145,7 @@ export interface StudioProject {
 export interface ContextItem {
   id: string;
   scope: 'user' | 'org';
-  kind: 'doc' | 'html' | 'mcp' | 'note';
+  kind: 'doc' | 'html' | 'mcp' | 'note' | 'image';
   name: string;
   content: string;
   meta: Record<string, unknown>;

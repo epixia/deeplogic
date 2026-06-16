@@ -1,14 +1,15 @@
-// OrgSwitcher — a compact dropdown of the user's orgs. Switching navigates to
-// the selected org's ingest page. Reads the active orgId from the URL params.
+// OrgSwitcher — a compact dropdown of the user's dashboards. Switching navigates to
+// the selected dashboard's home page. Reads the active orgId from the URL params.
 
 import { useEffect, useRef, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import './org-switcher.css'
 
 export default function OrgSwitcher() {
   const { orgs } = useAuth()
-  const { orgId } = useParams<{ orgId: string }>()
+  const { pathname } = useLocation()
+  const orgId = pathname.match(/^\/app\/([^/]+)/)?.[1]
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement | null>(null)
@@ -29,7 +30,7 @@ export default function OrgSwitcher() {
 
   function select(id: string) {
     setOpen(false)
-    if (id !== orgId) navigate(`/app/${id}/ingest`)
+    if (id !== orgId) navigate(`/app/${id}/dashboards`)
   }
 
   return (

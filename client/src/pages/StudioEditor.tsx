@@ -376,10 +376,10 @@ export default function StudioEditor() {
             onShowContext={() => void openDrawer()}
             error={genError}
           />
-          <PreviewPane html={html} fileBase={fileBase} />
+          <PreviewPane orgId={orgId} html={html} generating={generating} fileBase={fileBase} />
         </div>
       ) : (
-        <PreviewPane html={html} fileBase={fileBase} />
+        <PreviewPane orgId={orgId} html={html} generating={generating} fileBase={fileBase} />
       )}
 
       {/* ---------- Data Vault drawer ---------- */}

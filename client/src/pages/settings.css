@@ -1,40 +1,50 @@
-/* Settings / member management — dark/cyan cards, hairline borders. */
+/* Settings — dark/cyan cards, hairline borders. */
 
 .dl-settings {
   position: relative;
   z-index: 1;
   padding-top: 40px;
   padding-bottom: 80px;
-  max-width: 880px;
+  max-width: 900px;
 }
 
 .dl-set__head {
-  margin-bottom: 26px;
+  margin-bottom: 28px;
 }
 
+
 .dl-set__head h1 {
-  font-size: 30px;
+  font-size: 28px;
   font-weight: 800;
   letter-spacing: -0.02em;
-  margin: 8px 0 8px;
+  margin: 6px 0 8px;
 }
 
 .dl-set__sub {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 10px;
   flex-wrap: wrap;
-  font-size: 14px;
+  font-size: 13px;
   color: var(--mut);
 }
 
 .dl-set__slug {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   color: var(--cyan);
+  font-size: 13px;
 }
 
-.dl-set__role {
-  text-transform: capitalize;
+.dl-set__role-pill {
+  font-size: 11px !important;
+  padding: 2px 9px !important;
+}
+
+/* tab body spacing */
+.dl-set__tab-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
 }
 
 .dl-set__card {
@@ -198,4 +208,316 @@
   font-size: 13px;
   padding: 10px 14px;
   margin-bottom: 18px;
+}
+
+.dl-set__success {
+  border-radius: 10px;
+  border: 1px solid rgba(111, 227, 240, 0.3);
+  background: rgba(111, 227, 240, 0.07);
+  color: var(--cyan);
+  font-size: 13px;
+  padding: 10px 14px;
+  margin-bottom: 18px;
+}
+
+.dl-set__muted {
+  color: var(--mut);
+}
+
+/* ---- Tabs ---- */
+.dl-set__tabs {
+  display: flex;
+  gap: 2px;
+  margin-bottom: 28px;
+  border-bottom: 1px solid var(--line);
+  overflow-x: auto;
+}
+
+.dl-set__tab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--mut);
+  cursor: pointer;
+  font-size: 13.5px;
+  font-weight: 600;
+  font-family: inherit;
+  padding: 9px 18px;
+  margin-bottom: -1px;
+  white-space: nowrap;
+  transition: color 0.15s, border-color 0.15s;
+  border-radius: 6px 6px 0 0;
+}
+
+.dl-set__tab:hover {
+  color: var(--ink);
+  background: rgba(111, 227, 240, 0.04);
+}
+
+.dl-set__tab.active {
+  color: var(--cyan);
+  border-bottom-color: var(--cyan);
+}
+
+/* ---- General tab — rename workspace ---- */
+.dl-set__workspace-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.dl-set__workspace-name {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.dl-set__workspace-slug {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  color: var(--mut2);
+}
+
+.dl-set__rename-btn {
+  margin-left: auto;
+  height: 34px;
+  font-size: 13px;
+}
+
+.dl-set__rename-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.dl-set__rename-input {
+  max-width: 420px;
+}
+
+.dl-set__rename-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* ---- Workspace switcher ---- */
+.dl-set__ws-new-btn {
+  margin-left: auto;
+  height: 34px;
+  font-size: 13px;
+}
+
+.dl-set__ws-create {
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.dl-set__ws-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dl-set__ws-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.12s;
+  border: 1px solid transparent;
+}
+
+.dl-set__ws-item:hover {
+  background: var(--card2);
+  border-color: var(--line);
+}
+
+.dl-set__ws-item.active {
+  background: rgba(111, 227, 240, 0.06);
+  border-color: rgba(111, 227, 240, 0.2);
+  cursor: default;
+}
+
+.dl-set__ws-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  background: linear-gradient(135deg, #6fe3f0, #5560e8);
+  color: #04121b;
+  font-size: 15px;
+  font-weight: 800;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.dl-set__ws-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.dl-set__ws-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dl-set__ws-role {
+  font-size: 12px;
+  color: var(--mut2);
+  text-transform: capitalize;
+}
+
+.dl-set__ws-current {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--cyan);
+  background: rgba(111, 227, 240, 0.1);
+  padding: 2px 8px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+/* ---- Billing tab ---- */
+.dl-set__planbadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border: 1px solid var(--line);
+  color: var(--mut);
+}
+
+.dl-set__planbadge.plan-team {
+  color: var(--cyan);
+  border-color: rgba(111, 227, 240, 0.35);
+  background: rgba(111, 227, 240, 0.08);
+}
+
+.dl-set__planbadge.plan-business {
+  color: var(--blue);
+  border-color: rgba(63, 134, 224, 0.35);
+  background: rgba(63, 134, 224, 0.07);
+}
+
+.dl-set__planbadge.plan-enterprise {
+  color: #b59aff;
+  border-color: rgba(181, 154, 255, 0.35);
+  background: rgba(181, 154, 255, 0.07);
+}
+
+.dl-set__trial-banner {
+  background: rgba(111, 227, 240, 0.06);
+  border: 1px solid rgba(111, 227, 240, 0.2);
+  border-radius: 8px;
+  color: var(--ink);
+  font-size: 13px;
+  padding: 10px 14px;
+  margin-bottom: 18px;
+}
+
+.dl-set__billing-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.dl-set__billing-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dl-set__billing-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--mut2);
+  font-weight: 600;
+}
+
+.dl-set__billing-value {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.dl-set__token-bar {
+  height: 4px;
+  background: var(--line);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-top: 6px;
+}
+
+.dl-set__token-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #6fe3f0, #5560e8);
+  border-radius: 4px;
+  transition: width 0.3s;
+}
+
+.dl-set__billing-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding-top: 4px;
+}
+
+/* ---- PlanGate ---- */
+.plan-gate {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px 18px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--bg2);
+  color: var(--mut);
+  font-size: 14px;
+}
+
+.plan-gate__icon {
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.plan-gate__body {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.plan-gate__upgrade {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 14px;
+  border-radius: 999px;
+  background: linear-gradient(120deg, #6fe3f0, #5560e8);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+  transition: opacity 0.15s;
+}
+
+.plan-gate__upgrade:hover {
+  opacity: 0.85;
 }

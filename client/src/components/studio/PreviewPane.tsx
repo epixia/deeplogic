@@ -1,36 +1,116 @@
 // PreviewPane — the RIGHT pane of the Studio editor. Tabs: Preview / Code.
-//   Preview = sandboxed <iframe srcDoc={html}> filling the pane.
+//   Preview = E2B sandboxed iframe (different origin, fully isolated).
+//             Falls back to srcDoc while sandbox warms up or if E2B unavailable.
 //   Code    = read-only <pre> of the HTML with Copy + Download (.html) actions.
-// Used by both the owner editor and the read-only viewer.
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { useAuth } from '../../auth/AuthContext'
+import { createSandbox, killSandbox, updateSandbox } from '../../lib/api'
 import { applyReportTheme, useAppTheme } from './reportTheme'
 
 interface Props {
+  orgId: string
   html: string
-  /** used to name the downloaded file (project slug or name) */
+  generating: boolean
   fileBase: string
 }
 
 type PaneTab = 'preview' | 'code'
 
-export default function PreviewPane({ html, fileBase }: Props) {
+export default function PreviewPane({ orgId, html, generating, fileBase }: Props) {
   const [tab, setTab] = useState<PaneTab>('preview')
   const [copied, setCopied] = useState(false)
   const theme = useAppTheme()
+  const { getAccessToken } = useAuth()
+
+  // E2B sandbox state
+  const [sandboxId, setSandboxId] = useState<string | null>(null)
+  const [sandboxUrl, setSandboxUrl] = useState<string | null>(null)
+  const [sandboxLoading, setSandboxLoading] = useState(false)
+  const [sandboxError, setSandboxError] = useState<string | null>(null)
+  // cache-bust the iframe src when HTML updates in an existing sandbox
+  const [previewKey, setPreviewKey] = useState(0)
+
+  const sandboxIdRef = useRef<string | null>(null)
+  sandboxIdRef.current = sandboxId
 
   const safeBase =
-    (fileBase || 'report').replace(/[^a-z0-9-_]+/gi, '-').replace(/^-+|-+$/g, '') ||
-    'report'
+    (fileBase || 'report').replace(/[^a-z0-9-_]+/gi, '-').replace(/^-+|-+$/g, '') || 'report'
+
+  // Kill sandbox on unmount
+  useEffect(() => {
+    return () => {
+      const id = sandboxIdRef.current
+      if (!id) return
+      getAccessToken().then((token) => {
+        if (token) killSandbox(token, orgId, id).catch(() => {})
+      })
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orgId])
+
+  // Create or update sandbox when generation finishes and we have HTML
+  useEffect(() => {
+    if (generating || !html) return
+
+    let cancelled = false
+
+    async function syncSandbox() {
+      const token = await getAccessToken()
+      if (!token || cancelled) return
+
+      const currentId = sandboxIdRef.current
+
+      if (currentId) {
+        // Update existing sandbox
+        try {
+          await updateSandbox(token, orgId, currentId, html)
+          if (!cancelled) setPreviewKey((k) => k + 1)
+        } catch (err: unknown) {
+          // 410 = sandbox expired — create a fresh one
+          const expired =
+            err instanceof Error && err.message.includes('410')
+          if (!expired) return
+          setSandboxId(null)
+          setSandboxUrl(null)
+          sandboxIdRef.current = null
+          await boot(token)
+        }
+      } else {
+        await boot(token)
+      }
+    }
+
+    async function boot(token: string) {
+      if (cancelled) return
+      setSandboxLoading(true)
+      setSandboxError(null)
+      try {
+        const info = await createSandbox(token, orgId, html)
+        if (cancelled) {
+          killSandbox(token, orgId, info.sandboxId).catch(() => {})
+          return
+        }
+        setSandboxId(info.sandboxId)
+        setSandboxUrl(info.previewUrl)
+        setPreviewKey((k) => k + 1)
+      } catch {
+        if (!cancelled) setSandboxError('Sandbox unavailable — showing local preview.')
+      } finally {
+        if (!cancelled) setSandboxLoading(false)
+      }
+    }
+
+    void syncSandbox()
+    return () => { cancelled = true }
+  }, [html, generating, orgId, getAccessToken])
 
   async function copy() {
     try {
       await navigator.clipboard.writeText(html)
       setCopied(true)
       window.setTimeout(() => setCopied(false), 1400)
-    } catch {
-      /* clipboard unavailable — no-op */
-    }
+    } catch { /* clipboard unavailable */ }
   }
 
   function download() {
@@ -44,6 +124,10 @@ export default function PreviewPane({ html, fileBase }: Props) {
     a.remove()
     URL.revokeObjectURL(url)
   }
+
+  // Decide what to render in the preview tab
+  const showSandbox = sandboxUrl && !sandboxLoading && !sandboxError
+  const fallbackSrcDoc = html || applyReportTheme(EMPTY_DOC, theme)
 
   return (
     <section className="studio-panel">
@@ -64,7 +148,13 @@ export default function PreviewPane({ html, fileBase }: Props) {
             Code
           </button>
         </div>
+
         <div className="editor-pane-actions">
+          {tab === 'preview' && (
+            <span className={`preview-sandbox-badge ${showSandbox ? 'active' : ''}`}>
+              {sandboxLoading ? '⏳ Sandbox…' : showSandbox ? '🔒 Sandboxed' : '⚠ Local preview'}
+            </span>
+          )}
           <button
             type="button"
             className="btn btn-ghost btn-xs"
@@ -85,14 +175,28 @@ export default function PreviewPane({ html, fileBase }: Props) {
       </div>
 
       {tab === 'preview' ? (
-        <iframe
-          className="studio-preview"
-          sandbox="allow-scripts"
-          srcDoc={html ? applyReportTheme(html, theme) : applyReportTheme(EMPTY_DOC, theme)}
-          title="Report preview"
-        />
+        showSandbox ? (
+          <iframe
+            key={previewKey}
+            className="studio-preview"
+            src={sandboxUrl}
+            title="Report preview (sandboxed)"
+            sandbox="allow-scripts allow-forms"
+          />
+        ) : (
+          <iframe
+            className="studio-preview"
+            sandbox="allow-scripts"
+            srcDoc={fallbackSrcDoc}
+            title="Report preview"
+          />
+        )
       ) : (
         <pre className="studio-code">{html || '<!-- no HTML yet -->'}</pre>
+      )}
+
+      {sandboxError && (
+        <div className="preview-sandbox-warn">{sandboxError}</div>
       )}
     </section>
   )

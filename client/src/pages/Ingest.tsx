@@ -65,7 +65,6 @@ export default function Ingest() {
   return (
     <main className="wrap dl-ingest">
       <header className="dli-head">
-        <span className="eyebrow">Ingest</span>
         <h1 className="dli-h1">
           Turn your reports into a{' '}
           <span className="grad-text">thinking control room</span>.

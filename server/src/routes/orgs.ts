@@ -1,14 +1,18 @@
-// Org + member management (PRD v2).
-//   POST   /api/orgs                          { name } -> creates org + owner + seeds samples
-//   GET    /api/orgs/:orgId/members           -> Member[]
-//   POST   /api/orgs/:orgId/members           { email, role } (admin+)
-//   PATCH  /api/orgs/:orgId/members/:userId   { role } (admin+; only owner manages owners)
-//   DELETE /api/orgs/:orgId/members/:userId   (admin+; only owner removes owners)
+// Org + member management (PRD v2 + billing).
+//   POST   /api/orgs                               { name }
+//   GET    /api/orgs/:orgId/members                -> Member[]
+//   POST   /api/orgs/:orgId/members                { email, role } (admin+)
+//   PATCH  /api/orgs/:orgId/members/:userId        { role } (admin+)
+//   DELETE /api/orgs/:orgId/members/:userId        (admin+)
+//   GET    /api/orgs/:orgId/invitations            -> Invitation[] (admin+)
+//   DELETE /api/orgs/:orgId/invitations/:id        (admin+)
+//   GET    /api/invite/:token                      (public) -> invitation info
+//   POST   /api/invite/:token/accept               (auth)   -> accept + join org
 
 import { Router } from 'express';
 import type { Request, Response } from 'express';
 import { serviceClient } from '../supabase.js';
-import { requireMember, requireRole, callerRole } from '../auth.js';
+import { requireMember, requireRole, callerRole, checkMemberLimit } from '../auth.js';
 import {
   createOrgWithSeed,
   listMembers,
@@ -16,7 +20,11 @@ import {
   removeMember,
   addMemberByEmail,
   getMemberRole,
+  createInvitation,
+  listInvitations,
+  deleteInvitation,
 } from '../repo.js';
+import { sendEmail, inviteEmailHtml } from '../email.js';
 
 export const orgsRouter = Router();
 
@@ -38,8 +46,10 @@ orgsRouter.post('/orgs', async (req: Request, res: Response) => {
     const membership = await createOrgWithSeed(serviceClient, req.user.id, name);
     res.status(201).json(membership);
   } catch (err) {
-    console.error('POST /orgs failed', err);
-    res.status(500).json({ error: 'Failed to create organization' });
+    const detail = err instanceof Error ? err.message : String(err);
+    console.error('POST /orgs failed:', detail, err);
+    // TEMP: surface the real cause to the client while debugging.
+    res.status(500).json({ error: 'Failed to create organization', detail });
   }
 });
 
@@ -58,10 +68,11 @@ orgsRouter.get(
   }
 );
 
-// POST /api/orgs/:orgId/members — add an already-registered user (admin+).
+// POST /api/orgs/:orgId/members — add member or send invitation if not yet registered (admin+).
 orgsRouter.post(
   '/orgs/:orgId/members',
   requireRole(['owner', 'admin']),
+  checkMemberLimit(),
   async (req: Request, res: Response) => {
     const email = ((req.body && req.body.email) || '').toString().trim();
     const role = ((req.body && req.body.role) || 'member').toString() as Role;
@@ -73,22 +84,105 @@ orgsRouter.post(
       res.status(400).json({ error: 'Invalid role' });
       return;
     }
-    // Only an owner may grant the owner role.
     if (role === 'owner' && callerRole(req) !== 'owner') {
       res.status(403).json({ error: 'Only an owner can grant the owner role' });
       return;
     }
     try {
       const member = await addMemberByEmail(serviceClient, req.params.orgId, email, role);
-      res.status(201).json(member);
+      res.status(201).json({ type: 'member', ...member });
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to add member';
-      if (msg === 'user must sign up first') {
-        res.status(404).json({ error: 'user must sign up first' });
+      if (msg !== 'user must sign up first') {
+        console.error('POST member failed', err);
+        res.status(500).json({ error: msg });
         return;
       }
-      console.error('POST member failed', err);
-      res.status(500).json({ error: msg });
+      // User doesn't have an account yet — send an invitation email instead.
+      try {
+        const org = req.org!;
+        const inv = await createInvitation(
+          serviceClient,
+          req.params.orgId,
+          email,
+          role,
+          req.user!.id
+        );
+        const baseUrl = process.env.APP_URL ?? 'http://localhost:5173';
+        const acceptUrl = `${baseUrl}/invite/${inv.token}`;
+        await sendEmail({
+          to: email,
+          subject: `You're invited to join ${org.name} on DeepLogic`,
+          html: inviteEmailHtml({
+            orgName: org.name,
+            inviterEmail: req.user!.email,
+            role,
+            acceptUrl,
+            expiresAt: inv.expiresAt,
+          }),
+        });
+        res.status(202).json({ type: 'invitation', email, role, expiresAt: inv.expiresAt });
+      } catch (invErr) {
+        console.error('Invitation failed', invErr);
+        res.status(500).json({ error: 'Failed to send invitation' });
+      }
+    }
+  }
+);
+
+// GET /api/orgs/:orgId/invitations — list pending invitations (admin+).
+orgsRouter.get(
+  '/orgs/:orgId/invitations',
+  requireRole(['owner', 'admin']),
+  async (req: Request, res: Response) => {
+    try {
+      const invitations = await listInvitations(serviceClient, req.params.orgId);
+      res.json(invitations);
+    } catch (err) {
+      console.error('GET invitations failed', err);
+      res.status(500).json({ error: 'Failed to list invitations' });
+    }
+  }
+);
+
+// DELETE /api/orgs/:orgId/invitations/:invId — cancel a pending invitation (admin+).
+orgsRouter.delete(
+  '/orgs/:orgId/invitations/:invId',
+  requireRole(['owner', 'admin']),
+  async (req: Request, res: Response) => {
+    try {
+      await deleteInvitation(serviceClient, req.params.orgId, req.params.invId);
+      res.status(204).end();
+    } catch (err) {
+      console.error('DELETE invitation failed', err);
+      res.status(500).json({ error: 'Failed to cancel invitation' });
+    }
+  }
+);
+
+
+// PATCH /api/orgs/:orgId — rename workspace (admin+).
+orgsRouter.patch(
+  '/orgs/:orgId',
+  requireRole(['owner', 'admin']),
+  async (req: Request, res: Response) => {
+    const name = ((req.body && req.body.name) || '').toString().trim();
+    if (!name) {
+      res.status(400).json({ error: 'Name is required' });
+      return;
+    }
+    try {
+      const { data, error } = await serviceClient
+        .from('organizations')
+        .update({ name })
+        .eq('id', req.params.orgId)
+        .select('id, name, slug')
+        .single();
+      if (error) throw error;
+      res.json(data);
+    } catch (err) {
+      console.error('PATCH org failed', err);
+      res.status(500).json({ error: 'Failed to update organization' });
     }
   }
 );

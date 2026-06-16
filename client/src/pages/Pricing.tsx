@@ -175,7 +175,6 @@ export default function Pricing() {
       {/* usage / token model */}
       <section className="pr-usage rounded-card">
         <div className="pr-usage-copy">
-          <span className="eyebrow">How AI usage works</span>
           <h2>Pay for thinking, not for dashboards.</h2>
           <p>
             Connecting data, dashboards, Mission Control and anomaly detection are
@@ -214,7 +213,6 @@ export default function Pricing() {
 
       {/* FAQ */}
       <section className="pr-faq">
-        <span className="eyebrow">FAQ</span>
         <h2>Questions, answered.</h2>
         <div className="pr-faq-grid">
           {[

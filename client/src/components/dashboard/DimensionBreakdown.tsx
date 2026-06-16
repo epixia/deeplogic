@@ -35,7 +35,6 @@ export default function DimensionBreakdown({
     <div className="dl-chart-card rounded-card">
       <div className="dl-chart-card__head">
         <div>
-          <span className="eyebrow">Breakdown</span>
           <h3 className="dl-chart-card__title">
             {kpi.name} by {dimensionName}
           </h3>

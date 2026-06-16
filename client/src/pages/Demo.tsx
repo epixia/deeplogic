@@ -178,9 +178,6 @@ export default function Demo() {
       {/* demo banner */}
       <div className="demo-banner rounded-card">
         <div>
-          <span className="eyebrow" style={{ color: 'var(--cyan)' }}>
-            Live demo
-          </span>
           <p>
             You're exploring DeepLogic on{' '}
             {model ? <strong>{model.name}</strong> : 'a sample model'}. Nothing is
@@ -203,7 +200,6 @@ export default function Demo() {
           <div className="demo-pipeline-head">
             <Logo size={34} title="DeepLogic" />
             <div>
-              <span className="eyebrow">Generating your mission control</span>
               <h2>{model ? model.name : 'Reading the model…'}</h2>
             </div>
             <span className="mc-live">
@@ -276,7 +272,6 @@ export default function Demo() {
 
           {/* mission control band */}
           <div className="demo-mc-head">
-            <span className="eyebrow">Mission Control</span>
             <span className={`mc-live${connected ? '' : ' off'}`}>
               <span className="dot" />
               {connected ? 'Live' : 'Standby'}
@@ -287,7 +282,6 @@ export default function Demo() {
             <div className="mc-col">
               <section>
                 <div className="demo-alerts-head">
-                  <span className="eyebrow">Anomaly Alerts</span>
                   <span style={{ fontSize: 12, color: 'var(--mut2)' }}>
                     {anomalyList.length} active
                   </span>

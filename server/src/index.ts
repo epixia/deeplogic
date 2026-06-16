@@ -8,21 +8,30 @@ import cors from 'cors';
 
 import { requireAuth } from './auth.js';
 import { demoRouter } from './routes/demo.js';
+import { inviteRouter } from './routes/invite.js';
 import { meRouter } from './routes/me.js';
 import { orgsRouter } from './routes/orgs.js';
 import { modelsRouter } from './routes/models.js';
 import { ingestRouter } from './routes/ingest.js';
 import { missionRouter } from './routes/mission.js';
 import { studioRouter } from './routes/studio.js';
+import { billingRouter, stripeWebhookHandler } from './routes/billing.js';
+import { adminRouter } from './routes/admin.js';
+import { sandboxRouter } from './routes/sandbox.js';
+import { dashboardsRouter } from './routes/dashboards.js';
+import { agentsRouter } from './routes/agents.js';
+import { alertsRouter } from './routes/alerts.js';
 
 const PORT = Number(process.env.PORT) || 8787;
 
 const app = express();
 app.use(cors());
 
-// JSON body parsing for non-multipart requests. The ingest upload route uses
-// its own raw() parser scoped to multipart/form-data, so JSON here is safe.
-// Limit is generous to allow base64 image/PDF prompt attachments in Studio.
+// Stripe webhook needs the raw body for signature verification.
+// Register before express.json() so the buffer is unmodified.
+app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), stripeWebhookHandler);
+
+// JSON body parsing for all other routes.
 app.use(express.json({ limit: '30mb' }));
 
 // Lightweight request log.
@@ -36,9 +45,9 @@ app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', service: 'deeplogic-server', time: new Date().toISOString() });
 });
 
-// Public, unauthenticated homepage demo (ephemeral, no tenant). Mounted BEFORE
-// requireAuth so it is reachable without signing in.
+// Public routes — no auth required.
 app.use('/api', demoRouter);
+app.use('/api', inviteRouter);   // GET /invite/:token + POST /invite/:token/accept
 
 // Everything else under /api requires authentication.
 app.use('/api', requireAuth);
@@ -50,6 +59,12 @@ app.use('/api', modelsRouter);
 app.use('/api', ingestRouter);
 app.use('/api', missionRouter);
 app.use('/api', studioRouter);
+app.use('/api', billingRouter);
+app.use('/api', adminRouter);
+app.use('/api', sandboxRouter);
+app.use('/api', dashboardsRouter);
+app.use('/api', agentsRouter);
+app.use('/api', alertsRouter);
 
 app.listen(PORT, () => {
   console.log(`DeepLogic API listening on http://localhost:${PORT}`);

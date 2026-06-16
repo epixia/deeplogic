@@ -87,6 +87,31 @@
   padding: 10px 14px;
 }
 
+.dl-auth__forgot {
+  text-align: right;
+  font-size: 13px;
+  margin-top: -4px;
+}
+
+.dl-auth__forgot a {
+  color: var(--cyan);
+  font-weight: 600;
+}
+
+.dl-auth__forgot a:hover {
+  text-decoration: underline;
+}
+
+.dl-auth__success {
+  border-radius: 10px;
+  border: 1px solid rgba(111, 227, 240, 0.35);
+  background: rgba(111, 227, 240, 0.08);
+  color: var(--ink);
+  font-size: 13.5px;
+  line-height: 1.5;
+  padding: 12px 14px;
+}
+
 .dl-auth__foot {
   margin-top: 22px;
   text-align: center;

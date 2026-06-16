@@ -181,7 +181,18 @@ export default function Studio() {
     canDelete: boolean
   }) {
     return (
-      <div className="studio-card">
+      <div className="studio-card" style={{ position: 'relative' }}>
+        {canDelete && (
+          <button
+            type="button"
+            className="sc-delete-btn"
+            disabled={busyId === p.id}
+            title="Delete report"
+            onClick={() => void remove(p)}
+          >
+            ✕
+          </button>
+        )}
         <Link
           to={`/app/${orgId}/studio/${p.id}`}
           className="studio-card-link"
@@ -202,24 +213,6 @@ export default function Studio() {
             </span>
           </div>
         </Link>
-        <div className="studio-card-foot">
-          <Link
-            to={`/app/${orgId}/studio/${p.id}`}
-            className="btn btn-ghost btn-xs"
-          >
-            {p.isOwner ? 'Open' : 'View'}
-          </Link>
-          {canDelete && (
-            <button
-              type="button"
-              className="btn btn-danger btn-xs"
-              disabled={busyId === p.id}
-              onClick={() => void remove(p)}
-            >
-              Delete
-            </button>
-          )}
-        </div>
       </div>
     )
   }
@@ -228,9 +221,8 @@ export default function Studio() {
     <main className="wrap studio">
       <header className="studio-head">
         <div>
-          <span className="eyebrow">Reports</span>
           <h1>
-            Vibecode a <span className="grad-text">report</span>.
+            <span className="grad-text">Reports</span>
           </h1>
           <p className="studio-lead">
             Chat to generate self-contained HTML reports with live preview, code,
@@ -263,7 +255,7 @@ export default function Studio() {
           className={`studio-tab ${tab === 'context' ? 'active' : ''}`}
           onClick={() => setTab('context')}
         >
-          Context Library
+          Library
         </button>
       </div>
 
@@ -276,6 +268,9 @@ export default function Studio() {
           <div className="studio-empty">Loading your reports…</div>
         ) : (
           <div className="studio-grid">
+            {mine.map((p) => (
+              <ProjectCard key={p.id} p={p} canDelete />
+            ))}
             <button
               type="button"
               className="studio-card studio-card-new"
@@ -284,9 +279,6 @@ export default function Studio() {
               <span className="plus">+</span>
               New report
             </button>
-            {mine.map((p) => (
-              <ProjectCard key={p.id} p={p} canDelete />
-            ))}
           </div>
         )
       ) : loading ? (

@@ -102,6 +102,18 @@ export function createOrg(token: string, name: string): Promise<OrgMembership> {
   })
 }
 
+// PATCH /api/orgs/:orgId { name } -> rename workspace
+export function updateOrg(
+  token: string,
+  orgId: string,
+  body: { name: string },
+): Promise<{ id: string; name: string; slug: string }> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  })
+}
+
 /* ---------------- member management (RBAC) ---------------- */
 
 // GET /api/orgs/:orgId/members
@@ -133,7 +145,21 @@ export function removeMember(
   })
 }
 
-// POST /api/orgs/:orgId/members { email, role } -> add an already-registered user
+// POST /api/orgs/:orgId/members { email, role }
+// Returns { type: 'member', ...Member } or { type: 'invitation', email, role, expiresAt }
+export function inviteMember(
+  token: string,
+  orgId: string,
+  email: string,
+  role: OrgRole,
+): Promise<{ type: 'member' | 'invitation'; email?: string; role: OrgRole; expiresAt?: string } & Partial<Member>> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/members`, {
+    method: 'POST',
+    body: JSON.stringify({ email, role }),
+  })
+}
+
+/** @deprecated use inviteMember */
 export function addMemberByEmail(
   token: string,
   orgId: string,
@@ -144,6 +170,97 @@ export function addMemberByEmail(
     method: 'POST',
     body: JSON.stringify({ email, role }),
   })
+}
+
+/* ---------------- invitations ---------------- */
+
+export interface Invitation {
+  id: string
+  orgId: string
+  email: string
+  role: OrgRole
+  invitedBy: string | null
+  token: string
+  acceptedAt: string | null
+  expiresAt: string
+  createdAt: string
+}
+
+// GET /api/orgs/:orgId/invitations
+export function listInvitations(token: string, orgId: string): Promise<Invitation[]> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/invitations`)
+}
+
+// DELETE /api/orgs/:orgId/invitations/:id
+export function cancelInvitation(token: string, orgId: string, invId: string): Promise<void> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/invitations/${enc(invId)}`, { method: 'DELETE' })
+}
+
+// GET /api/invite/:token (public — no auth)
+export async function verifyInviteToken(token: string): Promise<{
+  orgId: string; orgName: string; email: string; role: string; expiresAt: string
+}> {
+  const res = await fetch(`/api/invite/${enc(token)}`)
+  if (!res.ok) throw new Error(await errorDetail(res))
+  return res.json()
+}
+
+// POST /api/invite/:token/accept (auth required)
+export function acceptInviteToken(
+  accessToken: string,
+  inviteToken: string,
+): Promise<{ orgId: string; role: string }> {
+  return jsonFetch(accessToken, `/invite/${enc(inviteToken)}/accept`, { method: 'POST' })
+}
+
+/* ---------------- billing ---------------- */
+
+export interface BillingSubscription {
+  plan: 'free' | 'team' | 'business' | 'enterprise'
+  status: 'trialing' | 'active' | 'past_due' | 'canceled'
+  inTrial: boolean
+  trialEndsAt: string | null
+  currentPeriodEnd: string | null
+  seatCount: number
+  tokensUsed: number
+  limits: {
+    members: number | null
+    reports: number | null
+    tokensPerMonth: number | null
+    byok: boolean
+    mcp: boolean
+    auditLog: boolean
+  }
+  hasStripe: boolean
+}
+
+// GET /api/orgs/:orgId/billing/subscription
+export function getBillingSubscription(
+  token: string,
+  orgId: string,
+): Promise<BillingSubscription> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/billing/subscription`)
+}
+
+// POST /api/orgs/:orgId/billing/checkout { plan, seats? }
+export function createCheckoutSession(
+  token: string,
+  orgId: string,
+  plan: 'team' | 'business',
+  seats?: number,
+): Promise<{ url: string }> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/billing/checkout`, {
+    method: 'POST',
+    body: JSON.stringify({ plan, seats }),
+  })
+}
+
+// POST /api/orgs/:orgId/billing/portal
+export function createPortalSession(
+  token: string,
+  orgId: string,
+): Promise<{ url: string }> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/billing/portal`, { method: 'POST' })
 }
 
 /* ---------------- models ---------------- */
@@ -456,6 +573,41 @@ export function getAiSettings(token: string, orgId: string): Promise<AiSettings>
   return jsonFetch(token, `/orgs/${enc(orgId)}/studio/ai-settings`)
 }
 
+/* ---------------- E2B sandbox preview ---------------- */
+
+export interface SandboxInfo {
+  sandboxId: string
+  previewUrl: string
+}
+
+// POST /api/orgs/:orgId/studio/sandbox { html } -> { sandboxId, previewUrl }
+export function createSandbox(token: string, orgId: string, html: string): Promise<SandboxInfo> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/studio/sandbox`, {
+    method: 'POST',
+    body: JSON.stringify({ html }),
+  })
+}
+
+// PATCH /api/orgs/:orgId/studio/sandbox/:sandboxId { html } -> { ok } | 410 expired
+export function updateSandbox(
+  token: string,
+  orgId: string,
+  sandboxId: string,
+  html: string,
+): Promise<{ ok: boolean }> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/studio/sandbox/${enc(sandboxId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ html }),
+  })
+}
+
+// DELETE /api/orgs/:orgId/studio/sandbox/:sandboxId -> 204
+export function killSandbox(token: string, orgId: string, sandboxId: string): Promise<void> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/studio/sandbox/${enc(sandboxId)}`, {
+    method: 'DELETE',
+  })
+}
+
 // PUT /api/orgs/:orgId/studio/ai-settings { active?, entries?:[{provider,model?,apiKey?}] }
 export function saveAiSettings(
   token: string,
@@ -488,7 +640,10 @@ export interface VaultConnector {
   kind: string
   sourceType: 'model' | 'report' | 'library'
   sourceName: string
+  deleteRef: string
   ownerEmail: string | null
+  url?: string | null
+  meta?: Record<string, string>
 }
 export interface VaultDocument {
   id: string
@@ -497,6 +652,7 @@ export interface VaultDocument {
   sourceType: 'report' | 'library'
   sourceName: string
   scope: string | null
+  deleteRef: string
   ownerEmail: string | null
 }
 
@@ -508,6 +664,115 @@ export function getOrgVault(
   return jsonFetch(token, `/orgs/${enc(orgId)}/vault`)
 }
 
+// GET /api/orgs/:orgId/vault/doc/content?ref=...
+export function getVaultDocContent(
+  token: string,
+  orgId: string,
+  deleteRef: string,
+): Promise<{ name: string; kind: string; content: string }> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/vault/doc/content?ref=${enc(deleteRef)}`)
+}
+
+// DELETE /api/orgs/:orgId/vault  { deleteRef }
+export function deleteVaultEntry(
+  token: string,
+  orgId: string,
+  deleteRef: string,
+): Promise<{ ok: boolean }> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/vault`, {
+    method: 'DELETE',
+    body: JSON.stringify({ deleteRef }),
+  })
+}
+
+// POST /api/orgs/:orgId/vault/test
+export function testConnectorUrl(
+  token: string,
+  orgId: string,
+  url: string,
+): Promise<{ ok: boolean; status?: number; statusText?: string; error?: string }> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/vault/test`, {
+    method: 'POST',
+    body: JSON.stringify({ url }),
+  })
+}
+
+// GET /api/orgs/:orgId/vault/test-stream?url=... — streams SSE diagnostic events
+export async function* streamConnectorTest(
+  token: string,
+  orgId: string,
+  url: string,
+  signal?: AbortSignal,
+): AsyncGenerator<{ msg: string; ok?: boolean; done?: boolean }> {
+  const res = await fetch(
+    `${BASE}/orgs/${enc(orgId)}/vault/test-stream?url=${encodeURIComponent(url)}`,
+    { headers: { Authorization: `Bearer ${token}` }, signal },
+  )
+  if (!res.ok || !res.body) {
+    yield { msg: `Server error: ${res.status}`, ok: false, done: true }
+    return
+  }
+  const reader = res.body.getReader()
+  const dec = new TextDecoder()
+  let buf = ''
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buf += dec.decode(value, { stream: true })
+    const lines = buf.split('\n')
+    buf = lines.pop() ?? ''
+    for (const line of lines) {
+      if (line.startsWith('data: ')) {
+        try { yield JSON.parse(line.slice(6)) as { msg: string; ok?: boolean; done?: boolean } }
+        catch { /* ignore malformed */ }
+      }
+    }
+  }
+}
+
+// PATCH /api/orgs/:orgId/vault/ctx/:ctxId
+export function updateVaultMcp(
+  token: string,
+  orgId: string,
+  ctxId: string,
+  patch: { name?: string; meta?: Record<string, string> },
+): Promise<{ ok: boolean }> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/vault/ctx/${enc(ctxId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(patch),
+  })
+}
+
+// PATCH /api/orgs/:orgId/studio/projects/:projectId/vault/:itemId
+export function updateVaultProj(
+  token: string,
+  orgId: string,
+  projectId: string,
+  itemId: string,
+  patch: { name?: string; meta?: Record<string, string>; enabled?: boolean },
+): Promise<{ ok: boolean }> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/studio/projects/${enc(projectId)}/vault/${enc(itemId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      ...(patch.name !== undefined ? { name: patch.name } : {}),
+      ...(patch.meta ? { meta: patch.meta } : {}),
+      ...(patch.enabled !== undefined ? { enabled: patch.enabled } : {}),
+    }),
+  })
+}
+
+// PATCH /api/orgs/:orgId/vault/model-connector
+export function updateVaultModelConnector(
+  token: string,
+  orgId: string,
+  body: { modelId: string; connectorKind: string; meta: Record<string, string> },
+): Promise<{ ok: boolean }> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/vault/model-connector`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  })
+}
+
 export type VaultKind = 'file' | 'mcp' | 'api' | 'note'
 
 export interface VaultItem {
@@ -516,6 +781,7 @@ export interface VaultItem {
   name: string
   content: string
   meta: Record<string, unknown>
+  enabled: boolean
   ts: string
 }
 
@@ -536,7 +802,7 @@ export interface StudioProject {
 }
 
 export type ContextScope = 'user' | 'org'
-export type ContextKind = 'doc' | 'html' | 'mcp' | 'note'
+export type ContextKind = 'doc' | 'html' | 'mcp' | 'note' | 'image'
 
 export interface ContextItem {
   id: string
@@ -707,6 +973,19 @@ export function getCompiledContext(
   )
 }
 
+// POST /api/orgs/:orgId/studio/context/summarize { filename, content } -> { description }
+export function summarizeDocument(
+  token: string,
+  orgId: string,
+  filename: string,
+  content: string,
+): Promise<{ description: string }> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/studio/context/summarize`, {
+    method: 'POST',
+    body: JSON.stringify({ filename, content }),
+  })
+}
+
 // GET /api/orgs/:orgId/studio/context
 export function listContext(
   token: string,
@@ -761,4 +1040,454 @@ export function deleteContext(
   return jsonFetch(token, `/orgs/${enc(orgId)}/studio/context/${enc(id)}`, {
     method: 'DELETE',
   })
+}
+
+/* ---------------- Super-admin API ---------------- */
+
+export interface AdminStats {
+  totalOrgs: number
+  totalUsers: number
+  planBreakdown: Record<string, number>
+  trialOrgs: number
+  pastDueOrgs: number
+  estimatedMrr: number
+  newOrgsThisMonth: number
+  tokensBilledThisMonth: number
+}
+
+export interface AdminOrg {
+  id: string
+  name: string
+  slug: string
+  plan: string
+  status: string
+  inTrial: boolean
+  memberCount: number
+  seatCount: number
+  createdAt: string
+  trialEndsAt: string | null
+  currentPeriodEnd: string | null
+  stripeCustomerId: string | null
+}
+
+export interface AdminOrgMember {
+  userId: string
+  email: string
+  role: string
+  joinedAt: string
+}
+
+export interface AdminOrgDetail {
+  org: { id: string; name: string; slug: string; created_at: string }
+  subscription: Record<string, unknown> | null
+  members: AdminOrgMember[]
+  tokensThisMonth: number
+  invitations: unknown[]
+}
+
+export interface AdminUser {
+  id: string
+  email: string
+  createdAt: string
+  orgs: { orgId: string; orgName: string; orgSlug: string; role: string }[]
+}
+
+// GET /api/admin/me
+export function adminMe(token: string): Promise<{ isAdmin: boolean; email: string }> {
+  return jsonFetch(token, '/admin/me')
+}
+
+// GET /api/admin/stats
+export function adminStats(token: string): Promise<AdminStats> {
+  return jsonFetch(token, '/admin/stats')
+}
+
+// GET /api/admin/orgs
+export function adminListOrgs(
+  token: string,
+  params?: { page?: number; limit?: number; search?: string; plan?: string; status?: string },
+): Promise<{ orgs: AdminOrg[]; total: number }> {
+  const q = new URLSearchParams()
+  if (params?.page)   q.set('page',   String(params.page))
+  if (params?.limit)  q.set('limit',  String(params.limit))
+  if (params?.search) q.set('search', params.search)
+  if (params?.plan)   q.set('plan',   params.plan)
+  if (params?.status) q.set('status', params.status)
+  const qs = q.toString() ? `?${q}` : ''
+  return jsonFetch(token, `/admin/orgs${qs}`)
+}
+
+// GET /api/admin/orgs/:orgId
+export function adminGetOrg(token: string, orgId: string): Promise<AdminOrgDetail> {
+  return jsonFetch(token, `/admin/orgs/${enc(orgId)}`)
+}
+
+// PATCH /api/admin/orgs/:orgId/subscription
+export function adminPatchSubscription(
+  token: string,
+  orgId: string,
+  patch: { plan?: string; status?: string; trialEndsAt?: string | null },
+): Promise<Record<string, unknown>> {
+  return jsonFetch(token, `/admin/orgs/${enc(orgId)}/subscription`, {
+    method: 'PATCH',
+    body: JSON.stringify(patch),
+  })
+}
+
+// DELETE /api/admin/orgs/:orgId/members/:userId
+export function adminRemoveMember(token: string, orgId: string, userId: string): Promise<void> {
+  return jsonFetch(token, `/admin/orgs/${enc(orgId)}/members/${enc(userId)}`, { method: 'DELETE' })
+}
+
+// GET /api/admin/users
+export function adminListUsers(
+  token: string,
+  params?: { page?: number; limit?: number; search?: string },
+): Promise<{ users: AdminUser[]; total: number }> {
+  const q = new URLSearchParams()
+  if (params?.page)   q.set('page',   String(params.page))
+  if (params?.limit)  q.set('limit',  String(params.limit))
+  if (params?.search) q.set('search', params.search)
+  const qs = q.toString() ? `?${q}` : ''
+  return jsonFetch(token, `/admin/users${qs}`)
+}
+
+// POST /api/admin/restart
+export function adminRestart(token: string): Promise<{ ok: boolean; message: string }> {
+  return jsonFetch(token, '/admin/restart', { method: 'POST' })
+}
+
+/* ---------------- dashboards + widgets ---------------- */
+
+export type WidgetType = 'kpi' | 'chart' | 'table' | 'insight' | 'alert' | 'embed' | 'news'
+export type DashboardVisibility = 'private' | 'org' | 'published'
+
+export interface WidgetSource {
+  type: 'library' | 'model'
+  ref: string
+  name: string
+}
+
+export interface AlertRule {
+  metric: string
+  operator: '>' | '<' | '>=' | '<=' | '='
+  threshold: number
+  channel?: string
+}
+
+export interface Widget {
+  id: string
+  dashboardId: string | null
+  ownerId: string
+  isOwner?: boolean
+  name: string
+  type: WidgetType
+  html: string | null
+  prompt: string | null
+  gridX: number
+  gridY: number
+  gridW: number
+  gridH: number
+  sources: WidgetSource[]
+  alertRule: AlertRule | null
+  alertStatus: 'ok' | 'fired' | null
+  lastRefreshed: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface DashboardListItem {
+  id: string
+  name: string
+  slug: string
+  visibility: DashboardVisibility
+  description: string | null
+  ownerId: string
+  isOwner: boolean
+  widgetCount: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface Dashboard extends DashboardListItem {
+  widgets: Widget[]
+}
+
+// GET /api/orgs/:orgId/dashboards
+export function listDashboards(token: string, orgId: string): Promise<DashboardListItem[]> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/dashboards`)
+}
+
+// POST /api/orgs/:orgId/dashboards
+export function createDashboard(
+  token: string,
+  orgId: string,
+  body: { name: string; description?: string },
+): Promise<DashboardListItem> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/dashboards`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
+// GET /api/orgs/:orgId/dashboards/:id
+export function getDashboard(token: string, orgId: string, id: string): Promise<Dashboard> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/dashboards/${enc(id)}`)
+}
+
+// PATCH /api/orgs/:orgId/dashboards/:id
+export function updateDashboard(
+  token: string,
+  orgId: string,
+  id: string,
+  patch: { name?: string; visibility?: DashboardVisibility; description?: string },
+): Promise<{ ok: boolean }> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/dashboards/${enc(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(patch),
+  })
+}
+
+// DELETE /api/orgs/:orgId/dashboards/:id
+export function deleteDashboard(token: string, orgId: string, id: string): Promise<void> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/dashboards/${enc(id)}`, { method: 'DELETE' })
+}
+
+// POST /api/orgs/:orgId/dashboards/:id/widgets
+export function createWidget(
+  token: string,
+  orgId: string,
+  dashboardId: string,
+  body: {
+    name: string
+    type?: WidgetType
+    html?: string
+    prompt?: string
+    sources?: WidgetSource[]
+    gridX?: number
+    gridY?: number
+    gridW?: number
+    gridH?: number
+    alertRule?: AlertRule | null
+  },
+): Promise<Widget> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/dashboards/${enc(dashboardId)}/widgets`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
+// PATCH /api/orgs/:orgId/dashboards/:id/widgets/:wid
+export function updateWidget(
+  token: string,
+  orgId: string,
+  dashboardId: string,
+  widgetId: string,
+  patch: {
+    name?: string
+    prompt?: string
+    gridX?: number
+    gridY?: number
+    gridW?: number
+    gridH?: number
+    sources?: WidgetSource[]
+    alertRule?: AlertRule | null
+  },
+): Promise<Widget> {
+  return jsonFetch(
+    token,
+    `/orgs/${enc(orgId)}/dashboards/${enc(dashboardId)}/widgets/${enc(widgetId)}`,
+    { method: 'PATCH', body: JSON.stringify(patch) },
+  )
+}
+
+// DELETE /api/orgs/:orgId/dashboards/:id/widgets/:wid
+export function deleteWidget(
+  token: string,
+  orgId: string,
+  dashboardId: string,
+  widgetId: string,
+): Promise<void> {
+  return jsonFetch(
+    token,
+    `/orgs/${enc(orgId)}/dashboards/${enc(dashboardId)}/widgets/${enc(widgetId)}`,
+    { method: 'DELETE' },
+  )
+}
+
+// --------------- org-level widget endpoints (standalone widget flow) --------
+
+// GET /api/orgs/:orgId/widgets/:wid
+export function getOrgWidget(token: string, orgId: string, widgetId: string): Promise<Widget> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/widgets/${enc(widgetId)}`)
+}
+
+// PATCH /api/orgs/:orgId/widgets/:wid
+export function updateOrgWidget(
+  token: string,
+  orgId: string,
+  widgetId: string,
+  patch: { name?: string; prompt?: string; gridW?: number; gridH?: number; sources?: WidgetSource[] },
+): Promise<Widget> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/widgets/${enc(widgetId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(patch),
+  })
+}
+
+// GET /api/orgs/:orgId/widgets
+export function listOrgWidgets(token: string, orgId: string): Promise<Widget[]> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/widgets`)
+}
+
+// DELETE /api/orgs/:orgId/widgets/:wid — permanently deletes the widget
+export function deleteOrgWidget(token: string, orgId: string, widgetId: string): Promise<void> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/widgets/${enc(widgetId)}`, { method: 'DELETE' })
+}
+
+// POST /api/orgs/:orgId/widgets/:wid/generate
+export function generateOrgWidget(
+  token: string,
+  orgId: string,
+  widgetId: string,
+  prompt?: string,
+): Promise<{ widget: Widget; usedAI: boolean }> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/widgets/${enc(widgetId)}/generate`, {
+    method: 'POST',
+    body: prompt ? JSON.stringify({ prompt }) : undefined,
+  })
+}
+
+// ---------------------------------------------------------------------------
+
+// GET /api/orgs/:orgId/dashboards/:id/widgets/:wid
+export function getWidget(
+  token: string,
+  orgId: string,
+  dashboardId: string,
+  widgetId: string,
+): Promise<Widget> {
+  return jsonFetch(
+    token,
+    `/orgs/${enc(orgId)}/dashboards/${enc(dashboardId)}/widgets/${enc(widgetId)}`,
+  )
+}
+
+// POST /api/orgs/:orgId/dashboards/:id/widgets/:wid/generate
+export function generateWidget(
+  token: string,
+  orgId: string,
+  dashboardId: string,
+  widgetId: string,
+  prompt?: string,
+): Promise<{ widget: Widget; usedAI: boolean }> {
+  return jsonFetch(
+    token,
+    `/orgs/${enc(orgId)}/dashboards/${enc(dashboardId)}/widgets/${enc(widgetId)}/generate`,
+    { method: 'POST', body: prompt ? JSON.stringify({ prompt }) : undefined },
+  )
+}
+
+/* ---------------- agents ---------------- */
+
+export interface Agent {
+  id: string
+  orgId: string
+  name: string
+  description: string
+  model: string
+  systemPrompt: string
+  schedule: string | null
+  lastRunAt: string | null
+  isOwner: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export function listAgents(token: string, orgId: string): Promise<Agent[]> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/agents`)
+}
+
+export function createAgent(
+  token: string,
+  orgId: string,
+  body: { name: string; description?: string; model?: string; systemPrompt?: string; schedule?: string | null },
+): Promise<Agent> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/agents`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
+export function updateAgent(
+  token: string,
+  orgId: string,
+  agentId: string,
+  body: Partial<{ name: string; description: string; model: string; systemPrompt: string; schedule: string | null }>,
+): Promise<Agent> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/agents/${enc(agentId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  })
+}
+
+export function deleteAgent(token: string, orgId: string, agentId: string): Promise<void> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/agents/${enc(agentId)}`, { method: 'DELETE' })
+}
+
+/* ---------------- alerts ---------------- */
+
+export interface Alert {
+  id: string
+  orgId: string
+  name: string
+  condition: string
+  sources: WidgetSource[]
+  notifyEmail: string | null
+  status: 'active' | 'paused'
+  lastChecked: string | null
+  lastFired: string | null
+  fireCount: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface AlertEvent {
+  id: string
+  alertId: string
+  firedAt: string
+  summary: string | null
+}
+
+export function listAlerts(token: string, orgId: string): Promise<Alert[]> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/alerts`)
+}
+
+export function createAlert(
+  token: string,
+  orgId: string,
+  body: { name: string; condition: string; sources?: WidgetSource[]; notifyEmail?: string; status?: 'active' | 'paused' },
+): Promise<Alert> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/alerts`, { method: 'POST', body: JSON.stringify(body) })
+}
+
+export function updateAlert(
+  token: string,
+  orgId: string,
+  alertId: string,
+  body: Partial<{ name: string; condition: string; sources: WidgetSource[]; notifyEmail: string; status: 'active' | 'paused' }>,
+): Promise<Alert> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/alerts/${enc(alertId)}`, { method: 'PATCH', body: JSON.stringify(body) })
+}
+
+export function deleteAlert(token: string, orgId: string, alertId: string): Promise<void> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/alerts/${enc(alertId)}`, { method: 'DELETE' })
+}
+
+export function checkAlert(token: string, orgId: string, alertId: string): Promise<{ fired: boolean; summary: string; checkedAt: string }> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/alerts/${enc(alertId)}/check`, { method: 'POST' })
+}
+
+export function listAlertEvents(token: string, orgId: string, alertId: string): Promise<AlertEvent[]> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/alerts/${enc(alertId)}/events`)
 }

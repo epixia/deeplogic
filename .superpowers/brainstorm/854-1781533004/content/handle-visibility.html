@@ -1,0 +1,77 @@
+<h2>When should the preset buttons show?</h2>
+<p class="subtitle">The drag handle already has name + action buttons (Edit / ✨ / ✕). Where do S M L T W fit?</p>
+
+<div class="cards">
+
+  <div class="card" data-choice="always" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#0a1628;padding:20px;min-height:160px;display:flex;flex-direction:column;gap:10px;justify-content:center;">
+      <!-- Widget with always-visible presets -->
+      <div style="background:#0f2035;border:1px solid #1e3a52;border-radius:10px;overflow:hidden;max-width:320px;margin:0 auto;width:100%;">
+        <div style="background:#091525;padding:5px 8px;display:flex;align-items:center;gap:5px;border-bottom:1px solid #1e3a52;">
+          <span style="font-size:10px;color:#4d6378;">⋮⋮</span>
+          <span style="font-size:10px;color:#4d6378;flex:1;">Revenue Chart</span>
+          <!-- size presets always visible -->
+          <span style="display:flex;gap:2px;">
+            <span style="font-size:9px;padding:1px 5px;background:rgba(111,227,240,.08);border:1px solid rgba(111,227,240,.2);border-radius:4px;color:#6fe3f0;">S</span>
+            <span style="font-size:9px;padding:1px 5px;background:rgba(111,227,240,.22);border:1px solid rgba(111,227,240,.5);border-radius:4px;color:#6fe3f0;font-weight:700;">M</span>
+            <span style="font-size:9px;padding:1px 5px;background:rgba(111,227,240,.08);border:1px solid rgba(111,227,240,.2);border-radius:4px;color:#6fe3f0;">L</span>
+            <span style="font-size:9px;padding:1px 5px;background:rgba(111,227,240,.08);border:1px solid rgba(111,227,240,.2);border-radius:4px;color:#6fe3f0;">T</span>
+            <span style="font-size:9px;padding:1px 5px;background:rgba(111,227,240,.08);border:1px solid rgba(111,227,240,.2);border-radius:4px;color:#6fe3f0;">W</span>
+          </span>
+          <span style="font-size:10px;color:#4d6378;margin-left:4px;">✕</span>
+        </div>
+        <div style="height:60px;display:flex;align-items:center;justify-content:center;">
+          <span style="font-size:10px;color:#4d6378;">widget content</span>
+        </div>
+      </div>
+      <div style="font-size:9px;color:#4d6378;text-align:center;">Current size highlighted (M). Always visible — one click to resize.</div>
+    </div>
+    <div class="card-body">
+      <h3>A — Always visible</h3>
+      <p>S M L T W always shown in the handle, current size highlighted. Busier but always one click away.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="hover" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#0a1628;padding:20px;min-height:160px;display:flex;flex-direction:column;gap:12px;justify-content:center;">
+      <!-- default state -->
+      <div>
+        <div style="font-size:9px;color:#4d6378;text-align:center;margin-bottom:6px;">Default (idle)</div>
+        <div style="background:#0f2035;border:1px solid #1e3a52;border-radius:10px;overflow:hidden;max-width:280px;margin:0 auto;width:100%;">
+          <div style="background:#091525;padding:5px 8px;display:flex;align-items:center;gap:5px;border-bottom:1px solid #1e3a52;">
+            <span style="font-size:10px;color:#4d6378;">⋮⋮</span>
+            <span style="font-size:10px;color:#4d6378;flex:1;">Revenue Chart</span>
+            <span style="font-size:10px;color:#4d6378;">✕</span>
+          </div>
+          <div style="height:44px;"></div>
+        </div>
+      </div>
+      <!-- hover state -->
+      <div>
+        <div style="font-size:9px;color:#6fe3f0;text-align:center;margin-bottom:6px;">On hover</div>
+        <div style="background:#0f2035;border:1px solid rgba(111,227,240,.4);border-radius:10px;overflow:hidden;max-width:280px;margin:0 auto;width:100%;">
+          <div style="background:#091525;padding:5px 8px;display:flex;align-items:center;gap:5px;border-bottom:1px solid #1e3a52;">
+            <span style="font-size:10px;color:#4d6378;">⋮⋮</span>
+            <span style="font-size:10px;color:#4d6378;flex:1;">Revenue Chart</span>
+            <span style="display:flex;gap:2px;">
+              <span style="font-size:9px;padding:1px 5px;background:rgba(111,227,240,.08);border:1px solid rgba(111,227,240,.2);border-radius:4px;color:#6fe3f0;">S</span>
+              <span style="font-size:9px;padding:1px 5px;background:rgba(111,227,240,.22);border:1px solid rgba(111,227,240,.5);border-radius:4px;color:#6fe3f0;font-weight:700;">M</span>
+              <span style="font-size:9px;padding:1px 5px;background:rgba(111,227,240,.08);border:1px solid rgba(111,227,240,.2);border-radius:4px;color:#6fe3f0;">L</span>
+              <span style="font-size:9px;padding:1px 5px;background:rgba(111,227,240,.08);border:1px solid rgba(111,227,240,.2);border-radius:4px;color:#6fe3f0;">T</span>
+              <span style="font-size:9px;padding:1px 5px;background:rgba(111,227,240,.08);border:1px solid rgba(111,227,240,.2);border-radius:4px;color:#6fe3f0;">W</span>
+            </span>
+            <span style="font-size:10px;color:#4d6378;">Edit</span>
+            <span style="font-size:10px;color:#4d6378;">✨</span>
+            <span style="font-size:10px;color:#4d6378;">✕</span>
+          </div>
+          <div style="height:44px;"></div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B — Show on hover (recommended)</h3>
+      <p>Handle stays clean when idle. Hover reveals S M L T W alongside the existing Edit/✨/✕ buttons. Less clutter.</p>
+    </div>
+  </div>
+
+</div>

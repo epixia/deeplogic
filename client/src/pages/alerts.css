@@ -1,0 +1,138 @@
+/* Alerts-specific styles — page layout, forms, and modals come from studio.css */
+
+/* ── Status indicators ───────────────────────── */
+.alert-card-hd {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 20px;
+}
+
+.alert-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.alert-status-dot.ok { background: var(--mut); }
+.alert-status-dot.fired {
+  background: #e07a8a;
+  box-shadow: 0 0 0 3px rgba(224, 122, 138, 0.2);
+}
+
+.alert-badge-paused {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--mut2);
+  background: var(--bg2);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 1px 8px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* ── Card condition text ─────────────────────── */
+.alert-card-condition {
+  font-size: 13px;
+  color: var(--mut);
+  margin: 0;
+  line-height: 1.5;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  flex: 1;
+}
+
+/* ── Inline check result ─────────────────────── */
+.alert-result {
+  font-size: 12px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  line-height: 1.4;
+}
+.alert-result--fired {
+  background: rgba(224, 122, 138, 0.1);
+  border: 1px solid rgba(224, 122, 138, 0.25);
+  color: #e07a8a;
+}
+.alert-result--ok {
+  background: rgba(50, 200, 130, 0.08);
+  border: 1px solid rgba(50, 200, 130, 0.2);
+  color: #32c882;
+}
+
+/* ── Check button ────────────────────────────── */
+.alert-check-btn {
+  color: var(--cyan) !important;
+  border-color: rgba(111, 227, 240, 0.3) !important;
+  white-space: nowrap;
+}
+.alert-check-btn:hover:not(:disabled) {
+  background: rgba(111, 227, 240, 0.08) !important;
+}
+
+/* ── Source chips (modal) ────────────────────── */
+.alerts-sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.alerts-source-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 6px 3px 10px;
+  background: rgba(111, 227, 240, 0.08);
+  border: 1px solid rgba(111, 227, 240, 0.2);
+  border-radius: 20px;
+  font-size: 12px;
+  color: var(--cyan);
+}
+.alerts-source-chip button {
+  background: none;
+  border: none;
+  color: rgba(111, 227, 240, 0.5);
+  cursor: pointer;
+  font-size: 10px;
+  padding: 1px 2px;
+  line-height: 1;
+}
+.alerts-source-chip button:hover { color: var(--cyan); }
+
+.alerts-source-add {
+  display: flex;
+  gap: 8px;
+}
+.alerts-source-add .studio-input { flex: 1; }
+
+/* ── Fire history list (in modal) ───────────── */
+.alert-events-list {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 4px;
+}
+.alert-event-row {
+  display: flex;
+  gap: 14px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+  font-size: 13px;
+}
+.alert-event-row:first-child { border-top: none; }
+.alert-event-time {
+  color: var(--mut);
+  white-space: nowrap;
+  flex-shrink: 0;
+  font-size: 12px;
+}
+.alert-event-summary { color: var(--ink); line-height: 1.4; }
+
+/* ── Spinner sm variant ──────────────────────── */
+.dl-spinner--sm {
+  width: 12px;
+  height: 12px;
+  border-width: 2px;
+}

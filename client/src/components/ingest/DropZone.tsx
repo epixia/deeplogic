@@ -43,7 +43,6 @@ export default function DropZone({ onFile, disabled, busy }: Props) {
   return (
     <div className="dli-upload">
       <div className="dli-section-head">
-        <span className="eyebrow">Or upload your own</span>
         <p className="dli-section-sub">
           Drop a report or document — analyzed locally, never used to train
           shared models.

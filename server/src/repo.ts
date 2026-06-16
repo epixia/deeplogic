@@ -314,6 +314,142 @@ export async function getMemberRole(
   return (data as { role: Member['role'] }).role;
 }
 
+// ---------------------------------------------------------------------------
+// Invitations
+// ---------------------------------------------------------------------------
+
+export interface Invitation {
+  id: string;
+  orgId: string;
+  email: string;
+  role: Member['role'];
+  invitedBy: string | null;
+  token: string;
+  acceptedAt: string | null;
+  expiresAt: string;
+  createdAt: string;
+}
+
+/** Create or refresh (upsert) a pending invitation for an email. */
+export async function createInvitation(
+  service: SupabaseClient,
+  orgId: string,
+  email: string,
+  role: Member['role'],
+  invitedById: string
+): Promise<Invitation> {
+  const target = email.trim().toLowerCase();
+  // If one already exists, delete it so we can re-invite with a fresh token.
+  await service
+    .from('org_invitations')
+    .delete()
+    .eq('org_id', orgId)
+    .eq('email', target)
+    .is('accepted_at', null);
+
+  const { data, error } = await service
+    .from('org_invitations')
+    .insert({ org_id: orgId, email: target, role, invited_by: invitedById })
+    .select('*')
+    .single();
+  if (error) throw new Error(error.message);
+  return mapInvitation(data as Record<string, unknown>);
+}
+
+/** List pending (not accepted, not expired) invitations for an org. */
+export async function listInvitations(
+  service: SupabaseClient,
+  orgId: string
+): Promise<Invitation[]> {
+  const { data, error } = await service
+    .from('org_invitations')
+    .select('*')
+    .eq('org_id', orgId)
+    .is('accepted_at', null)
+    .gt('expires_at', new Date().toISOString())
+    .order('created_at', { ascending: false });
+  if (error) throw new Error(error.message);
+  return ((data ?? []) as Record<string, unknown>[]).map(mapInvitation);
+}
+
+/** Delete a pending invitation by id. */
+export async function deleteInvitation(
+  service: SupabaseClient,
+  orgId: string,
+  invitationId: string
+): Promise<void> {
+  const { error } = await service
+    .from('org_invitations')
+    .delete()
+    .eq('id', invitationId)
+    .eq('org_id', orgId);
+  if (error) throw new Error(error.message);
+}
+
+/**
+ * Look up an invitation by token. Returns null if not found, expired, or
+ * already accepted.
+ */
+export async function getInvitationByToken(
+  service: SupabaseClient,
+  token: string
+): Promise<Invitation | null> {
+  const { data, error } = await service
+    .from('org_invitations')
+    .select('*')
+    .eq('token', token)
+    .is('accepted_at', null)
+    .gt('expires_at', new Date().toISOString())
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) return null;
+  return mapInvitation(data as Record<string, unknown>);
+}
+
+/**
+ * Accept an invitation: mark it accepted, add the user as a member.
+ * Idempotent — if already a member, just marks the invitation accepted.
+ */
+export async function acceptInvitation(
+  service: SupabaseClient,
+  token: string,
+  userId: string
+): Promise<{ orgId: string; role: Member['role'] }> {
+  const inv = await getInvitationByToken(service, token);
+  if (!inv) throw new Error('Invitation not found, expired, or already used');
+
+  // Upsert membership (may already exist if user signed up another way).
+  const { error: memErr } = await service
+    .from('org_members')
+    .upsert(
+      { org_id: inv.orgId, user_id: userId, role: inv.role },
+      { onConflict: 'org_id,user_id' }
+    );
+  if (memErr) throw new Error(memErr.message);
+
+  // Mark accepted.
+  await service
+    .from('org_invitations')
+    .update({ accepted_at: new Date().toISOString() })
+    .eq('id', inv.id);
+
+  return { orgId: inv.orgId, role: inv.role };
+}
+
+function mapInvitation(row: Record<string, unknown>): Invitation {
+  return {
+    id:          row.id as string,
+    orgId:       row.org_id as string,
+    email:       row.email as string,
+    role:        row.role as Member['role'],
+    invitedBy:   (row.invited_by as string | null) ?? null,
+    token:       row.token as string,
+    acceptedAt:  (row.accepted_at as string | null) ?? null,
+    expiresAt:   row.expires_at as string,
+    createdAt:   row.created_at as string,
+  };
+}
+
 /**
  * Add an already-registered user (by email) to an org with a role.
  * Throws a clear error if no such auth user exists ("user must sign up first").

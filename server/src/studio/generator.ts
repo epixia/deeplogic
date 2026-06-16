@@ -34,11 +34,14 @@ export interface GenerateArgs {
   history?: StudioMessage[];
   ai?: AiConfig | null;
   attachments?: PromptAttachment[];
+  /** Override the default studio system prompt (used for widget generation). */
+  systemOverride?: string;
 }
 
 export interface GenerateResult {
   html: string;
   usedAI: boolean;
+  tokensUsed: number;
   /** Set when a key WAS configured but the provider call failed (vs. plain template mode). */
   aiError?: string;
 }
@@ -51,19 +54,19 @@ const DEFAULT_MODEL: Record<AiProvider, string> = {
 };
 
 const SYSTEM_PROMPT =
-  "You are DeepLogic Studio, an expert at building beautiful, self-contained analytics reports. " +
-  'Output ONE complete HTML document (<!doctype html> ... </html>) and NOTHING else — ' +
-  'no markdown, no code fences, no commentary. Inline all CSS (and any JS). ' +
-  'THEMING (important): define all colors as CSS custom properties on :root for a DARK ' +
-  'default using DeepLogic tokens — background #070b12, cards #0e1726, hairline borders ' +
-  'rgba(120,180,220,.14), text #eaf3fb, muted #8ea3b8, and the cyan->blue accent gradient ' +
-  'linear-gradient(120deg,#6fe3f0,#49a0e6,#5560e8). ALSO include an ' +
-  '`html[data-theme="light"] { ... }` block that redefines those same variables for a clean ' +
-  'corporate LIGHT theme (background #faf9f8, cards #ffffff, borders #e1dfdd, text #201f1e, ' +
-  'muted #605e5c, accent #0078d4). Reference the variables everywhere (no hardcoded colors) so ' +
-  'the report looks right in BOTH themes — the host sets data-theme on <html>. ' +
-  'Use ONLY the data/facts in the provided context; when you cite KPIs use the real numbers. ' +
-  'If a current report is provided, modify it to satisfy the user\'s request rather than starting over.';
+  'You are an expert web developer and designer. The user will describe something to build or change. ' +
+  'Output ONE complete, self-contained HTML document (<!doctype html>...</html>) and NOTHING ELSE. ' +
+  'No markdown fences, no code blocks, no commentary — only the raw HTML file. ' +
+  'Rules: ' +
+  '1. Inline ALL CSS and JavaScript. Zero external CDN links or <link> stylesheet references. ' +
+  '2. Design it exactly as the user asks. You have full creative freedom — choose any colors, fonts, layout, animations. ' +
+  '3. Make it beautiful and polished. Use modern CSS (custom properties, flexbox, grid, gradients). ' +
+  '4. If context data is provided, use those real numbers and facts. Do not invent KPIs or metrics. ' +
+  '5. If a current HTML file is provided, modify it to satisfy the request instead of rebuilding from scratch. ' +
+  '6. When images appear in the ATTACHED IMAGES section, each one has a ready-made <img> tag with a complete ' +
+  'data URI src. Copy that tag VERBATIM into the HTML — never shorten, re-encode, or replace the src. ' +
+  '7. Never reference external placeholder image services (via.placeholder.com, placehold.co, lorempixel, etc.). ' +
+  'If you need a placeholder image, draw one as an inline <svg> element instead.';
 
 /** Light-theme overrides appended to deterministic templates so they respect the toggle. */
 const LIGHT_OVERRIDES = `
@@ -223,16 +226,31 @@ function buildUserMessage(args: GenerateArgs): string {
     parts.push('(none — create a new report from scratch)');
   }
   const atts = args.attachments ?? [];
-  if (atts.length) {
-    parts.push('=== ATTACHED TO THIS PROMPT ===');
-    for (const a of atts) {
+  const imageAtts = atts.filter((a) => a.kind === 'image' && a.dataBase64);
+  const otherAtts = atts.filter((a) => a.kind !== 'image' || !a.dataBase64);
+
+  if (imageAtts.length) {
+    parts.push('=== ATTACHED IMAGES ===');
+    parts.push(
+      'Each image is embedded below as a complete data URI. ' +
+      'To include an image in the HTML, copy the <img> tag EXACTLY as written — the src is already the full base64 data URI. ' +
+      'Do NOT truncate, modify, or re-encode the src attribute.'
+    );
+    for (const a of imageAtts) {
+      const mime = a.mediaType ?? 'image/png';
+      parts.push(`### ${a.name}`);
+      parts.push(`<img src="data:${mime};base64,${a.dataBase64}" alt="${a.name}" style="max-width:100%">`);
+    }
+  }
+
+  if (otherAtts.length) {
+    parts.push('=== ATTACHED FILES ===');
+    for (const a of otherAtts) {
       if (a.kind === 'text' && a.text) {
         parts.push(`### ${a.name}`);
         parts.push(a.text.slice(0, 60000));
-      } else if (a.kind === 'image') {
-        parts.push(`(An image "${a.name}" is attached below — use it as a visual reference.)`);
       } else if (a.kind === 'pdf') {
-        parts.push(`(A PDF "${a.name}" is attached below — read it for content.)`);
+        parts.push(`(A PDF "${a.name}" is attached — read it for content.)`);
       }
     }
   }
@@ -242,14 +260,17 @@ function buildUserMessage(args: GenerateArgs): string {
   return parts.join('\n\n');
 }
 
+interface CallResult {
+  text: string;
+  tokens: number;
+}
+
 /** Call Anthropic (Claude) via the official SDK. Supports image + PDF attachments. */
-async function callAnthropic(args: GenerateArgs, apiKey: string, model: string): Promise<string> {
+async function callAnthropic(args: GenerateArgs, apiKey: string, model: string): Promise<CallResult> {
   const mod = await import('@anthropic-ai/sdk');
   const Anthropic = mod.default;
   const client = new Anthropic({ apiKey });
 
-  // Build a multimodal content array (text + images + PDFs).
-  // Typed loosely so it works across SDK versions / block types.
   const content: unknown[] = [{ type: 'text', text: buildUserMessage(args) }];
   for (const a of args.attachments ?? []) {
     if (a.kind === 'image' && a.dataBase64) {
@@ -268,14 +289,16 @@ async function callAnthropic(args: GenerateArgs, apiKey: string, model: string):
   const res = await client.messages.create({
     model,
     max_tokens: 8000,
-    system: SYSTEM_PROMPT,
+    system: args.systemOverride ?? SYSTEM_PROMPT,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     messages: [{ role: 'user', content: content as any }],
   });
-  return (res.content ?? [])
+  const text = (res.content ?? [])
     .filter((b): b is { type: 'text'; text: string } => b.type === 'text')
     .map((b) => b.text)
     .join('');
+  const tokens = (res.usage?.input_tokens ?? 0) + (res.usage?.output_tokens ?? 0);
+  return { text, tokens };
 }
 
 /** Call an OpenAI-compatible chat API (OpenAI or OpenRouter) via fetch. */
@@ -284,8 +307,7 @@ async function callOpenAICompatible(
   baseUrl: string,
   apiKey: string,
   model: string
-): Promise<string> {
-  // Build (possibly multimodal) user content: text + any images as image_url.
+): Promise<CallResult> {
   const text = buildUserMessage(args);
   const imageParts = (args.attachments ?? [])
     .filter((a) => a.kind === 'image' && a.dataBase64)
@@ -308,7 +330,7 @@ async function callOpenAICompatible(
       model,
       max_tokens: 8000,
       messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'system', content: args.systemOverride ?? SYSTEM_PROMPT },
         { role: 'user', content: userContent },
       ],
     }),
@@ -319,8 +341,12 @@ async function callOpenAICompatible(
   }
   const data = (await res.json()) as {
     choices?: { message?: { content?: string } }[];
+    usage?: { total_tokens?: number };
   };
-  return data.choices?.[0]?.message?.content ?? '';
+  return {
+    text: data.choices?.[0]?.message?.content ?? '',
+    tokens: data.usage?.total_tokens ?? 0,
+  };
 }
 
 /** Resolve which AI config to use: workspace BYOK first, then ANTHROPIC_API_KEY env. */
@@ -349,24 +375,25 @@ function resolveAi(args: GenerateArgs): AiConfig | null {
  */
 export async function generateReport(args: GenerateArgs): Promise<GenerateResult> {
   const ai = resolveAi(args);
-  if (!ai) return { html: templateReport(args), usedAI: false };
+  if (!ai) return { html: templateReport(args), usedAI: false, tokensUsed: 0 };
 
   try {
     const model = ai.model || DEFAULT_MODEL[ai.provider];
-    let text: string;
+    let result: CallResult;
     if (ai.provider === 'anthropic') {
-      text = await callAnthropic(args, ai.apiKey, model);
+      result = await callAnthropic(args, ai.apiKey, model);
     } else if (ai.provider === 'openai') {
-      text = await callOpenAICompatible(args, 'https://api.openai.com/v1', ai.apiKey, model);
+      result = await callOpenAICompatible(args, 'https://api.openai.com/v1', ai.apiKey, model);
     } else {
-      text = await callOpenAICompatible(args, 'https://openrouter.ai/api/v1', ai.apiKey, model);
+      result = await callOpenAICompatible(args, 'https://openrouter.ai/api/v1', ai.apiKey, model);
     }
 
-    let html = stripFences(text);
+    let html = stripFences(result.text);
     if (!html) {
       return {
         html: templateReport(args),
         usedAI: false,
+        tokensUsed: 0,
         aiError: `${ai.provider} returned an empty response`,
       };
     }
@@ -375,12 +402,13 @@ export async function generateReport(args: GenerateArgs): Promise<GenerateResult
         (args.prompt || 'DeepLogic Report').trim().slice(0, 120) || 'DeepLogic Report';
       html = wrapHtml(title, escapeHtml(html));
     }
-    return { html, usedAI: true };
+    return { html, usedAI: true, tokensUsed: result.tokens };
   } catch (err) {
     console.error('Studio AI generation failed; falling back to template', err);
     return {
       html: templateReport(args),
       usedAI: false,
+      tokensUsed: 0,
       aiError: err instanceof Error ? err.message : 'AI request failed',
     };
   }

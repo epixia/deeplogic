@@ -29,6 +29,8 @@ export interface AuthContextValue {
   refreshOrgs: () => Promise<void>
   signIn: (email: string, password: string) => Promise<{ error?: string }>
   signUp: (email: string, password: string) => Promise<{ error?: string }>
+  resetPassword: (email: string) => Promise<{ error?: string }>
+  updatePassword: (password: string) => Promise<{ error?: string }>
   signOut: () => Promise<void>
   getAccessToken: () => Promise<string | null>
 }
@@ -45,12 +47,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [orgs, setOrgs] = useState<OrgMembership[]>([])
   const [loading, setLoading] = useState(true)
 
-  // Keep the latest token in a ref so refreshOrgs / getAccessToken don't churn.
   const sessionRef = useRef<Session | null>(null)
   sessionRef.current = session
 
   const getAccessToken = useCallback(async (): Promise<string | null> => {
-    // Prefer the live session (auto-refreshed by supabase-js).
     const { data } = await supabase.auth.getSession()
     return data.session?.access_token ?? sessionRef.current?.access_token ?? null
   }, [])
@@ -65,12 +65,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const me = await getMe(token)
       setOrgs(me.orgs)
     } catch {
-      // Network / not-yet-provisioned — leave orgs empty rather than throwing.
       setOrgs([])
     }
   }, [getAccessToken])
 
-  // Restore session on mount + subscribe to auth changes.
   useEffect(() => {
     let active = true
 
@@ -103,10 +101,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signIn = useCallback(
     async (email: string, password: string): Promise<{ error?: string }> => {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      })
+      const { error } = await supabase.auth.signInWithPassword({ email, password })
       if (error) return { error: error.message }
       await refreshOrgs()
       return {}
@@ -118,11 +113,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async (email: string, password: string): Promise<{ error?: string }> => {
       const { data, error } = await supabase.auth.signUp({ email, password })
       if (error) return { error: error.message }
-      // With email confirmation disabled (local Supabase), a session is returned
-      // immediately. If not, surface a hint.
       if (!data.session) {
         return { error: 'Check your email to confirm your account, then sign in.' }
       }
+      await refreshOrgs()
+      return {}
+    },
+    [refreshOrgs],
+  )
+
+  const resetPassword = useCallback(
+    async (email: string): Promise<{ error?: string }> => {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      })
+      return error ? { error: error.message } : {}
+    },
+    [],
+  )
+
+  const updatePassword = useCallback(
+    async (password: string): Promise<{ error?: string }> => {
+      const { error } = await supabase.auth.updateUser({ password })
+      if (error) return { error: error.message }
       await refreshOrgs()
       return {}
     },
@@ -145,10 +158,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       refreshOrgs,
       signIn,
       signUp,
+      resetPassword,
+      updatePassword,
       signOut,
       getAccessToken,
     }),
-    [session, loading, orgs, refreshOrgs, signIn, signUp, signOut, getAccessToken],
+    [
+      session,
+      loading,
+      orgs,
+      refreshOrgs,
+      signIn,
+      signUp,
+      resetPassword,
+      updatePassword,
+      signOut,
+      getAccessToken,
+    ],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

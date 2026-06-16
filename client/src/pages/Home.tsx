@@ -162,7 +162,6 @@ export default function Home() {
 
       {/* ---------------- live demo ---------------- */}
       <section id="demo" className="dlh-demo">
-        <span className="eyebrow">Try the demo</span>
         <h2 className="dlh-h2">See your mission control center generate.</h2>
         <p className="dlh-lead">
           Use a sample report, or bring your own. DeepLogic analyzes it,
@@ -180,7 +179,6 @@ export default function Home() {
           {/* sample chooser */}
           <div className="dli-samples">
             <div className="dli-section-head">
-              <span className="eyebrow">Pick a sample</span>
               <p className="dli-section-sub">
                 Pre-built sample reports — ingested instantly.
               </p>
@@ -224,7 +222,6 @@ export default function Home() {
 
       {/* ---------------- how it works ---------------- */}
       <section id="how" className="dlh-how">
-        <span className="eyebrow">How it works</span>
         <h2 className="dlh-h2">
           From a report to a thinking control center.
         </h2>

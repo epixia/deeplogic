@@ -2,15 +2,18 @@
 // the user's first org (or onboarding).
 
 import { useState, type FormEvent } from 'react'
-import { Link, useNavigate, useLocation } from 'react-router-dom'
+import { Link, useNavigate, useLocation, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
+import { acceptInviteToken } from '../lib/api'
 import Logo from '../components/Logo'
 import './auth.css'
 
 export default function Login() {
-  const { signIn } = useAuth()
+  const { signIn, getAccessToken, refreshOrgs } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
+  const [searchParams] = useSearchParams()
+  const inviteToken = searchParams.get('invite')
   const from = (location.state as { from?: { pathname?: string } } | null)?.from
     ?.pathname
 
@@ -25,11 +28,25 @@ export default function Login() {
     setBusy(true)
     localStorage.setItem('dl_last_email', email.trim())
     const { error } = await signIn(email.trim(), password)
-    setBusy(false)
     if (error) {
+      setBusy(false)
       setError(error)
       return
     }
+    if (inviteToken) {
+      try {
+        const accessToken = await getAccessToken()
+        if (accessToken) {
+          const { orgId } = await acceptInviteToken(accessToken, inviteToken)
+          await refreshOrgs()
+          navigate(`/app/${orgId}/ingest`, { replace: true })
+          return
+        }
+      } catch {
+        // Fall through to normal navigation if acceptance fails.
+      }
+    }
+    setBusy(false)
     navigate(from && from.startsWith('/app') ? from : '/app', { replace: true })
   }
 
@@ -73,6 +90,10 @@ export default function Login() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />
+          </div>
+
+          <div className="dl-auth__forgot">
+            <Link to="/forgot-password">Forgot password?</Link>
           </div>
 
           <button className="btn btn-primary" type="submit" disabled={busy}>

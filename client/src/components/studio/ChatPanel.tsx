@@ -1,11 +1,11 @@
 // ChatPanel — the LEFT pane of the Studio editor (owner only). Renders the
-// message history (user/assistant/system bubbles), a "working" state while a
-// generation is in flight, the context chips (link to Context Library + the
-// grounding model picker), a "What the AI sees" trigger, the prompt composer,
-// and — when there is no HTML yet — a friendly prompt-starter empty state.
+// message history (user/assistant bubbles), a generating indicator, the prompt
+// composer, and a welcome/empty state with starter prompts.
 
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { useEffect, useRef, useState, useCallback, type ClipboardEvent, type DragEvent, type JSX, type KeyboardEvent } from 'react'
 import { Link } from 'react-router-dom'
+import { useAuth } from '../../auth/AuthContext'
+import { createContext } from '../../lib/api'
 import type { ModelListItem } from '../../types'
 import type { PromptAttachment, StudioMessage } from '../../lib/api'
 
@@ -17,6 +17,21 @@ const MAX_BYTES = 10 * 1024 * 1024 // 10MB per file
 const isImage = (f: File) => f.type.startsWith('image/')
 const isPdf = (f: File) =>
   f.type === 'application/pdf' || /\.pdf$/i.test(f.name)
+
+const LINK_RE = /\[([^\]]+)\]\(([^)]+)\)/g
+function renderWithLinks(text: string) {
+  const parts: (string | JSX.Element)[] = []
+  let last = 0
+  let m: RegExpExecArray | null
+  LINK_RE.lastIndex = 0
+  while ((m = LINK_RE.exec(text)) !== null) {
+    if (m.index > last) parts.push(text.slice(last, m.index))
+    parts.push(<Link key={m.index} to={m[2]}>{m[1]}</Link>)
+    last = m.index + m[0].length
+  }
+  if (last < text.length) parts.push(text.slice(last))
+  return parts
+}
 
 function readAsBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -30,14 +45,36 @@ function readAsBase64(file: File): Promise<string> {
   })
 }
 
+// Resize an image to at most maxPx on the longest side and re-encode.
+// Keeps PNG for PNGs (to preserve transparency), uses JPEG for everything else.
+// Result is typically 30–100KB, well within context-window limits.
+function resizeImage(file: File, maxPx = 800, quality = 0.82): Promise<{ base64: string; mediaType: string }> {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    const url = URL.createObjectURL(file)
+    img.onload = () => {
+      URL.revokeObjectURL(url)
+      const { naturalWidth: w, naturalHeight: h } = img
+      const scale = w > maxPx || h > maxPx ? Math.min(maxPx / w, maxPx / h) : 1
+      const canvas = document.createElement('canvas')
+      canvas.width = Math.round(w * scale)
+      canvas.height = Math.round(h * scale)
+      const ctx = canvas.getContext('2d')
+      if (!ctx) { reject(new Error('canvas not supported')); return }
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+      const mediaType = file.type === 'image/png' ? 'image/png' : 'image/jpeg'
+      const dataUrl = canvas.toDataURL(mediaType, quality)
+      resolve({ base64: dataUrl.slice(dataUrl.indexOf(',') + 1), mediaType })
+    }
+    img.onerror = () => reject(new Error('Image decode failed'))
+    img.src = url
+  })
+}
+
 async function fileToAttachment(file: File): Promise<PromptAttachment> {
   if (isImage(file)) {
-    return {
-      kind: 'image',
-      name: file.name,
-      mediaType: file.type || 'image/png',
-      dataBase64: await readAsBase64(file),
-    }
+    const { base64, mediaType } = await resizeImage(file)
+    return { kind: 'image', name: file.name, mediaType, dataBase64: base64 }
   }
   if (isPdf(file)) {
     return {
@@ -47,16 +84,15 @@ async function fileToAttachment(file: File): Promise<PromptAttachment> {
       dataBase64: await readAsBase64(file),
     }
   }
-  // html / text / markdown / csv / json → inline text
   const text = await file.text()
   return { kind: 'text', name: file.name, text: text.slice(0, 60000) }
 }
 
 const STARTERS = [
-  'Build an executive summary of revenue and churn.',
-  'Turn this into a one-page board report.',
-  'Create a KPI dashboard with trend callouts and a short narrative.',
-  'Summarize the highlights as a clean, printable brief.',
+  'Build a KPI dashboard with trend charts and an executive summary.',
+  'Create a one-page board report from this data.',
+  'Make a visual sales pipeline tracker with key metrics.',
+  'Build a clean landing page for our product launch.',
 ]
 
 interface Props {
@@ -64,11 +100,8 @@ interface Props {
   messages: StudioMessage[]
   hasHtml: boolean
   generating: boolean
-  /** the user prompt currently in flight (shown optimistically) */
   pendingPrompt: string | null
-  /** whether the last generation used the live AI vs the template engine */
   lastUsedAI: boolean | null
-  /** grounding model picker */
   models: ModelListItem[]
   modelId: string | null
   onModelChange: (modelId: string | null) => void
@@ -83,25 +116,90 @@ export default function ChatPanel({
   hasHtml,
   generating,
   pendingPrompt,
-  lastUsedAI,
-  models,
-  modelId,
-  onModelChange,
   onSend,
-  onShowContext,
   error,
 }: Props) {
+  const { getAccessToken } = useAuth()
   const [draft, setDraft] = useState('')
   const [attachments, setAttachments] = useState<PromptAttachment[]>([])
+  const [savedAtts, setSavedAtts] = useState<Set<number>>(new Set())
+  const [savingAtts, setSavingAtts] = useState<Set<number>>(new Set())
   const [attachError, setAttachError] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-  // auto-scroll to newest message / working indicator
+  // ---- voice input ----
+  const [listening, setListening] = useState(false)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const recognitionRef = useRef<any>(null)
+  const voiceBaseRef = useRef('') // draft text before voice started
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const SpeechRecognitionAPI: any =
+    typeof window !== 'undefined'
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ? ((window as any).SpeechRecognition ?? (window as any).webkitSpeechRecognition)
+      : undefined
+
+  const voiceSupported = !!SpeechRecognitionAPI
+
+  const stopVoice = useCallback(() => {
+    recognitionRef.current?.stop()
+    recognitionRef.current = null
+    setListening(false)
+  }, [])
+
+  function toggleVoice() {
+    if (listening) { stopVoice(); return }
+    if (!SpeechRecognitionAPI) return
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const rec = new SpeechRecognitionAPI() as any
+    rec.continuous = true
+    rec.interimResults = true
+    rec.lang = 'en-US'
+    voiceBaseRef.current = draft
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    rec.onresult = (e: any) => {
+      let interim = ''
+      let final = ''
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const t = e.results[i][0].transcript
+        if (e.results[i].isFinal) final += t
+        else interim += t
+      }
+      if (final) voiceBaseRef.current = (voiceBaseRef.current + ' ' + final).trim()
+      const combined = interim
+        ? (voiceBaseRef.current + ' ' + interim).trim()
+        : voiceBaseRef.current
+      setDraft(combined)
+      autoResize()
+    }
+    rec.onerror = () => stopVoice()
+    rec.onend = () => setListening(false)
+    rec.start()
+    recognitionRef.current = rec
+    setListening(true)
+  }
+
+  // Stop voice on unmount
+  useEffect(() => () => stopVoice(), [stopVoice])
+
   useEffect(() => {
     const el = scrollRef.current
     if (el) el.scrollTop = el.scrollHeight
   }, [messages.length, generating, pendingPrompt])
+
+  useEffect(() => {
+    textareaRef.current?.focus()
+  }, [])
+
+  function autoResize() {
+    const el = textareaRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = Math.min(el.scrollHeight, 180) + 'px'
+  }
 
   async function addFiles(files: FileList | null) {
     if (!files || files.length === 0) return
@@ -129,15 +227,38 @@ export default function ChatPanel({
 
   function removeAttachment(i: number) {
     setAttachments((prev) => prev.filter((_, idx) => idx !== i))
+    setSavedAtts((prev) => { const s = new Set(prev); s.delete(i); return s })
+    setSavingAtts((prev) => { const s = new Set(prev); s.delete(i); return s })
+  }
+
+  async function saveToLibrary(i: number, a: PromptAttachment) {
+    if (!a.dataBase64 || savingAtts.has(i) || savedAtts.has(i)) return
+    setSavingAtts((prev) => new Set(prev).add(i))
+    try {
+      const token = await getAccessToken()
+      if (!token) return
+      const mime = a.mediaType ?? 'image/png'
+      await createContext(token, orgId, {
+        kind: 'image',
+        name: a.name,
+        content: `data:${mime};base64,${a.dataBase64}`,
+        scope: 'org',
+      })
+      setSavedAtts((prev) => new Set(prev).add(i))
+    } catch { /* ignore */ } finally {
+      setSavingAtts((prev) => { const s = new Set(prev); s.delete(i); return s })
+    }
   }
 
   function send(text: string) {
+    stopVoice()
     const prompt = text.trim()
     if ((!prompt && attachments.length === 0) || generating) return
     onSend(prompt || 'Use the attached file(s) to build/update this report.', attachments)
     setDraft('')
     setAttachments([])
     setAttachError(null)
+    if (textareaRef.current) textareaRef.current.style.height = 'auto'
   }
 
   function onKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
@@ -147,8 +268,7 @@ export default function ChatPanel({
     }
   }
 
-  // Paste an image/file straight into the chat input.
-  function onPaste(e: React.ClipboardEvent<HTMLTextAreaElement>) {
+  function onPaste(e: ClipboardEvent<HTMLTextAreaElement>) {
     const files = e.clipboardData?.files
     if (files && files.length > 0) {
       e.preventDefault()
@@ -156,190 +276,149 @@ export default function ChatPanel({
     }
   }
 
-  // Drag & drop files onto the composer.
   const [dragOver, setDragOver] = useState(false)
-  function onDrop(e: React.DragEvent) {
+  function onDrop(e: DragEvent<HTMLDivElement>) {
     e.preventDefault()
     setDragOver(false)
     if (e.dataTransfer?.files?.length) void addFiles(e.dataTransfer.files)
   }
 
-  const groundModel = models.find((m) => m.id === modelId) ?? null
   const showEmpty = !hasHtml && messages.length === 0 && !pendingPrompt
+  const canSend = !generating && (!!draft.trim() || attachments.length > 0)
 
   return (
     <section className="studio-panel chat-col">
-      <div className="studio-panel-head">
-        <span>Chat</span>
-        <button
-          type="button"
-          className="btn btn-ghost btn-xs"
-          onClick={onShowContext}
-        >
-          What the AI sees
-        </button>
-      </div>
-
-      {/* context chips: library link + grounding model picker */}
-      <div className="chat-chips">
-        <Link to={`/app/${orgId}/studio`} className="chat-chip" title="Context Library">
-          Context Library
-        </Link>
-        <span
-          className={`chat-chip ${groundModel ? 'grounded' : ''}`}
-          title="Ground this report in real KPIs from a semantic model"
-        >
-          {groundModel ? 'Grounded:' : 'Ground:'}
-          <select
-            value={modelId ?? ''}
-            onChange={(e) => onModelChange(e.target.value || null)}
-          >
-            <option value="">None</option>
-            {models.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.name}
-              </option>
-            ))}
-          </select>
-        </span>
-      </div>
-
-      <div className="studio-chat" ref={scrollRef} style={{ flex: '1 1 auto' }}>
+      <div className="studio-chat" ref={scrollRef}>
         {showEmpty ? (
           <div className="editor-empty">
-            <h3>Describe the report you want</h3>
-            <p>
-              Chat to generate a self-contained HTML report. Try one of these to
-              get started:
-            </p>
+            <div className="editor-empty-icon">✦</div>
+            <h3>What do you want to build?</h3>
+            <p>Describe it in plain language — I'll write the HTML. Drop in an image, PDF or file to build from it.</p>
             <div className="editor-starters">
               {STARTERS.map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  className="editor-starter"
-                  onClick={() => send(s)}
-                  disabled={generating}
-                >
+                <button key={s} type="button" className="editor-starter" onClick={() => send(s)} disabled={generating}>
                   {s}
                 </button>
               ))}
             </div>
           </div>
         ) : (
-          <>
+          <div className="chat-messages">
             {messages.map((m, i) => {
-              const isLastAssistant =
-                m.role === 'assistant' &&
-                i === lastIndex(messages, 'assistant')
+              if (m.role === 'user') {
+                return (
+                  <div key={`${m.ts}-${i}`} className="chat-row chat-row--user">
+                    <div className="chat-bubble user">{m.content}</div>
+                  </div>
+                )
+              }
               return (
-                <div key={`${m.ts}-${i}`} className={`chat-bubble ${m.role}`}>
-                  {m.content}
-                  {isLastAssistant && lastUsedAI !== null && (
-                    <div className="chat-meta-row">
-                      <span className={`chat-badge ${lastUsedAI ? 'ai' : ''}`}>
-                        {lastUsedAI ? 'AI' : 'Template'}
-                      </span>
-                    </div>
-                  )}
+                <div key={`${m.ts}-${i}`} className="chat-row chat-row--ai">
+                  <div className="chat-ai-avatar">✦</div>
+                  <div className="chat-ai-body">
+                    <div className="chat-bubble assistant">{renderWithLinks(m.content)}</div>
+                  </div>
                 </div>
               )
             })}
             {pendingPrompt && (
-              <div className="chat-bubble user is-pending">{pendingPrompt}</div>
-            )}
-            {generating && (
-              <div className="chat-working">
-                <span className="dot" />
-                Generating report…
+              <div className="chat-row chat-row--user">
+                <div className="chat-bubble user is-pending">{pendingPrompt}</div>
               </div>
             )}
-          </>
+            {generating && (
+              <div className="chat-row chat-row--ai">
+                <div className="chat-ai-avatar">✦</div>
+                <div className="chat-working">
+                  <span className="chat-working-dots"><span /><span /><span /></span>
+                  Building…
+                </div>
+              </div>
+            )}
+          </div>
         )}
       </div>
 
-      {error && (
-        <div className="studio-error" style={{ padding: '0 14px' }}>
-          {error}
-        </div>
-      )}
+      {error && <div className="studio-error chat-error">{error}</div>}
 
-      <div
-        className={`chat-composer ${dragOver ? 'is-drop' : ''}`}
-        onDragOver={(e) => {
-          e.preventDefault()
-          if (!generating) setDragOver(true)
-        }}
-        onDragLeave={() => setDragOver(false)}
-        onDrop={onDrop}
-      >
-        {dragOver && <div className="chat-drop-hint">Drop image / PDF / HTML to attach</div>}
-        {(attachments.length > 0 || attachError) && (
-          <div className="chat-attachments">
-            {attachments.map((a, i) => (
-              <span className={`chat-att chat-att-${a.kind}`} key={`${a.name}-${i}`}>
-                <span className="chat-att-ic">
-                  {a.kind === 'image' ? '🖼' : a.kind === 'pdf' ? '📕' : '📄'}
+      <div className="chat-composer-wrap">
+        <div
+          className={`chat-composer ${dragOver ? 'is-drop' : ''}`}
+          onDragOver={(e) => { e.preventDefault(); if (!generating) setDragOver(true) }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={onDrop}
+        >
+          {dragOver && <div className="chat-drop-hint">Drop to attach</div>}
+          {(attachments.length > 0 || attachError) && (
+            <div className="chat-attachments">
+              {attachments.map((a, i) => (
+                <span className={`chat-att chat-att-${a.kind}`} key={`${a.name}-${i}`}>
+                  <span className="chat-att-ic">
+                    {a.kind === 'image' ? '🖼' : a.kind === 'pdf' ? '📕' : '📄'}
+                  </span>
+                  <span className="chat-att-name">{a.name}</span>
+                  {a.kind === 'image' && a.dataBase64 && (
+                    <button
+                      type="button"
+                      className={`chat-att-save${savedAtts.has(i) ? ' chat-att-save--done' : ''}`}
+                      onClick={() => void saveToLibrary(i, a)}
+                      disabled={savingAtts.has(i) || savedAtts.has(i)}
+                      title={savedAtts.has(i) ? 'Saved to library' : 'Save to Context Library'}
+                    >
+                      {savedAtts.has(i) ? '✓' : savingAtts.has(i) ? '…' : '⊕'}
+                    </button>
+                  )}
+                  <button type="button" className="chat-att-x" onClick={() => removeAttachment(i)} aria-label={`Remove ${a.name}`}>✕</button>
                 </span>
-                <span className="chat-att-name">{a.name}</span>
-                <button
-                  type="button"
-                  className="chat-att-x"
-                  onClick={() => removeAttachment(i)}
-                  aria-label={`Remove ${a.name}`}
-                >
-                  ✕
-                </button>
-              </span>
-            ))}
-            {attachError && <span className="chat-att-err">{attachError}</span>}
-          </div>
-        )}
-        <textarea
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={onKeyDown}
-          onPaste={onPaste}
-          placeholder="Describe a change, or paste / drop an image, PDF or HTML to build from…"
-          disabled={generating}
-        />
-        <div className="chat-composer-foot">
-          <div className="chat-composer-left">
-            <input
-              ref={fileRef}
-              type="file"
-              accept={ATTACH_ACCEPT}
-              multiple
-              style={{ display: 'none' }}
-              onChange={(e) => void addFiles(e.target.files)}
-            />
+              ))}
+              {attachError && <span className="chat-att-err">{attachError}</span>}
+            </div>
+          )}
+          <div className="chat-composer-inner">
+            <input ref={fileRef} type="file" accept={ATTACH_ACCEPT} multiple style={{ display: 'none' }} onChange={(e) => void addFiles(e.target.files)} />
             <button
               type="button"
-              className="btn btn-ghost btn-xs chat-attach-btn"
+              className="chat-attach-btn"
               onClick={() => fileRef.current?.click()}
               disabled={generating || attachments.length >= MAX_ATTACH}
-              title="Attach image, PDF, or HTML"
+              title="Attach image, PDF, or file"
             >
-              📎 Attach
+              📎
+            </button>
+            <textarea
+              ref={textareaRef}
+              value={draft}
+              onChange={(e) => { setDraft(e.target.value); autoResize() }}
+              onKeyDown={onKeyDown}
+              onPaste={onPaste}
+              placeholder={hasHtml ? 'Describe a change…' : 'Describe what to build…'}
+              disabled={generating}
+              rows={1}
+            />
+            {voiceSupported && (
+              <button
+                type="button"
+                className={`chat-mic-btn${listening ? ' listening' : ''}`}
+                onClick={toggleVoice}
+                disabled={generating}
+                title={listening ? 'Stop recording' : 'Speak your prompt'}
+              >
+                {listening ? '⏹' : '🎙'}
+              </button>
+            )}
+            <button
+              type="button"
+              className={`chat-send-btn ${canSend ? 'active' : ''}`}
+              onClick={() => send(draft)}
+              disabled={!canSend}
+              title={generating ? 'Building…' : hasHtml ? 'Update report' : 'Build report'}
+            >
+              {generating ? <span className="chat-send-spinner" /> : '↑'}
             </button>
           </div>
-          <button
-            type="button"
-            className="btn btn-primary btn-xs"
-            onClick={() => send(draft)}
-            disabled={generating || (!draft.trim() && attachments.length === 0)}
-          >
-            {generating ? 'Working…' : 'Send'}
-          </button>
+          <div className="chat-composer-hint">↵ send · ⇧↵ newline{voiceSupported ? ' · 🎙 voice' : ''}</div>
         </div>
       </div>
     </section>
   )
-}
-
-function lastIndex(messages: StudioMessage[], role: StudioMessage['role']): number {
-  for (let i = messages.length - 1; i >= 0; i--) {
-    if (messages[i].role === role) return i
-  }
-  return -1
 }

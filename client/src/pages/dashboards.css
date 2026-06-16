@@ -466,6 +466,7 @@
 .wg-drag-handle:active { cursor: grabbing; }
 .wg-drag-dots { color: var(--mut); font-size: 12px; letter-spacing: -1px; user-select: none; }
 .wg-drag-name { flex: 1; font-size: 11px; font-weight: 600; color: var(--mut2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wg-db-badge { font-size: 9px; font-weight: 700; font-family: monospace; color: #f0c040; background: rgba(240, 192, 64, 0.12); border: 1px solid rgba(240, 192, 64, 0.3); border-radius: 3px; padding: 1px 4px; white-space: nowrap; flex-shrink: 0; }
 
 .wg-content { flex: 1; overflow: hidden; position: relative; }
 
@@ -483,52 +484,19 @@
 }
 .react-grid-item:hover .react-resizable-handle { opacity: 1; }
 
-/* Cancel library rotation — we provide our own ::after visuals */
-.react-grid-item > .react-resizable-handle-sw,
-.react-grid-item > .react-resizable-handle-nw,
-.react-grid-item > .react-resizable-handle-ne,
-.react-grid-item > .react-resizable-handle-e,
-.react-grid-item > .react-resizable-handle-w,
-.react-grid-item > .react-resizable-handle-n,
-.react-grid-item > .react-resizable-handle-s {
-  transform: none;
-}
-
-/* Corner handles — L-shaped cyan border, one rule per corner for correct positioning */
-.react-grid-item > .react-resizable-handle-se::after,
-.react-grid-item > .react-resizable-handle-sw::after,
-.react-grid-item > .react-resizable-handle-ne::after,
-.react-grid-item > .react-resizable-handle-nw::after {
+/* SE corner handle — L-shaped cyan border */
+.react-grid-item > .react-resizable-handle-se::after {
   content: '';
   position: absolute;
-  width: 8px;
-  height: 8px;
-  border-color: var(--cyan);
-  border-style: solid;
-  border-width: 0;
-}
-.react-grid-item > .react-resizable-handle-se::after {
+  width: 8px; height: 8px;
+  border-color: var(--cyan); border-style: solid; border-width: 0;
   bottom: 3px; right: 3px;
   border-right-width: 2px; border-bottom-width: 2px;
-}
-.react-grid-item > .react-resizable-handle-sw::after {
-  bottom: 3px; left: 3px;
-  border-left-width: 2px; border-bottom-width: 2px;
-}
-.react-grid-item > .react-resizable-handle-ne::after {
-  top: 3px; right: 3px;
-  border-right-width: 2px; border-top-width: 2px;
-}
-.react-grid-item > .react-resizable-handle-nw::after {
-  top: 3px; left: 3px;
-  border-left-width: 2px; border-top-width: 2px;
 }
 
 /* Edge handles — short centred bar */
 .react-grid-item > .react-resizable-handle-e::after,
-.react-grid-item > .react-resizable-handle-w::after,
-.react-grid-item > .react-resizable-handle-s::after,
-.react-grid-item > .react-resizable-handle-n::after {
+.react-grid-item > .react-resizable-handle-s::after {
   content: '';
   position: absolute;
   background: var(--cyan);
@@ -539,17 +507,9 @@
   top: 50%; transform: translateY(-50%);
   right: 3px; width: 2px; height: 24px;
 }
-.react-grid-item > .react-resizable-handle-w::after {
-  top: 50%; transform: translateY(-50%);
-  left: 3px; width: 2px; height: 24px;
-}
 .react-grid-item > .react-resizable-handle-s::after {
   left: 50%; transform: translateX(-50%);
   bottom: 3px; height: 2px; width: 24px;
-}
-.react-grid-item > .react-resizable-handle-n::after {
-  left: 50%; transform: translateX(-50%);
-  top: 3px; height: 2px; width: 24px;
 }
 
 .wg-action-btn {
@@ -870,36 +830,6 @@
 .wb-save:hover { background: rgba(111, 227, 240, 0.2); }
 .wb-save:disabled { opacity: 0.5; cursor: default; }
 
-/* ── Widget preset size buttons ────────────────────────────── */
-.wg-preset-btns {
-  display: none;
-  gap: 2px;
-  align-items: center;
-}
-.wg-drag-handle:hover .wg-preset-btns { display: flex; }
-
-.wg-preset-btn {
-  padding: 1px 6px;
-  border-radius: 4px;
-  background: rgba(111, 227, 240, 0.08);
-  border: 1px solid rgba(111, 227, 240, 0.2);
-  color: var(--cyan);
-  font-size: 9px;
-  font-weight: 600;
-  cursor: pointer;
-  line-height: 1.6;
-  transition: background 0.1s, border-color 0.1s;
-  letter-spacing: 0.02em;
-}
-.wg-preset-btn:hover {
-  background: rgba(111, 227, 240, 0.18);
-  border-color: rgba(111, 227, 240, 0.45);
-}
-.wg-preset-btn.active {
-  background: rgba(111, 227, 240, 0.22);
-  border-color: rgba(111, 227, 240, 0.55);
-  font-weight: 700;
-}
 
 /* ── Live size badge during free resize ────────────────────── */
 .wg-size-badge {

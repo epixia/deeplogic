@@ -1,0 +1,98 @@
+<h2>How should widgets snap to size?</h2>
+<p class="subtitle">The grid already has 3 columns and freeform drag/resize via react-grid-layout. Choose how snapping should work.</p>
+
+<div class="cards">
+
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#0a1628;padding:16px;min-height:180px;display:flex;flex-direction:column;gap:10px;">
+      <div style="font-size:10px;color:#4d6378;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;">Named size presets</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;flex:1;">
+        <div style="background:#0f2035;border:1px solid #1e3a52;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:3px;padding:6px;">
+          <div style="font-size:9px;color:#6fe3f0;font-weight:700;">S</div>
+          <div style="font-size:8px;color:#4d6378;">1×1</div>
+        </div>
+        <div style="background:#0f2035;border:1px solid #1e3a52;border-radius:8px;grid-column:span 2;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:3px;padding:6px;">
+          <div style="font-size:9px;color:#6fe3f0;font-weight:700;">M</div>
+          <div style="font-size:8px;color:#4d6378;">2×1</div>
+        </div>
+        <div style="background:#0f2035;border:1px solid #1e3a52;border-radius:8px;grid-column:span 3;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:3px;padding:6px;">
+          <div style="font-size:9px;color:#6fe3f0;font-weight:700;">L</div>
+          <div style="font-size:8px;color:#4d6378;">3×1</div>
+        </div>
+        <div style="background:#0f2035;border:1px solid #1e3a52;border-radius:8px;grid-column:span 2;grid-row:span 1;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:3px;height:48px;">
+          <div style="font-size:9px;color:#6fe3f0;font-weight:700;">WIDE</div>
+          <div style="font-size:8px;color:#4d6378;">2×2</div>
+        </div>
+        <div style="background:#0f2035;border:1px solid #1e3a52;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:3px;height:48px;">
+          <div style="font-size:9px;color:#6fe3f0;font-weight:700;">T</div>
+          <div style="font-size:8px;color:#4d6378;">1×2</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:4px;margin-top:4px;">
+        <span style="padding:3px 8px;border-radius:20px;background:rgba(111,227,240,.1);border:1px solid rgba(111,227,240,.3);color:#6fe3f0;font-size:9px;">S</span>
+        <span style="padding:3px 8px;border-radius:20px;background:rgba(111,227,240,.1);border:1px solid rgba(111,227,240,.3);color:#6fe3f0;font-size:9px;">M</span>
+        <span style="padding:3px 8px;border-radius:20px;background:rgba(111,227,240,.2);border:1px solid rgba(111,227,240,.5);color:#6fe3f0;font-size:9px;font-weight:700;">L ✓</span>
+        <span style="padding:3px 8px;border-radius:20px;background:rgba(111,227,240,.1);border:1px solid rgba(111,227,240,.3);color:#6fe3f0;font-size:9px;">WIDE</span>
+        <span style="padding:3px 8px;border-radius:20px;background:rgba(111,227,240,.1);border:1px solid rgba(111,227,240,.3);color:#6fe3f0;font-size:9px;">TALL</span>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A — Named size presets</h3>
+      <p>Small, Medium, Large, Wide, Tall — resize handle snaps only to these fixed sizes. Simple and intentional.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#0a1628;padding:16px;min-height:180px;display:flex;flex-direction:column;gap:10px;">
+      <div style="font-size:10px;color:#4d6378;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;">Free grid snap + size badge</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;flex:1;position:relative;">
+        <div style="background:#0f2035;border:1px solid #1e3a52;border-radius:8px;grid-column:span 2;grid-row:span 1;min-height:70px;position:relative;display:flex;align-items:center;justify-content:center;">
+          <div style="font-size:9px;color:#4d6378;">Chart widget</div>
+          <div style="position:absolute;bottom:4px;right:4px;background:#6fe3f0;color:#04121b;font-size:8px;font-weight:700;padding:2px 5px;border-radius:4px;">2×1</div>
+          <!-- resize handle -->
+          <div style="position:absolute;bottom:2px;right:2px;width:10px;height:10px;border-right:2px solid #6fe3f0;border-bottom:2px solid #6fe3f0;border-radius:0 0 3px 0;"></div>
+        </div>
+        <div style="background:#0f2035;border:2px dashed rgba(111,227,240,.4);border-radius:8px;min-height:70px;display:flex;align-items:center;justify-content:center;">
+          <div style="font-size:8px;color:rgba(111,227,240,.4);">snap zone</div>
+        </div>
+        <div style="background:#0f2035;border:1px solid #1e3a52;border-radius:8px;grid-column:span 3;min-height:50px;display:flex;align-items:center;justify-content:center;position:relative;">
+          <div style="font-size:9px;color:#4d6378;">KPI row</div>
+          <div style="position:absolute;bottom:4px;right:4px;background:#6fe3f0;color:#04121b;font-size:8px;font-weight:700;padding:2px 5px;border-radius:4px;">3×1</div>
+        </div>
+      </div>
+      <div style="font-size:9px;color:#4d6378;text-align:center;">Drag handle shows current size (e.g. "2×1") live during resize</div>
+    </div>
+    <div class="card-body">
+      <h3>B — Free grid snap + size badge</h3>
+      <p>Any grid cell combination allowed. A live "2×1" badge appears on the widget during resize so you always know the current size.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#0a1628;padding:16px;min-height:180px;display:flex;flex-direction:column;gap:10px;">
+      <div style="font-size:10px;color:#4d6378;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;">Preset buttons + free resize</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:6px;">
+        <div style="background:#0f2035;border:1px solid #1e3a52;border-radius:8px;grid-column:span 2;min-height:80px;position:relative;display:flex;flex-direction:column;">
+          <!-- drag handle with preset buttons -->
+          <div style="background:#091525;border-radius:8px 8px 0 0;padding:4px 6px;display:flex;align-items:center;gap:4px;border-bottom:1px solid #1e3a52;">
+            <span style="font-size:9px;color:#6fe3f0;opacity:.5;">⋮⋮</span>
+            <span style="font-size:8px;color:#4d6378;flex:1;">Revenue Chart</span>
+            <span style="font-size:8px;padding:1px 5px;background:rgba(111,227,240,.15);border-radius:4px;color:#6fe3f0;cursor:pointer;">S</span>
+            <span style="font-size:8px;padding:1px 5px;background:rgba(111,227,240,.3);border-radius:4px;color:#6fe3f0;font-weight:bold;cursor:pointer;">M</span>
+            <span style="font-size:8px;padding:1px 5px;background:rgba(111,227,240,.15);border-radius:4px;color:#6fe3f0;cursor:pointer;">L</span>
+          </div>
+          <div style="flex:1;display:flex;align-items:center;justify-content:center;">
+            <span style="font-size:9px;color:#4d6378;">widget content</span>
+          </div>
+        </div>
+        <div style="background:#0f2035;border:1px solid #1e3a52;border-radius:8px;min-height:80px;"></div>
+      </div>
+      <div style="font-size:9px;color:#4d6378;text-align:center;">S/M/L quick-snap buttons live in the drag handle bar + free resize still available</div>
+    </div>
+    <div class="card-body">
+      <h3>C — Preset shortcuts + free resize</h3>
+      <p>S/M/L quick-snap buttons appear in the widget's drag handle bar. Free resize is still available for custom sizes.</p>
+    </div>
+  </div>
+
+</div>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, useMemo } from 'react'
+import { useCallback, useEffect, useRef, useState, useMemo, type RefCallback } from 'react'
 import { useParams } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import {
@@ -24,13 +24,6 @@ const TYPE_ICONS: Record<string, string> = {
   kpi: '📊', chart: '📈', table: '📋', insight: '💡', alert: '🔔', embed: '🔗',
 }
 
-const PRESETS = [
-  { label: 'S', w: 1, h: 1 },
-  { label: 'M', w: 2, h: 1 },
-  { label: 'L', w: 3, h: 1 },
-  { label: 'T', w: 1, h: 2 },
-  { label: 'W', w: 3, h: 2 },
-]
 
 const COLS = 3
 const ROW_HEIGHT = 200
@@ -39,7 +32,7 @@ interface LibraryItem { id: string; name: string; kind: string }
 
 export default function DashboardEditor() {
   const { orgId, dashboardId } = useParams<{ orgId: string; dashboardId: string }>()
-  const { session, orgs } = useAuth()
+  const { session, orgs, getAccessToken } = useAuth()
   const token = session?.access_token ?? ''
   const orgName = orgs.find((o) => o.id === orgId)?.name ?? ''
 
@@ -47,7 +40,18 @@ export default function DashboardEditor() {
   const boardRef = useRef<Dashboard | null>(null)
   const [loading, setLoading] = useState(true)
   const [gridWidth, setGridWidth] = useState(900)
-  const gridRef = useRef<HTMLDivElement>(null)
+  const [saveMsg, setSaveMsg] = useState<{ ok: boolean; text: string } | null>(null)
+  const saveMsgTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const gridRef = useRef<HTMLDivElement | null>(null)
+  // Callback ref so ResizeObserver fires when the grid mounts (after loading spinner)
+  const gridRefCallback = useCallback<RefCallback<HTMLDivElement>>((node) => {
+    gridRef.current = node
+    if (!node) return
+    const measure = () => setGridWidth(node.clientWidth)
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(node)
+  }, [])
 
   const [selected, setSelected] = useState<string | null>(null)
   const [generating, setGenerating] = useState<Record<string, boolean>>({})
@@ -55,6 +59,7 @@ export default function DashboardEditor() {
   const [editWidget, setEditWidget] = useState<Widget | null>(null)
   const [saving, setSaving] = useState(false)
   const [resizing, setResizing] = useState<{ i: string; w: number; h: number } | null>(null)
+  const lastResizeLayoutRef = useRef<Layout | null>(null)
   const [library, setLibrary] = useState<LibraryItem[]>([])
 
   // Existing-widget picker
@@ -76,40 +81,48 @@ export default function DashboardEditor() {
     ]).then(([d, items]) => {
       setBoard(d)
       boardRef.current = d
+      const initLayout = d.widgets.map((w: Widget) => ({
+        i: w.id, x: w.gridX, y: w.gridY, w: w.gridW, h: w.gridH,
+        minW: 1, minH: 1, maxW: COLS, maxH: 5,
+      }))
+      widgetKeyRef.current = d.widgets.map((w: Widget) =>
+        `${w.id}:${w.gridX},${w.gridY},${w.gridW},${w.gridH}`
+      ).join('|')
+      setLocalLayout(initLayout)
       setLibrary((items ?? []).map((i: { id: string; name: string; kind: string }) => ({
         id: i.id, name: i.name, kind: i.kind,
       })))
-    }).catch(console.error)
-      .finally(() => setLoading(false))
+      setLoading(false)
+    }).catch((err) => { console.error(err); setLoading(false) })
   }, [orgId, dashboardId, token])
 
-  // Keep gridWidth in sync with container for correct ReactGridLayout rendering
-  useEffect(() => {
-    function measure() {
-      if (gridRef.current) setGridWidth(gridRef.current.clientWidth)
-    }
-    measure()
-    const ro = new ResizeObserver(measure)
-    if (gridRef.current) ro.observe(gridRef.current)
-    return () => ro.disconnect()
-  }, [])
 
   // Keep boardRef in sync with board state so callbacks always see the latest board
   useEffect(() => { boardRef.current = board }, [board])
 
-  // Sync localLayout when the widget set changes (load, add, remove) — not on position updates
-  const widgetKey = useMemo(() => (board?.widgets ?? []).map((w) => w.id).join(','), [board?.widgets])
+  // Sync localLayout when widget set or grid positions change (load, add, remove, server-side edits)
+  const widgetKey = useMemo(
+    () => (board?.widgets ?? []).map((w) => `${w.id}:${w.gridX},${w.gridY},${w.gridW},${w.gridH}`).join('|'),
+    [board?.widgets],
+  )
   useEffect(() => {
     if (!board || widgetKey === widgetKeyRef.current) return
     widgetKeyRef.current = widgetKey
     setLocalLayout(
       board.widgets.map((w) => ({
-        i: w.id, x: w.gridX, y: w.gridY, w: w.gridW, h: w.gridH, minW: 1, minH: 1,
+        i: w.id, x: w.gridX, y: w.gridY, w: w.gridW, h: w.gridH,
+        minW: 1, minH: 1, maxW: COLS, maxH: 5,
       }))
     )
   }, [board, widgetKey])
 
   // Track layout locally during drag/resize — no board state update (avoids interrupting drag)
+  const showSave = useCallback((ok: boolean, text: string) => {
+    if (saveMsgTimer.current) clearTimeout(saveMsgTimer.current)
+    setSaveMsg({ ok, text })
+    saveMsgTimer.current = setTimeout(() => setSaveMsg(null), 4000)
+  }, [])
+
   const onLayoutChange = useCallback((layout: Layout) => {
     setLocalLayout(layout as unknown as LayoutItem[])
   }, [])
@@ -118,6 +131,12 @@ export default function DashboardEditor() {
   const saveLayoutItems = useCallback(async (layout: Layout) => {
     if (!boardRef.current || !orgId || !dashboardId) return
     const items = layout as unknown as LayoutItem[]
+    const clamp = (l: LayoutItem) => ({
+      x: l.x, y: l.y,
+      w: Math.min(COLS, Math.max(1, l.w)),
+      h: Math.min(5, Math.max(1, l.h)),
+    })
+    const snapshot = boardRef.current.widgets.slice()
     setBoard((prev) => {
       if (!prev) return prev
       return {
@@ -125,41 +144,41 @@ export default function DashboardEditor() {
         widgets: prev.widgets.map((w) => {
           const l = items.find((li) => li.i === w.id)
           if (!l) return w
-          return { ...w, gridX: l.x, gridY: l.y, gridW: l.w, gridH: l.h }
+          const c = clamp(l)
+          return { ...w, gridX: c.x, gridY: c.y, gridW: c.w, gridH: c.h }
         }),
       }
     })
+    const tok = await getAccessToken()
+    if (!tok) { showSave(false, 'Not logged in'); return }
+    let saved = 0
     for (const l of items) {
-      const orig = boardRef.current?.widgets.find((w) => w.id === l.i)
+      const orig = snapshot.find((w) => w.id === l.i)
       if (!orig) continue
-      if (orig.gridX === l.x && orig.gridY === l.y && orig.gridW === l.w && orig.gridH === l.h) continue
-      await updateWidget(token, orgId, dashboardId, l.i, {
-        gridX: l.x, gridY: l.y, gridW: l.w, gridH: l.h,
-      }).catch(console.error)
+      const c = clamp(l)
+      const unchanged = orig.gridX === c.x && orig.gridY === c.y && orig.gridW === c.w && orig.gridH === c.h
+      if (unchanged) continue
+      await updateWidget(tok, orgId, dashboardId, l.i, {
+        gridX: c.x, gridY: c.y, gridW: c.w, gridH: c.h,
+      }).then(() => { saved++ })
+        .catch((err: Error) => { console.error('[save] PATCH err:', err.message); showSave(false, err.message) })
     }
-  }, [token, orgId, dashboardId])
+    if (saved > 0) showSave(true, 'Layout saved')
+  }, [getAccessToken, orgId, dashboardId, showSave])
 
   const onDragStop = useCallback((layout: Layout) => { void saveLayoutItems(layout) }, [saveLayoutItems])
-  const onResize = useCallback((_layout: Layout, _old: LayoutItem | null, newItem: LayoutItem | null) => {
+  const onResize = useCallback((layout: Layout, _old: LayoutItem | null, newItem: LayoutItem | null) => {
     if (!newItem) return
     setResizing({ i: newItem.i, w: newItem.w, h: newItem.h })
+    lastResizeLayoutRef.current = layout
   }, [])
-  const onResizeStop = useCallback((layout: Layout) => {
+  const onResizeStop = useCallback((_staleLayout: Layout) => {
     setResizing(null)
+    const layout = lastResizeLayoutRef.current ?? _staleLayout
+    lastResizeLayoutRef.current = null
+    setLocalLayout(layout as unknown as LayoutItem[])
     void saveLayoutItems(layout)
   }, [saveLayoutItems])
-
-  const applyPreset = useCallback(async (widgetId: string, w: number, h: number) => {
-    if (!board || !orgId || !dashboardId) return
-    const widget = board.widgets.find((x) => x.id === widgetId)
-    if (!widget || (widget.gridW === w && widget.gridH === h)) return
-    setLocalLayout((prev) => prev.map((l) => l.i === widgetId ? { ...l, w, h } : l))
-    setBoard((prev) => {
-      if (!prev) return prev
-      return { ...prev, widgets: prev.widgets.map((x) => x.id === widgetId ? { ...x, gridW: w, gridH: h } : x) }
-    })
-    await updateWidget(token, orgId, dashboardId, widgetId, { gridW: w, gridH: h }).catch(console.error)
-  }, [board, token, orgId, dashboardId])
 
   async function handleSaveWidget(data: {
     name: string; type: WidgetType; prompt: string;
@@ -276,6 +295,16 @@ export default function DashboardEditor() {
 
   return (
     <div className="dbe-layout">
+      {saveMsg && (
+        <div style={{
+          position: 'fixed', bottom: 20, right: 20, zIndex: 9999,
+          padding: '8px 16px', borderRadius: 6, fontWeight: 600, fontSize: 13,
+          background: saveMsg.ok ? '#1a7f4b' : '#8b1a1a',
+          color: '#fff', boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
+        }}>
+          {saveMsg.ok ? '✓' : '✗'} {saveMsg.text}
+        </div>
+      )}
       <main className="dbe-main">
         <div className="dbe-header">
           <div className="dbe-header-left">
@@ -291,7 +320,7 @@ export default function DashboardEditor() {
           </div>
         </div>
 
-        <div className="dbe-grid-wrap" ref={gridRef}>
+        <div className="dbe-grid-wrap" ref={gridRefCallback}>
           <ReactGridLayout
             className="dbe-rgl"
             layout={localLayout}
@@ -303,7 +332,7 @@ export default function DashboardEditor() {
             draggableHandle=".wg-drag-handle"
             isDraggable={true}
             isResizable={true}
-            resizeHandles={['se', 'sw', 'ne', 'nw', 'e', 'w', 's', 'n']}
+            resizeHandles={['se', 'e', 's']}
             onLayoutChange={onLayoutChange}
             onDragStop={onDragStop}
             onResize={onResize}
@@ -319,23 +348,7 @@ export default function DashboardEditor() {
                 <div className="wg-drag-handle">
                   <span className="wg-drag-dots">⋮⋮</span>
                   <span className="wg-drag-name">{w.name}</span>
-                  <div className="wg-preset-btns" onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
-                    {PRESETS.map((p) => {
-                      const liveW = resizing?.i === w.id ? resizing.w : w.gridW
-                      const liveH = resizing?.i === w.id ? resizing.h : w.gridH
-                      return (
-                        <button
-                          key={p.label}
-                          type="button"
-                          className={`wg-preset-btn${liveW === p.w && liveH === p.h ? ' active' : ''}`}
-                          onClick={() => void applyPreset(w.id, p.w, p.h)}
-                          title={`${p.label}: ${p.w}×${p.h}`}
-                        >
-                          {p.label}
-                        </button>
-                      )
-                    })}
-                  </div>
+                  <span className="wg-db-badge" title="Saved in DB">{w.gridW}×{w.gridH}</span>
                   <div className="wg-cell-actions" onClick={(e) => e.stopPropagation()}>
                     <button
                       type="button"
@@ -366,14 +379,7 @@ export default function DashboardEditor() {
                 {/* Widget content */}
                 <div className="wg-content">
                   {resizing?.i === w.id && (
-                    <div className="wg-size-badge">
-                      {(() => {
-                        const match = PRESETS.find((p) => p.w === resizing.w && p.h === resizing.h)
-                        return match
-                          ? `${match.label} (${resizing.w}×${resizing.h})`
-                          : `${resizing.w}×${resizing.h}`
-                      })()}
-                    </div>
+                    <div className="wg-size-badge">{resizing.w}×{resizing.h}</div>
                   )}
                   {generating[w.id] ? (
                     <div className="wg-placeholder">

@@ -17,7 +17,8 @@ import { Router, raw } from 'express';
 import { randomUUID } from 'node:crypto';
 import type { Request, Response } from 'express';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { requireMember, requireRole, callerRole } from '../auth.js';
+import { requireMember, requireRole, callerRole, checkReportLimit, checkTokenBudget, requireFeature } from '../auth.js';
+import { logUsageEvent } from '../billing.js';
 import { getModel } from '../repo.js';
 import { serviceClient } from '../supabase.js';
 import { compileContext } from '../studio/context.js';
@@ -207,6 +208,7 @@ studioRouter.get(
 studioRouter.post(
   '/orgs/:orgId/studio/projects',
   requireMember(),
+  checkReportLimit(),
   async (req: Request, res: Response) => {
     const orgId = req.params.orgId;
     const name = ((req.body && req.body.name) || '').toString().trim();
@@ -419,6 +421,7 @@ async function testProviderKey(
 studioRouter.post(
   '/orgs/:orgId/studio/projects/:id/generate',
   requireMember(),
+  checkTokenBudget(),
   async (req: Request, res: Response) => {
     const { orgId, id } = req.params;
     const prompt = ((req.body && req.body.prompt) || '').toString();
@@ -459,28 +462,55 @@ studioRouter.post(
       const context = compileContext(items, model, project.vault ?? []);
       const history = project.messages ?? [];
       const ai = await loadAiConfig(orgId).catch(() => null);
-      const { html, usedAI, aiError } = await generateReport({
+
+      // Extract image items from the context library and prepend as attachments.
+      // Cap at 2MB base64 per image (~1.5MB file) — client already resizes on upload.
+      const libraryImageAtts: PromptAttachment[] = items
+        .filter((i) => i.kind === 'image' && i.enabled && i.content && i.content.length < 2_000_000)
+        .map((i) => {
+          const commaIdx = i.content!.indexOf(',');
+          const header = commaIdx > -1 ? i.content!.slice(0, commaIdx) : '';
+          const data = commaIdx > -1 ? i.content!.slice(commaIdx + 1) : i.content!;
+          const mediaType = header.replace('data:', '').replace(';base64', '') || 'image/png';
+          return { kind: 'image' as const, name: i.name, mediaType, dataBase64: data };
+        });
+
+      const { html, usedAI, aiError, tokensUsed } = await generateReport({
         prompt,
         currentHtml: project.html ?? '',
         context,
         modelData: model,
         history,
         ai,
-        attachments,
+        attachments: [...libraryImageAtts, ...attachments],
       });
+
+      // Fire-and-forget usage metering.
+      logUsageEvent(
+        serviceClient,
+        orgId,
+        req.user?.id,
+        usedAI ? 'ai_generation' : 'template_generation',
+        tokensUsed ?? 0,
+        ai?.provider ?? undefined,
+        id
+      ).catch((e) => console.error('usage log failed', e));
 
       const now = new Date().toISOString();
       const attNote = attachments.length
         ? `\n\n📎 ${attachments.map((a) => a.name).join(', ')}`
         : '';
       const userMessage: StudioMessage = { role: 'user', content: prompt + attNote, ts: now };
+      const isFirstBuild = !project.html;
       const assistantMessage: StudioMessage = {
         role: 'assistant',
         content: usedAI
-          ? 'Generated an updated report from your request.'
+          ? isFirstBuild
+            ? `Done. Take a look at the preview and tell me what to change.`
+            : `Updated. Let me know what else to tweak.`
           : aiError
-            ? `Your AI provider returned an error: ${aiError}. Showing a template instead — check the key under Settings → AI providers (use “Test all keys”).`
-            : 'Generated a starter report in template mode. No AI provider key is set — add one under Settings → AI providers (Claude, OpenAI, or OpenRouter) to generate real, prompt-driven reports.',
+            ? `AI provider error: ${aiError}. Fell back to a template. Check your key under [Settings -> AI providers](/app/${orgId}/settings).`
+            : `Built a template (no AI key set). Add a key under [Settings -> AI providers](/app/${orgId}/settings) to unlock real AI generation.`,
         ts: now,
       };
       const messages: StudioMessage[] = [...history, userMessage, assistantMessage];
@@ -570,6 +600,7 @@ studioRouter.post(
             ? body.content.slice(0, MAX_VAULT_CONTENT)
             : '',
         meta: body.meta && typeof body.meta === 'object' ? body.meta : {},
+        enabled: true,
         ts: new Date().toISOString(),
       };
       const vault = [...(project.vault ?? []), item].slice(-MAX_VAULT_ITEMS);
@@ -626,6 +657,43 @@ studioRouter.delete(
   }
 );
 
+// PATCH projects/:id/vault/:itemId { name?, meta: { url?, description? } }
+studioRouter.patch(
+  '/orgs/:orgId/studio/projects/:id/vault/:itemId',
+  requireMember(),
+  async (req: Request, res: Response) => {
+    const { orgId, id, itemId } = req.params;
+    const body = req.body || {};
+    try {
+      const project = await loadProject(req.db!, orgId, id);
+      if (!project) { res.status(404).json({ error: 'Project not found' }); return; }
+      const vault = (project.vault ?? []).map((v) => {
+        if (v.id !== itemId) return v;
+        const updated = { ...v };
+        if (typeof body.name === 'string' && body.name.trim()) updated.name = body.name.trim();
+        if (body.meta && typeof body.meta === 'object') {
+          updated.meta = { ...(v.meta ?? {}), ...(body.meta as Record<string, unknown>) };
+        }
+        if (typeof body.enabled === 'boolean') updated.enabled = body.enabled;
+        return updated;
+      });
+      const { data, error } = await req
+        .db!.from('studio_projects')
+        .update({ vault, updated_at: new Date().toISOString() })
+        .eq('org_id', orgId)
+        .eq('id', id)
+        .select(PROJECT_COLS)
+        .maybeSingle();
+      if (error) throw new Error(error.message);
+      if (!data) { res.status(404).json({ error: 'Project not found' }); return; }
+      res.json({ ok: true });
+    } catch (err) {
+      console.error('PATCH studio vault failed', err);
+      res.status(500).json({ error: 'Failed to update vault item' });
+    }
+  }
+);
+
 // POST projects/:id/import-pbix (multipart 'file') -> parse Power BI report into
 // connectors/visuals/measures, attach a structured brief to the vault, and seed
 // a starter HTML scaffold when the report is still empty.
@@ -671,6 +739,7 @@ studioRouter.post(
           visuals: summary.visuals.length,
           measures: summary.measureCount,
         },
+        enabled: true,
         ts: now,
       };
       const vault = [...(project.vault ?? []), note].slice(-MAX_VAULT_ITEMS);
@@ -721,8 +790,11 @@ interface VaultConnectorRow {
   kind: string;
   sourceType: 'model' | 'report' | 'library';
   sourceName: string;
+  deleteRef: string; // "model:{modelId}" | "ctx:{ctxId}" | "proj:{projectId}:{vaultItemId}"
   ownerId?: string | null;
   ownerEmail?: string | null;
+  url?: string;
+  meta?: Record<string, unknown>;
 }
 interface VaultDocumentRow {
   id: string;
@@ -731,6 +803,7 @@ interface VaultDocumentRow {
   sourceType: 'report' | 'library';
   sourceName: string;
   scope?: string;
+  deleteRef: string;
   ownerId?: string | null;
   ownerEmail?: string | null;
 }
@@ -773,6 +846,7 @@ studioRouter.get(
             kind: c.kind,
             sourceType: 'model',
             sourceName: m.name,
+            deleteRef: `model:${m.id}`,
             ownerEmail: null, // workspace-owned
           });
         }
@@ -796,7 +870,10 @@ studioRouter.get(
             kind: 'mcp',
             sourceType: 'library',
             sourceName: srcName,
+            deleteRef: `ctx:${c.id}`,
             ownerId: c.owner_id,
+            url: typeof c.meta?.url === 'string' ? c.meta.url : undefined,
+            meta: (c.meta ?? {}) as Record<string, unknown>,
           });
         } else {
           documents.push({
@@ -806,6 +883,7 @@ studioRouter.get(
             sourceType: 'library',
             sourceName: srcName,
             scope: c.scope,
+            deleteRef: `ctx:${c.id}`,
             ownerId: c.owner_id,
           });
         }
@@ -821,13 +899,17 @@ studioRouter.get(
         ownerIds.add(p.owner_id);
         for (const v of p.vault ?? []) {
           if (v.kind === 'mcp' || v.kind === 'api') {
+            const vMeta = (v.meta ?? {}) as Record<string, unknown>;
             connectors.push({
               id: `pv-${v.id}`,
               name: v.name,
               kind: v.kind,
               sourceType: 'report',
               sourceName: p.name,
+              deleteRef: `proj:${p.id}:${v.id}`,
               ownerId: p.owner_id,
+              url: typeof vMeta.url === 'string' ? vMeta.url : undefined,
+              meta: vMeta,
             });
           } else {
             documents.push({
@@ -836,6 +918,7 @@ studioRouter.get(
               kind: v.kind,
               sourceType: 'report',
               sourceName: p.name,
+              deleteRef: `proj:${p.id}:${v.id}`,
               ownerId: p.owner_id,
             });
           }
@@ -849,6 +932,7 @@ studioRouter.get(
                 kind: c.kind,
                 sourceType: 'report',
                 sourceName: p.name,
+                deleteRef: `proj:${p.id}:${v.id}`,
                 ownerId: p.owner_id,
               });
             }
@@ -864,7 +948,10 @@ studioRouter.get(
         kind: r.kind,
         sourceType: r.sourceType,
         sourceName: r.sourceName,
+        deleteRef: r.deleteRef,
         ownerEmail: r.ownerId ? emails.get(r.ownerId) ?? null : (r.ownerEmail ?? null),
+        url: r.url ?? null,
+        meta: r.meta ?? {},
       }));
       const finishD = documents.map((r) => ({
         id: r.id,
@@ -873,6 +960,7 @@ studioRouter.get(
         sourceType: r.sourceType,
         sourceName: r.sourceName,
         scope: r.scope ?? null,
+        deleteRef: r.deleteRef,
         ownerEmail: r.ownerId ? emails.get(r.ownerId) ?? null : (r.ownerEmail ?? null),
       }));
 
@@ -880,6 +968,290 @@ studioRouter.get(
     } catch (err) {
       console.error('GET vault failed', err);
       res.status(500).json({ error: 'Failed to load the workspace vault' });
+    }
+  }
+);
+
+// GET /orgs/:orgId/vault/doc/content?ref=ctx:{id}|proj:{pid}:{vid}
+// Returns the stored content for a single document (fetched on demand, not in listing).
+studioRouter.get(
+  '/orgs/:orgId/vault/doc/content',
+  requireMember(),
+  async (req: Request, res: Response) => {
+    const ref = (req.query.ref ?? '').toString().trim();
+    const orgId = req.params.orgId;
+    const db = req.db!;
+
+    try {
+      if (ref.startsWith('ctx:')) {
+        const ctxId = ref.slice(4);
+        const { data, error } = await db
+          .from('context_items')
+          .select('name, kind, content, meta')
+          .eq('id', ctxId)
+          .eq('org_id', orgId)
+          .maybeSingle();
+        if (error || !data) {
+          res.status(404).json({ error: 'No preview available' });
+          return;
+        }
+        // meta.pdf holds the base64 data URI for actual file preview
+        const pdfData = (data.meta as Record<string, string> | null)?.pdf;
+        const previewContent = pdfData ?? data.content ?? '';
+        if (!previewContent) {
+          res.status(404).json({ error: 'No preview available' });
+          return;
+        }
+        res.json({ name: data.name, kind: data.kind, content: previewContent });
+        return;
+      }
+
+      if (ref.startsWith('proj:')) {
+        const [, projectId, itemId] = ref.split(':');
+        const { data, error } = await db
+          .from('studio_projects')
+          .select('vault')
+          .eq('id', projectId)
+          .eq('org_id', orgId)
+          .maybeSingle();
+        if (error || !data) { res.status(404).json({ error: 'Project not found' }); return; }
+        const item = ((data.vault ?? []) as { id: string; name: string; kind: string; content?: string }[])
+          .find((v) => v.id === itemId);
+        if (!item || !item.content) { res.status(404).json({ error: 'No preview available' }); return; }
+        res.json({ name: item.name, kind: item.kind, content: item.content });
+        return;
+      }
+
+      res.status(400).json({ error: 'Invalid ref' });
+    } catch (err) {
+      console.error('GET vault doc content failed', err);
+      res.status(500).json({ error: 'Failed to load document content' });
+    }
+  }
+);
+
+// POST /orgs/:orgId/vault/test { url } — ping the URL from the server (avoids CORS)
+studioRouter.post(
+  '/orgs/:orgId/vault/test',
+  requireMember(),
+  async (req: Request, res: Response) => {
+    const url = (req.body?.url ?? '').toString().trim();
+    if (!url) { res.status(400).json({ error: 'url is required' }); return; }
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 8000);
+      let r = await fetch(url, { method: 'HEAD', signal: controller.signal }).catch(() =>
+        fetch(url, { method: 'GET', signal: controller.signal })
+      );
+      if (r.status === 405) r = await fetch(url, { method: 'GET', signal: controller.signal });
+      clearTimeout(timer);
+      res.json({ ok: r.ok, status: r.status, statusText: r.statusText });
+    } catch (e) {
+      res.json({ ok: false, error: e instanceof Error ? e.message : 'Connection failed' });
+    }
+  }
+);
+
+// GET /orgs/:orgId/vault/test-stream?url=... — stream live diagnostics via SSE
+studioRouter.get(
+  '/orgs/:orgId/vault/test-stream',
+  requireMember(),
+  async (req: Request, res: Response) => {
+    const url = ((req.query.url as string) ?? '').trim();
+    if (!url) { res.status(400).json({ error: 'url required' }); return; }
+
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders();
+
+    const emit = (msg: string, ok?: boolean, done = false) => {
+      res.write(`data: ${JSON.stringify({ msg, ok, done })}\n\n`);
+    };
+
+    let host = '';
+    try { host = new URL(url).hostname; } catch { /* ignore */ }
+
+    emit(`Resolving ${host || url}…`);
+
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => { controller.abort(); }, 10000);
+      const start = Date.now();
+
+      emit('Connecting…');
+
+      let r = await fetch(url, { method: 'HEAD', signal: controller.signal }).catch(() =>
+        fetch(url, { method: 'GET', signal: controller.signal })
+      );
+      if (r.status === 405) r = await fetch(url, { method: 'GET', signal: controller.signal });
+      clearTimeout(timer);
+
+      const ms = Date.now() - start;
+      const ct = r.headers.get('content-type') ?? '';
+
+      if (r.ok) {
+        emit(`${r.status} ${r.statusText}`, true);
+        if (ct) emit(`Content-Type: ${ct}`);
+        emit(`Latency: ${ms}ms`, true);
+        emit('Connected', true, true);
+      } else {
+        emit(`${r.status} ${r.statusText} — ${ms}ms`, false);
+        emit('Connection failed', false, true);
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Connection failed';
+      emit(msg, false);
+      emit('Connection failed', false, true);
+    }
+
+    res.end();
+  }
+);
+
+// PATCH /orgs/:orgId/vault/ctx/:ctxId { name?, url?, description? } — update a context-library MCP connector
+studioRouter.patch(
+  '/orgs/:orgId/vault/ctx/:ctxId',
+  requireMember(),
+  async (req: Request, res: Response) => {
+    const { orgId, ctxId } = req.params;
+    const db = req.db!;
+    const userId = req.user!.id;
+    const body = req.body ?? {};
+    const patch: Record<string, unknown> = {};
+    if (typeof body.name === 'string' && body.name.trim()) patch.name = body.name.trim();
+    if (body.meta && typeof body.meta === 'object') {
+      const { data } = await db.from('context_items').select('meta').eq('id', ctxId).eq('org_id', orgId).single();
+      const existingMeta = (data?.meta ?? {}) as Record<string, unknown>;
+      patch.meta = { ...existingMeta, ...(body.meta as Record<string, unknown>) };
+    }
+    if (Object.keys(patch).length === 0) { res.status(400).json({ error: 'Nothing to update' }); return; }
+    try {
+      const role = callerRole(req);
+      const { error } = await db
+        .from('context_items')
+        .update(patch)
+        .eq('id', ctxId)
+        .eq('org_id', orgId)
+        .eq(role === 'member' ? 'owner_id' : 'org_id', role === 'member' ? userId : orgId);
+      if (error) throw new Error(error.message);
+      res.json({ ok: true });
+    } catch (e) {
+      res.status(500).json({ error: e instanceof Error ? e.message : 'Update failed' });
+    }
+  }
+);
+
+// PATCH /orgs/:orgId/vault/model-connector { modelId, connectorKind, meta }
+// Merges credential meta into models.data.connectors[].meta for the matching connector kind.
+studioRouter.patch(
+  '/orgs/:orgId/vault/model-connector',
+  requireMember(),
+  async (req: Request, res: Response) => {
+    const { orgId } = req.params;
+    const { modelId, connectorKind, meta } = req.body ?? {};
+    if (!modelId || !connectorKind || typeof meta !== 'object') {
+      res.status(400).json({ error: 'modelId, connectorKind, and meta are required' });
+      return;
+    }
+    try {
+      const { data, error } = await req.db!
+        .from('models')
+        .select('data')
+        .eq('id', modelId)
+        .eq('org_id', orgId)
+        .single();
+      if (error || !data) { res.status(404).json({ error: 'Model not found' }); return; }
+      const modelData = (data as any).data as {
+        connectors?: { id?: string; name: string; kind: string; meta?: Record<string, unknown> }[];
+        [k: string]: unknown;
+      };
+      const connectors = (modelData.connectors ?? []).map((c) =>
+        c.kind === connectorKind
+          ? { ...c, meta: { ...(c.meta ?? {}), ...(meta as Record<string, unknown>) } }
+          : c
+      );
+      const { error: upErr } = await req.db!
+        .from('models')
+        .update({ data: { ...modelData, connectors } })
+        .eq('id', modelId)
+        .eq('org_id', orgId);
+      if (upErr) throw new Error(upErr.message);
+      res.json({ ok: true });
+    } catch (e) {
+      res.status(500).json({ error: e instanceof Error ? e.message : 'Update failed' });
+    }
+  }
+);
+
+// DELETE vault entry — routes by deleteRef prefix.
+// "model:{modelId}"         → delete the semantic model row
+// "ctx:{contextItemId}"     → delete the context_items row (caller must own or be admin)
+// "proj:{projectId}:{itemId}" → remove one item from studio_projects.vault[]
+studioRouter.delete(
+  '/orgs/:orgId/vault',
+  requireMember(),
+  async (req: Request, res: Response) => {
+    const { orgId } = req.params;
+    const ref: string = req.body?.deleteRef ?? '';
+    if (!ref) { res.status(400).json({ error: 'deleteRef is required' }); return; }
+
+    const db = req.db!;
+    const userId = req.user!.id;
+    const role = callerRole(req);
+
+    try {
+      if (ref.startsWith('model:')) {
+        const modelId = ref.slice('model:'.length);
+        if (role !== 'owner' && role !== 'admin') {
+          res.status(403).json({ error: 'Only owners and admins can delete models.' });
+          return;
+        }
+        const { error } = await db.from('models').delete().eq('id', modelId).eq('org_id', orgId);
+        if (error) throw error;
+        res.json({ ok: true });
+
+      } else if (ref.startsWith('ctx:')) {
+        const ctxId = ref.slice('ctx:'.length);
+        // owners/admins can delete any; members can delete their own
+        let q = serviceClient.from('context_items').delete().eq('id', ctxId).eq('org_id', orgId);
+        if (role === 'member') q = q.eq('owner_id', userId);
+        const { error } = await q;
+        if (error) throw error;
+        res.json({ ok: true });
+
+      } else if (ref.startsWith('proj:')) {
+        const rest = ref.slice('proj:'.length);
+        const colonIdx = rest.indexOf(':');
+        if (colonIdx === -1) { res.status(400).json({ error: 'Invalid deleteRef' }); return; }
+        const projectId = rest.slice(0, colonIdx);
+        const vaultItemId = rest.slice(colonIdx + 1);
+
+        const { data: proj, error: fetchErr } = await db
+          .from('studio_projects')
+          .select('owner_id, vault')
+          .eq('id', projectId)
+          .eq('org_id', orgId)
+          .single();
+        if (fetchErr || !proj) { res.status(404).json({ error: 'Project not found' }); return; }
+
+        const canEdit = proj.owner_id === userId || role === 'owner' || role === 'admin';
+        if (!canEdit) { res.status(403).json({ error: 'Not authorised' }); return; }
+
+        const newVault = ((proj.vault as VaultItem[]) ?? []).filter((v) => v.id !== vaultItemId);
+        const { error: updErr } = await db
+          .from('studio_projects')
+          .update({ vault: newVault })
+          .eq('id', projectId);
+        if (updErr) throw updErr;
+        res.json({ ok: true });
+
+      } else {
+        res.status(400).json({ error: 'Unknown deleteRef format' });
+      }
+    } catch (err) {
+      console.error('DELETE vault entry failed', err);
+      res.status(500).json({ error: 'Delete failed' });
     }
   }
 );
@@ -979,6 +1351,76 @@ studioRouter.post(
 // Context Library
 // ---------------------------------------------------------------------------
 
+// POST context/summarize {filename, content} -> {description}
+// Uses the org's active AI provider to generate a short description of a document.
+// Falls back to extracting the first 400 chars if no AI key is configured.
+studioRouter.post(
+  '/orgs/:orgId/studio/context/summarize',
+  requireMember(),
+  async (req: Request, res: Response) => {
+    const { orgId } = req.params;
+    const filename: string = req.body?.filename ?? 'document';
+    const raw: string = (req.body?.content ?? '').slice(0, 80_000);
+    if (!raw.trim()) { res.status(400).json({ error: 'content is required' }); return; }
+
+    try {
+      const ai = await loadAiConfig(orgId);
+      if (!ai) {
+        // No AI — return truncated preview as description
+        const preview = raw.replace(/\s+/g, ' ').trim().slice(0, 400);
+        res.json({ description: preview });
+        return;
+      }
+
+      const prompt =
+        `You are a document analyst. A user has uploaded a file named "${filename}". ` +
+        `Read its content and write a concise description (2–4 sentences) that explains: ` +
+        `what this document is, what topics or data it covers, and how an AI might use it as context. ` +
+        `Output ONLY the description text — no headings, no bullet points, no markdown.\n\n` +
+        `=== DOCUMENT CONTENT ===\n${raw}`;
+
+      const DEFAULT_MODEL: Record<AiProvider, string> = {
+        anthropic: 'claude-haiku-4-5-20251001',
+        openai: 'gpt-4o-mini',
+        openrouter: 'openai/gpt-4o-mini',
+      };
+      const model = ai.model || DEFAULT_MODEL[ai.provider];
+
+      let description = '';
+      if (ai.provider === 'anthropic') {
+        const mod = await import('@anthropic-ai/sdk');
+        const client = new mod.default({ apiKey: ai.apiKey });
+        const resp = await client.messages.create({
+          model,
+          max_tokens: 300,
+          messages: [{ role: 'user', content: prompt }],
+        });
+        description = (resp.content ?? [])
+          .filter((b): b is { type: 'text'; text: string } => b.type === 'text')
+          .map((b) => b.text).join('').trim();
+      } else {
+        const baseUrl = ai.provider === 'openai'
+          ? 'https://api.openai.com/v1'
+          : 'https://openrouter.ai/api/v1';
+        const r = await fetch(`${baseUrl}/chat/completions`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${ai.apiKey}` },
+          body: JSON.stringify({ model, max_tokens: 300, messages: [{ role: 'user', content: prompt }] }),
+        });
+        const data = await r.json() as { choices?: { message?: { content?: string } }[] };
+        description = data.choices?.[0]?.message?.content?.trim() ?? '';
+      }
+
+      res.json({ description: description || raw.replace(/\s+/g, ' ').trim().slice(0, 400) });
+    } catch (err) {
+      console.error('context/summarize failed', err);
+      // Graceful fallback — never block the upload
+      const preview = raw.replace(/\s+/g, ' ').trim().slice(0, 400);
+      res.json({ description: preview });
+    }
+  }
+);
+
 // GET context
 studioRouter.get(
   '/orgs/:orgId/studio/context',
@@ -1003,7 +1445,7 @@ studioRouter.post(
     const body = req.body || {};
     const kind = (body.kind || '').toString();
     const name = (body.name || '').toString().trim();
-    if (!['doc', 'html', 'mcp', 'note'].includes(kind)) {
+    if (!['doc', 'html', 'mcp', 'note', 'image'].includes(kind)) {
       res.status(400).json({ error: 'Invalid kind' });
       return;
     }
