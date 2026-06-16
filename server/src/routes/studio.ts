@@ -459,7 +459,7 @@ studioRouter.post(
         ? await getModel(req.db!, orgId, project.model_id).catch(() => null)
         : null;
 
-      const context = compileContext(items, model, project.vault ?? []);
+      const context = await compileContext(items, model, project.vault ?? []);
       const history = project.messages ?? [];
       const ai = await loadAiConfig(orgId).catch(() => null);
 
@@ -551,7 +551,7 @@ studioRouter.get(
       const model = project.model_id
         ? await getModel(req.db!, orgId, project.model_id).catch(() => null)
         : null;
-      const markdown = compileContext(items, model, project.vault ?? []);
+      const markdown = await compileContext(items, model, project.vault ?? []);
       res.json({ markdown });
     } catch (err) {
       console.error('GET studio compiled-context failed', err);

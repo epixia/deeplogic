@@ -213,6 +213,40 @@ function templateReport(args: GenerateArgs): string {
 </html>`;
 }
 
+/**
+ * Build the full multi-turn messages array for the AI call.
+ * Previous user prompts are included so the model has memory of prior requests.
+ * Previous assistant turns are replaced with a short acknowledgement — the
+ * actual HTML state is already passed in the final user message via currentHtml.
+ */
+function buildMessages(args: GenerateArgs): { role: 'user' | 'assistant'; content: string }[] {
+  const out: { role: 'user' | 'assistant'; content: string }[] = [];
+
+  for (const m of args.history ?? []) {
+    if (m.role === 'system') continue;
+    if (m.role === 'assistant') {
+      out.push({ role: 'assistant', content: '(HTML report generated — current state is in your next message)' });
+    } else {
+      out.push({ role: 'user', content: m.content });
+    }
+  }
+
+  // Current turn carries full context + current HTML + new request
+  out.push({ role: 'user', content: buildUserMessage(args) });
+
+  // APIs require strict alternation and must start with user — merge consecutive same-role.
+  const norm: typeof out = [];
+  for (const m of out) {
+    if (norm.length && norm[norm.length - 1].role === m.role) {
+      norm[norm.length - 1].content += '\n\n' + m.content;
+    } else {
+      norm.push({ ...m });
+    }
+  }
+  while (norm.length && norm[0].role !== 'user') norm.shift();
+  return norm;
+}
+
 /** Build the user message sent to Claude. */
 function buildUserMessage(args: GenerateArgs): string {
   const parts: string[] = [];
@@ -271,27 +305,35 @@ async function callAnthropic(args: GenerateArgs, apiKey: string, model: string):
   const Anthropic = mod.default;
   const client = new Anthropic({ apiKey });
 
-  const content: unknown[] = [{ type: 'text', text: buildUserMessage(args) }];
+  const turns = buildMessages(args);
+
+  // All prior turns are plain text; the final user turn gets attachment content blocks.
+  const lastContent: unknown[] = [{ type: 'text', text: turns[turns.length - 1].content }];
   for (const a of args.attachments ?? []) {
     if (a.kind === 'image' && a.dataBase64) {
-      content.push({
+      lastContent.push({
         type: 'image',
         source: { type: 'base64', media_type: a.mediaType || 'image/png', data: a.dataBase64 },
       });
     } else if (a.kind === 'pdf' && a.dataBase64) {
-      content.push({
+      lastContent.push({
         type: 'document',
         source: { type: 'base64', media_type: 'application/pdf', data: a.dataBase64 },
       });
     }
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const messages: any[] = [
+    ...turns.slice(0, -1).map((m) => ({ role: m.role, content: m.content })),
+    { role: 'user', content: lastContent },
+  ];
+
   const res = await client.messages.create({
     model,
-    max_tokens: 8000,
+    max_tokens: 16000,
     system: args.systemOverride ?? SYSTEM_PROMPT,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    messages: [{ role: 'user', content: content as any }],
+    messages,
   });
   const text = (res.content ?? [])
     .filter((b): b is { type: 'text'; text: string } => b.type === 'text')
@@ -308,15 +350,24 @@ async function callOpenAICompatible(
   apiKey: string,
   model: string
 ): Promise<CallResult> {
-  const text = buildUserMessage(args);
+  const turns = buildMessages(args);
+
   const imageParts = (args.attachments ?? [])
     .filter((a) => a.kind === 'image' && a.dataBase64)
     .map((a) => ({
       type: 'image_url',
       image_url: { url: `data:${a.mediaType || 'image/png'};base64,${a.dataBase64}` },
     }));
-  const userContent =
-    imageParts.length > 0 ? [{ type: 'text', text }, ...imageParts] : text;
+
+  const lastTurnText = turns[turns.length - 1].content;
+  const lastUserContent =
+    imageParts.length > 0 ? [{ type: 'text', text: lastTurnText }, ...imageParts] : lastTurnText;
+
+  const messages = [
+    { role: 'system', content: args.systemOverride ?? SYSTEM_PROMPT },
+    ...turns.slice(0, -1).map((m) => ({ role: m.role, content: m.content })),
+    { role: 'user', content: lastUserContent },
+  ];
 
   const res = await fetch(`${baseUrl}/chat/completions`, {
     method: 'POST',
@@ -328,11 +379,8 @@ async function callOpenAICompatible(
     },
     body: JSON.stringify({
       model,
-      max_tokens: 8000,
-      messages: [
-        { role: 'system', content: args.systemOverride ?? SYSTEM_PROMPT },
-        { role: 'user', content: userContent },
-      ],
+      max_tokens: 16000,
+      messages,
     }),
   });
   if (!res.ok) {

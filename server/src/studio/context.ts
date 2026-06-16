@@ -6,9 +6,39 @@
 import type { ContextItem, SemanticModel, VaultItem } from '../types.js';
 
 const MAX_CHARS = 16000;
+const FETCH_TIMEOUT_MS = 8000;
+const FETCH_MAX_CHARS = 5000;
+
+/**
+ * Fetch a URL and return its content as a string, truncated to FETCH_MAX_CHARS.
+ * Never throws — returns an error note on failure.
+ */
+async function fetchUrlContent(url: string): Promise<string> {
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+    const r = await fetch(url, {
+      method: 'GET',
+      signal: controller.signal,
+      headers: { Accept: 'application/json, text/plain, */*' },
+    });
+    clearTimeout(timer);
+    if (!r.ok) return `[fetch failed: ${r.status} ${r.statusText}]`;
+    const raw = await r.text();
+    // Pretty-print JSON so the AI can read it more easily.
+    try {
+      const json = JSON.parse(raw) as unknown;
+      return JSON.stringify(json, null, 2).slice(0, FETCH_MAX_CHARS);
+    } catch {
+      return raw.slice(0, FETCH_MAX_CHARS);
+    }
+  } catch (e) {
+    return `[fetch failed: ${e instanceof Error ? e.message : 'unknown error'}]`;
+  }
+}
 
 /** Render the per-report Data Vault (files / MCP / APIs / notes) as markdown. */
-function renderVault(vault: VaultItem[]): string[] {
+async function renderVault(vault: VaultItem[]): Promise<string[]> {
   const parts: string[] = [];
   // enabled defaults to true for backwards-compat (items created before the field existed)
   const items = (vault ?? []).filter((i) => i.enabled !== false);
@@ -20,9 +50,7 @@ function renderVault(vault: VaultItem[]): string[] {
   const notes = items.filter((i) => i.kind === 'note');
 
   parts.push('## Report Data Vault');
-  parts.push(
-    'Resources attached specifically to THIS report. Prefer these when building it.'
-  );
+  parts.push('Resources attached specifically to THIS report. Prefer these when building it.');
 
   if (files.length) {
     parts.push('### Attached files');
@@ -31,15 +59,22 @@ function renderVault(vault: VaultItem[]): string[] {
       if (f.content) parts.push('```\n' + f.content + '\n```');
     }
   }
+
   if (mcps.length) {
-    parts.push('### MCP servers');
+    parts.push('### MCP connectors');
     for (const m of mcps) {
       const meta = (m.meta ?? {}) as Record<string, unknown>;
       const url = typeof meta.url === 'string' ? meta.url : '';
       const desc = typeof meta.description === 'string' ? meta.description : '';
-      parts.push(`- **${m.name}** ${url ? `(${url})` : ''} ${desc ? `— ${desc}` : ''}`.trim());
+      parts.push(`#### ${m.name}${url ? ` (${url})` : ''}${desc ? ` — ${desc}` : ''}`);
+      if (url) {
+        const data = await fetchUrlContent(url);
+        parts.push('Live data:');
+        parts.push('```json\n' + data + '\n```');
+      }
     }
   }
+
   if (apis.length) {
     parts.push('### APIs');
     for (const a of apis) {
@@ -47,10 +82,16 @@ function renderVault(vault: VaultItem[]): string[] {
       const url = typeof meta.url === 'string' ? meta.url : '';
       const desc = typeof meta.description === 'string' ? meta.description : '';
       const auth = typeof meta.auth === 'string' ? meta.auth : '';
-      parts.push(`- **${a.name}** ${url ? `(${url})` : ''} ${desc ? `— ${desc}` : ''}`.trim());
-      if (auth) parts.push(`  - auth: ${auth}`);
+      parts.push(`#### ${a.name}${url ? ` (${url})` : ''}${desc ? ` — ${desc}` : ''}`);
+      if (auth) parts.push(`Auth: ${auth}`);
+      if (url) {
+        const data = await fetchUrlContent(url);
+        parts.push('Live data:');
+        parts.push('```json\n' + data + '\n```');
+      }
     }
   }
+
   if (notes.length) {
     parts.push('### Vault notes');
     for (const n of notes) {
@@ -75,13 +116,14 @@ function formatKpiValue(value: number, format: SemanticModel['kpis'][number]['fo
 /**
  * Compile the enabled context items (and an optional grounding model) into a
  * single augmented markdown document. Grouped by kind with clear headers;
- * MCP descriptors use meta.url + meta.description. Capped to ~12000 chars.
+ * URL-based MCP/API connectors are fetched live and their data is included.
+ * Capped to MAX_CHARS.
  */
-export function compileContext(
+export async function compileContext(
   items: ContextItem[],
   model?: SemanticModel | null,
   vault?: VaultItem[]
-): string {
+): Promise<string> {
   const enabled = (items ?? []).filter((i) => i.enabled);
 
   const docs = enabled.filter((i) => i.kind === 'doc');
@@ -97,7 +139,7 @@ export function compileContext(
   );
 
   // Per-report Data Vault first — it's the most specific to this report.
-  parts.push(...renderVault(vault ?? []));
+  parts.push(...(await renderVault(vault ?? [])));
 
   if (docs.length) {
     parts.push('## Documents');
@@ -116,16 +158,18 @@ export function compileContext(
   }
 
   if (mcps.length) {
-    parts.push('## MCP servers');
+    parts.push('## MCP / URL connectors');
     for (const m of mcps) {
       const meta = (m.meta ?? {}) as Record<string, unknown>;
       const url = typeof meta.url === 'string' ? meta.url : '';
       const description =
-        typeof meta.description === 'string' ? meta.description : m.content ?? '';
-      const bits = [`- **${m.name}**`];
-      if (url) bits.push(`(${url})`);
-      if (description) bits.push(`— ${description}`);
-      parts.push(bits.join(' '));
+        typeof meta.description === 'string' ? meta.description : (m.content ?? '');
+      parts.push(`### ${m.name}${url ? ` (${url})` : ''}${description ? ` — ${description}` : ''}`);
+      if (url) {
+        const data = await fetchUrlContent(url);
+        parts.push('Live data:');
+        parts.push('```json\n' + data + '\n```');
+      }
     }
   }
 
