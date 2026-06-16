@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, useMemo, type RefCallback } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import {
   getDashboard,
@@ -32,6 +32,7 @@ interface LibraryItem { id: string; name: string; kind: string }
 
 export default function DashboardEditor() {
   const { orgId, dashboardId } = useParams<{ orgId: string; dashboardId: string }>()
+  const navigate = useNavigate()
   const { session, orgs, getAccessToken } = useAuth()
   const token = session?.access_token ?? ''
   const orgName = orgs.find((o) => o.id === orgId)?.name ?? ''
@@ -353,7 +354,7 @@ export default function DashboardEditor() {
                     <button
                       type="button"
                       className="wg-action-btn"
-                      onClick={() => { setEditWidget(w); setShowBuilder(true) }}
+                      onClick={() => navigate(`/app/${orgId}/widgets/${w.id}`)}
                     >
                       Edit
                     </button>
