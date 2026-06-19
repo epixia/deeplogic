@@ -1,6 +1,7 @@
 // Admin user list — paginated, searchable.
 
 import { useCallback, useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../../auth/AuthContext'
 import { adminListUsers, type AdminUser } from '../../lib/api'
 import AdminLayout from './AdminLayout'
@@ -62,24 +63,32 @@ export default function AdminUsers() {
           <thead>
             <tr>
               <th>Email</th>
+              <th>Status</th>
               <th>Joined</th>
+              <th>Last sign-in</th>
               <th>Orgs</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={3} style={{ textAlign: 'center', padding: 32 }}>
+              <tr><td colSpan={5} style={{ textAlign: 'center', padding: 32 }}>
                 <div className="dl-spinner" style={{ margin: '0 auto' }} />
               </td></tr>
             ) : users.length === 0 ? (
-              <tr><td colSpan={3} className="dl-admin__empty">No users found.</td></tr>
+              <tr><td colSpan={5} className="dl-admin__empty">No users found.</td></tr>
             ) : users.map((u) => (
               <tr key={u.id}>
                 <td>
-                  <span style={{ fontWeight: 600 }}>{u.email}</span>
+                  <Link to={`/admin/users/${u.id}`} style={{ fontWeight: 600, color: 'var(--ink)' }}>{u.email}</Link>
                   <div className="muted" style={{ fontSize: 11, fontFamily: 'ui-monospace, monospace' }}>{u.id}</div>
                 </td>
+                <td>
+                  {u.suspended
+                    ? <span className="dl-admin__badge dl-admin__badge--suspended">suspended</span>
+                    : <span className="dl-admin__badge dl-admin__badge--active">active</span>}
+                </td>
                 <td className="muted">{fmtDate(u.createdAt)}</td>
+                <td className="muted">{u.lastSignInAt ? fmtDate(u.lastSignInAt) : '—'}</td>
                 <td>
                   {u.orgs.length === 0 ? (
                     <span className="muted">—</span>

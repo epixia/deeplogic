@@ -1,0 +1,32 @@
+/* Skills — agent capability catalogue on the Agents page. */
+
+.sk-wrap { margin-top: 40px; }
+.sk-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+.sk-head h2 { font-size: 20px; font-weight: 800; letter-spacing: -0.02em; }
+.sk-sub { font-size: 13px; color: var(--mut); }
+
+.sk-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(248px, 1fr)); gap: 12px; }
+.sk-card {
+  border: 1px solid var(--line); border-radius: 14px; background: var(--card);
+  padding: 14px 15px; display: flex; flex-direction: column; gap: 7px;
+  transition: border-color .15s, transform .15s;
+}
+.sk-card:hover { border-color: rgba(120, 180, 220, 0.3); transform: translateY(-1px); }
+.sk-card-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.sk-ic {
+  width: 36px; height: 36px; flex: none; border-radius: 10px; font-size: 18px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--bg2); border: 1px solid var(--line);
+}
+.sk-name { font-size: 14px; font-weight: 700; }
+.sk-blurb { font-size: 12.5px; color: var(--mut); line-height: 1.45; flex: 1; }
+.sk-status { font-size: 11px; font-weight: 700; color: var(--good); }
+
+.sk-cat {
+  font-size: 10.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+  padding: 2px 8px; border-radius: 99px; border: 1px solid var(--line); color: var(--mut);
+}
+.sk-cat--research { color: var(--cyan); border-color: color-mix(in srgb, var(--cyan) 35%, transparent); }
+.sk-cat--knowledge { color: #a78bfa; border-color: color-mix(in srgb, #a78bfa 35%, transparent); }
+.sk-cat--build { color: var(--good); border-color: color-mix(in srgb, var(--good) 35%, transparent); }
+.sk-cat--autonomy { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 35%, transparent); }

@@ -104,6 +104,9 @@ export default function Login() {
         <div className="dl-auth__foot">
           No account yet? <Link to="/signup">Create one</Link>
         </div>
+        <div className="dl-auth__foot">
+          <Link to="/">← Back to home</Link>
+        </div>
       </div>
     </main>
   )

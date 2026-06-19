@@ -1,93 +1,423 @@
-// Onboarding — create the first organization. POST /api/orgs both creates the
-// org (caller becomes owner) and seeds the two sample models server-side. On
-// success we refresh memberships and route into the org's dashboard.
-//
-// If the user already belongs to an org (e.g. revisiting the page), bounce them
-// straight to that org.
+// Onboarding — value-first, AI-driven setup. A visitor enters their website and
+// watches a LIVE MONITOR as DeepLogic learns the business (anonymously — nothing
+// is saved yet). Only at the end do we ask for name + email to claim the
+// workspace; the account is created instantly (set-password link emailed) and
+// the gathered data is persisted. An optional Power BI step follows.
 
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
-import { createOrg } from '../lib/api'
+import {
+  createOrg,
+  onboardingAnalyzeStream,
+  onboardingPersist,
+  ingestToVault,
+  scanPowerBI,
+  type OnboardingEvent,
+  type ProposedAgentLite,
+  type PowerBIScan,
+} from '../lib/api'
 import Logo from '../components/Logo'
-import './auth.css'
+import './onboarding.css'
+
+type Phase = 'intro' | 'running' | 'review' | 'powerbi' | 'claim' | 'done'
+interface FeedItem { kind: 'step' | 'detail'; icon?: string; text: string }
+interface Company { name: string; summary: string; facts: { label: string; value: string }[] }
+interface Stats { domain: string; age: { createdAt: string; ageYears: number } | null; sources: { title: string; url: string }[] }
+interface Competitor { name: string; website: string; reason: string }
+type Summary = Extract<OnboardingEvent, { type: 'done' }>['summary']
+
+function guessOrgName(website: string, company?: Company | null): string {
+  if (company?.name) return company.name.split('|')[0].split('—')[0].trim().slice(0, 60)
+  try {
+    const h = new URL(website.startsWith('http') ? website : `https://${website}`).hostname.replace(/^www\./, '')
+    const base = h.split('.')[0] || h
+    return base.charAt(0).toUpperCase() + base.slice(1)
+  } catch { return 'My Workspace' }
+}
+
+function randomPassword(): string {
+  const rnd = (globalThis.crypto?.randomUUID?.() ?? `${Math.random()}${Math.random()}`).replace(/-/g, '')
+  return `Dl!${rnd.slice(0, 16)}` // satisfies length + a little complexity
+}
 
 export default function Onboarding() {
-  const { orgs, getAccessToken, refreshOrgs, loading } = useAuth()
+  const { orgs, session, getAccessToken, signUp, resetPassword, refreshOrgs, loading } = useAuth()
   const navigate = useNavigate()
 
-  const [name, setName] = useState('')
+  const [phase, setPhase] = useState<Phase>('intro')
+  const [website, setWebsite] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
-  useEffect(() => {
-    if (!name) setName('My Dashboard')
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  const [feed, setFeed] = useState<FeedItem[]>([])
+  const [company, setCompany] = useState<Company | null>(null)
+  const [stats, setStats] = useState<Stats | null>(null)
+  const [competitors, setCompetitors] = useState<Competitor[]>([])
+  const [products, setProducts] = useState<{ name: string; description: string }[]>([])
+  const [agents, setAgents] = useState<ProposedAgentLite[]>([])
+  const [summary, setSummary] = useState<Summary | null>(null)
 
-  // Already onboarded → go to the first org's dashboards.
-  if (!loading && !busy && orgs.length > 0) {
+  // claim (end) form
+  const [name, setName] = useState('')
+  const [email, setEmail] = useState('')
+  const [orgId, setOrgId] = useState<string | null>(null)
+  const [pwNote, setPwNote] = useState(false)
+
+  // Power BI step — files chosen here are held in memory and uploaded once the
+  // workspace exists (during claim), so name+email stays the final step.
+  const [pbiFiles, setPbiFiles] = useState<File[]>([])
+  const [pbiIntro, setPbiIntro] = useState(true)
+  const [dragActive, setDragActive] = useState(false)
+  const [pbiScans, setPbiScans] = useState<Record<string, { status: 'scanning' | 'done' | 'failed'; scan?: PowerBIScan }>>({})
+  const [pbiResults, setPbiResults] = useState<{ name: string; category: string }[]>([])
+  const fileRef = useRef<HTMLInputElement>(null)
+  const feedEndRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => { feedEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [feed])
+
+  // Existing user who already has a workspace → straight in.
+  if (!loading && !busy && phase === 'intro' && orgs.length > 0) {
     return <Navigate to={`/app/${orgs[0].id}/dashboards`} replace />
   }
 
-  async function onSubmit(e: FormEvent) {
+  async function startAnalyze(e: FormEvent) {
     e.preventDefault()
-    setError(null)
-    const trimmed = name.trim()
-    if (!trimmed) {
-      setError('Give your dashboard a name.')
-      return
-    }
-    setBusy(true)
+    const site = website.trim()
+    if (!site) { setError('Enter your website to get started.'); return }
+    setError(null); setBusy(true); setPhase('running')
+    setFeed([{ kind: 'step', icon: '✨', text: 'Starting up…' }])
     try {
-      const token = await getAccessToken()
-      if (!token) throw new Error('Your session expired — please sign in again.')
-      const org = await createOrg(token, trimmed)
-      await refreshOrgs()
-      navigate(`/app/${org.id}/dashboards`, { replace: true })
+      for await (const ev of onboardingAnalyzeStream(site)) {
+        if (ev.type === 'step') setFeed((f) => [...f, { kind: 'step', icon: ev.icon, text: ev.text }])
+        else if (ev.type === 'detail') setFeed((f) => [...f, { kind: 'detail', text: ev.text }])
+        else if (ev.type === 'company') setCompany({ name: ev.name, summary: ev.summary, facts: ev.facts })
+        else if (ev.type === 'stats') setStats({ domain: ev.domain, age: ev.age, sources: ev.sources })
+        else if (ev.type === 'competitor') setCompetitors((c) => [...c, { name: ev.name, website: ev.website, reason: ev.reason }])
+        else if (ev.type === 'product') setProducts((p) => [...p, { name: ev.name, description: ev.description }])
+        else if (ev.type === 'agent') setAgents((a) => [...a, { name: ev.name, description: ev.description, model: ev.model, systemPrompt: ev.systemPrompt, schedule: ev.schedule }])
+        else if (ev.type === 'done') { setSummary(ev.summary); setPhase('powerbi') }
+        else if (ev.type === 'error') setError(ev.error)
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not create dashboard.')
-      setBusy(false)
-    }
+      setError(err instanceof Error ? err.message : 'Analysis failed.')
+    } finally { setBusy(false) }
   }
 
+  // Claim the workspace: create the account (instant), persist what we gathered.
+  async function claim(e: FormEvent) {
+    e.preventDefault()
+    const nm = name.trim(), em = email.trim()
+    if (!nm || !em) { setError('Enter your name and email to save your workspace.'); return }
+    setError(null); setBusy(true)
+    try {
+      // 1) Create the account unless already signed in.
+      if (!session) {
+        const { error: suErr } = await signUp(em, randomPassword(), nm)
+        if (suErr) throw new Error(suErr)
+        void resetPassword(em).catch(() => undefined) // "set your password" email (best-effort)
+        setPwNote(true)
+      }
+      const token = await getAccessToken()
+      if (!token) throw new Error('Could not start your session — please try signing in.')
+
+      // 2) Create the workspace + persist the gathered data.
+      const org = await createOrg(token, guessOrgName(website, company))
+      await onboardingPersist(token, org.id, {
+        website,
+        company: company ? { name: company.name, summary: company.summary, facts: company.facts } : null,
+        competitors,
+        products,
+        agents,
+      })
+      await refreshOrgs()
+      setOrgId(org.id)
+
+      // 3) Upload any Power BI files chosen on the previous step (workspace now exists).
+      for (const file of pbiFiles.slice(0, 20)) {
+        try {
+          const dataBase64 = await fileToBase64(file)
+          const res = await ingestToVault(token, org.id, { dataBase64, filename: file.name, mediaType: file.type || 'application/octet-stream', name: file.name })
+          setPbiResults((p) => [...p, { name: res.item.name, category: res.category }])
+        } catch { setPbiResults((p) => [...p, { name: file.name, category: 'failed' }]) }
+      }
+      setPhase('done')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not create your workspace.')
+    } finally { setBusy(false) }
+  }
+
+  function addPbiFiles(files: FileList | null) {
+    if (!files) return
+    const incoming = Array.from(files)
+    setPbiFiles((prev) => {
+      const merged = [...prev]
+      for (const f of incoming) {
+        if (!merged.some((e) => e.name === f.name && e.size === f.size)) merged.push(f) // dedupe
+      }
+      return merged.slice(0, 20)
+    })
+    // Live feedback: parse Power BI files now and surface detected connectors.
+    for (const f of incoming) {
+      const key = `${f.name}-${f.size}`
+      if (!/\.(pbit|pbix)$/i.test(f.name) || pbiScans[key]) continue
+      setPbiScans((s) => ({ ...s, [key]: { status: 'scanning' } }))
+      void (async () => {
+        try {
+          const scan = await scanPowerBI(await fileToBase64(f), f.name)
+          setPbiScans((s) => ({ ...s, [key]: { status: scan.ok ? 'done' : 'failed', scan } }))
+        } catch {
+          setPbiScans((s) => ({ ...s, [key]: { status: 'failed' } }))
+        }
+      })()
+    }
+  }
+  function fileToBase64(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const r = new FileReader()
+      r.onload = () => resolve(String(r.result).split(',')[1] ?? '')
+      r.onerror = () => reject(new Error('read failed'))
+      r.readAsDataURL(file)
+    })
+  }
+
+  function finish() { if (orgId) navigate(`/app/${orgId}/dashboards`, { replace: true }) }
+
+  // ---- intro ----
+  if (phase === 'intro') {
+    return (
+      <main className="ob">
+        <div className="ob-intro">
+          <Logo size={46} title="DeepLogic" />
+          <h1>Let's get to know your business</h1>
+          <p className="ob-lead">
+            Drop in your website and watch DeepLogic read it, learn what you do, and find your
+            competitors — live. No sign-up needed to see it work.
+          </p>
+          {error && <div className="ob-error">{error}</div>}
+          <form className="ob-form" onSubmit={startAnalyze}>
+            <input className="ob-input" type="text" autoFocus placeholder="yourcompany.com" value={website} onChange={(e) => setWebsite(e.target.value)} />
+            <button className="btn btn-primary ob-go" type="submit" disabled={busy}>
+              {busy ? 'Starting…' : 'Get Started →'}
+            </button>
+            <span className="ob-micro">We'll only ask for your name &amp; email at the end, once you've seen the results.</span>
+          </form>
+        </div>
+      </main>
+    )
+  }
+
+  // ---- running / done / claimed: the live monitor + claim ----
   return (
-    <main className="dl-auth">
-      <div className="dl-auth__card">
-        <div className="dl-auth__head">
-          <Logo size={44} title="DeepLogic" />
-          <h1>Name your dashboard</h1>
+    <main className="ob ob-monitor">
+      <header className="ob-mon-head">
+        <Logo size={32} title="DeepLogic" />
+        <div>
+          <h1>
+            {phase === 'running' ? 'Analysing your business…'
+              : phase === 'review' ? 'Your intelligence is ready'
+              : phase === 'powerbi' ? 'Add your Power BI reports'
+              : phase === 'claim' ? 'Activate your workspace'
+              : 'Your workspace is ready'}
+          </h1>
           <p>
-            We'll seed it with two sample reports so you can explore right away.
+            {phase === 'running' ? 'Watch the AI reason through your business — live.'
+              : phase === 'review' ? 'We’ve built your picture. Activate your workspace to see it all.'
+              : phase === 'powerbi' ? 'Optional — we’ll detect connectors, datasets & KPIs.'
+              : phase === 'claim' ? 'Last step — just your name and email.'
+              : (summary ? `${summary.company} · ${summary.competitors} competitor${summary.competitors === 1 ? '' : 's'} — open your dashboard to dive in` : 'All set up for you.')}
           </p>
         </div>
+        {phase === 'done' && <button className="btn btn-primary ob-enter" onClick={finish}>Enter DeepLogic →</button>}
+      </header>
 
-        <form className="dl-auth__form" onSubmit={onSubmit}>
-          {error && (
-            <div className="dl-auth__error" role="alert">
-              {error}
+      {error && <div className="ob-error">{error}</div>}
+
+      {/* the AI's live reasoning — the focus. We intentionally do NOT show the
+          gathered data here; the payoff lives in the dashboard after signup. */}
+      {(phase === 'running' || phase === 'review') && (
+        <div className="ob-think">
+          <section className="ob-feed ob-feed--center">
+            <div className="ob-feed-title">⚡ Live AI reasoning</div>
+            <ul className="ob-feed-list">
+              {feed.map((f, i) => {
+                const isLastStep = f.kind === 'step' && phase === 'running' && i === feed.length - 1
+                return (
+                  <li key={i} className={`ob-feed-item ob-feed-${f.kind}${isLastStep ? ' is-active' : ''}`}>
+                    {f.kind === 'step'
+                      ? <><span className="ob-feed-ic">{isLastStep ? <span className="ob-spin" /> : f.icon}</span>{f.text}</>
+                      : <span className="ob-feed-detailtext">{f.text}</span>}
+                  </li>
+                )
+              })}
+              <div ref={feedEndRef} />
+            </ul>
+          </section>
+        </div>
+      )}
+
+      {/* review → mystery reveal: a glassmorphism modal over the blurred feed */}
+      {phase === 'review' && (
+        <div className="ob-reveal-backdrop">
+          <section className="ob-reveal ob-glass" role="dialog" aria-modal="true" aria-label="Analysis complete">
+            <div className="ob-reveal-ic">🔒</div>
+            <h2>We've built your intelligence picture</h2>
+            <p className="ob-reveal-lead">
+              DeepLogic has analysed your business — the full breakdown is waiting inside your dashboard.
+            </p>
+            <ul className="ob-reveal-list">
+              {company && <li>✓ Company profile &amp; positioning</li>}
+              {products.length > 0 && <li>✓ {products.length} product{products.length === 1 ? '' : 's'} catalogued</li>}
+              {stats && <li>✓ Website &amp; domain intelligence</li>}
+              {summary && summary.competitors > 0 && <li>✓ {summary.competitors} competitors mapped</li>}
+              {agents.length > 0 && <li>✓ {agents.length} AI agent{agents.length === 1 ? '' : 's'} drafted &amp; ready to deploy</li>}
+              {pbiFiles.length > 0 && <li>✓ {pbiFiles.length} Power BI report{pbiFiles.length === 1 ? '' : 's'} — connectors detected</li>}
+              <li>✓ Memory graph + a starter dashboard, built for you</li>
+            </ul>
+            <button className="btn btn-primary ob-reveal-cta" onClick={() => setPhase('claim')}>Continue →</button>
+          </section>
+        </div>
+      )}
+
+      {/* Power BI upload step — intro modal first, then the upload area */}
+      {phase === 'powerbi' && pbiIntro && (
+        <div className="ob-reveal-backdrop">
+          <section className="ob-reveal ob-glass" role="dialog" aria-modal="true" aria-label="Why connect Power BI">
+            <div className="ob-reveal-ic">📈</div>
+            <h2>Connect your Power BI — go deeper</h2>
+            <p className="ob-reveal-lead">
+              Your reports are where your business already lives. Hand us one and DeepLogic
+              learns it from the inside — far beyond what your website shows.
+            </p>
+            <ul className="ob-reveal-list">
+              <li>🔌 Detects your <strong>data connectors</strong> — where your data actually lives</li>
+              <li>🗂 Maps your <strong>tables &amp; fields</strong> — the shape of your business</li>
+              <li>📐 Surfaces your <strong>KPIs &amp; measures</strong> — what you already track</li>
+              <li>⚡ Pre-fills your <strong>Connectors</strong> so agents &amp; reports use real data — no setup</li>
+            </ul>
+            <div className="ob-step-actions">
+              <button className="btn btn-ghost" onClick={() => { setPbiFiles([]); setPbiIntro(false); setPhase('review') }}>Not now</button>
+              <button className="btn btn-primary ob-reveal-cta" onClick={() => setPbiIntro(false)}>Upload a report →</button>
             </div>
-          )}
-
-          <div className="dl-field">
-            <label htmlFor="orgname">Dashboard name</label>
-            <input
-              id="orgname"
-              className="dl-input"
-              type="text"
-              required
-              autoFocus
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Acme Analytics"
-            />
+          </section>
+        </div>
+      )}
+      {phase === 'powerbi' && !pbiIntro && (
+        <section className="ob-step">
+          <p className="ob-step-lead">Add a Power BI export (<code>.pbit</code> parses best) and we'll detect its connectors, datasets and KPIs to pre-fill your Connectors. Totally optional — you can do this later.</p>
+          <input
+            ref={fileRef} type="file" hidden multiple accept=".pbit,.pbix,.xlsx,.csv,.json"
+            onChange={(e) => { addPbiFiles(e.target.files); e.target.value = '' }}
+          />
+          <div
+            className={`ob-drop${dragActive ? ' is-drag' : ''}`}
+            role="button" tabIndex={0}
+            onClick={() => fileRef.current?.click()}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileRef.current?.click() } }}
+            onDragEnter={(e) => { e.preventDefault(); setDragActive(true) }}
+            onDragOver={(e) => { e.preventDefault(); if (!dragActive) setDragActive(true) }}
+            onDragLeave={(e) => { e.preventDefault(); setDragActive(false) }}
+            onDrop={(e) => { e.preventDefault(); setDragActive(false); addPbiFiles(e.dataTransfer.files) }}
+          >
+            <div className="ob-drop-ic">📈</div>
+            <div className="ob-drop-title">
+              <strong>Drag &amp; drop</strong> Power BI files here, or <span className="ob-drop-link">browse</span>
+            </div>
+            <div className="ob-drop-hint"><code>.pbit</code> parses best · also .pbix, .xlsx, .csv, .json</div>
           </div>
+          {pbiFiles.length > 0 && (
+            <>
+              <div className="ob-filecount">{pbiFiles.length} file{pbiFiles.length === 1 ? '' : 's'} selected{pbiFiles.length >= 20 ? ' (max)' : ''}</div>
+              <ul className="ob-filelist">
+                {pbiFiles.map((f, i) => {
+                  const sc = pbiScans[`${f.name}-${f.size}`]
+                  return (
+                    <li key={`${f.name}-${f.size}`} className="ob-fileitem">
+                      <div className="ob-filerow">
+                        <span className="ob-filename">📄 {f.name}</span>
+                        <button className="ob-file-x" onClick={() => setPbiFiles((p) => p.filter((_, j) => j !== i))}>✕</button>
+                      </div>
+                      {sc?.status === 'scanning' && <span className="ob-filescan"><span className="ob-spin" /> Scanning for connectors…</span>}
+                      {sc?.status === 'done' && sc.scan && (
+                        <div className="ob-fileconn">
+                          <span className="ob-fileconn-head">
+                            ✓ {sc.scan.connectors.length} connector{sc.scan.connectors.length === 1 ? '' : 's'} · {sc.scan.tableCount} table{sc.scan.tableCount === 1 ? '' : 's'} · {sc.scan.measureCount} measure{sc.scan.measureCount === 1 ? '' : 's'}
+                          </span>
+                          {sc.scan.connectors.length > 0 && (
+                            <div className="ob-conn-block">
+                              <span className="ob-conn-label">Connectors</span>
+                              <div className="ob-connchips">
+                                {sc.scan.connectors.map((c, j) => (
+                                  <span key={j} className="ob-connchip">{c.name}<span className="ob-connchip-kind">{c.kind}</span></span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          {sc.scan.tables.length > 0 && (
+                            <details className="ob-tabledetails" open>
+                              <summary>Tables &amp; fields ({sc.scan.tables.length})</summary>
+                              <ul className="ob-tablelist">
+                                {sc.scan.tables.map((t, j) => (
+                                  <li key={j}>
+                                    <div className="ob-table-row">
+                                      <span className="ob-table-name">🗂 {t.name}</span>
+                                      <span className="ob-table-meta">{t.columns.length} col{t.columns.length === 1 ? '' : 's'}{t.measures.length ? ` · ${t.measures.length} measure${t.measures.length === 1 ? '' : 's'}` : ''}</span>
+                                    </div>
+                                    {t.columns.length > 0 && (
+                                      <div className="ob-table-cols">{t.columns.slice(0, 14).join(', ')}{t.columns.length > 14 ? ` +${t.columns.length - 14} more` : ''}</div>
+                                    )}
+                                    {t.measures.length > 0 && (
+                                      <div className="ob-table-measures">ƒ {t.measures.slice(0, 8).join(', ')}{t.measures.length > 8 ? '…' : ''}</div>
+                                    )}
+                                  </li>
+                                ))}
+                              </ul>
+                            </details>
+                          )}
+                        </div>
+                      )}
+                      {sc?.status === 'failed' && <span className="ob-filescan ob-filescan--fail">Couldn't read connectors from this file.</span>}
+                    </li>
+                  )
+                })}
+              </ul>
+            </>
+          )}
+          <div className="ob-step-actions">
+            <button className="btn btn-ghost" onClick={() => { setPbiFiles([]); setPhase('review') }}>Skip for now</button>
+            <button className="btn btn-primary" onClick={() => setPhase('review')}>Continue →</button>
+          </div>
+        </section>
+      )}
 
-          <button className="btn btn-primary" type="submit" disabled={busy}>
-            {busy ? 'Creating dashboard…' : 'Create dashboard'}
-          </button>
-        </form>
-      </div>
+      {/* claim step — name + email (the final step) */}
+      {phase === 'claim' && (
+        <section className="ob-step">
+          <p className="ob-step-lead">
+            Just your name and email — set a password later. We'll save everything we found
+            {pbiFiles.length ? ` and import your ${pbiFiles.length} Power BI file${pbiFiles.length === 1 ? '' : 's'}` : ''}.
+          </p>
+          <form className="ob-claim-form" onSubmit={claim}>
+            <input className="ob-input" type="text" placeholder="Your name" autoFocus value={name} onChange={(e) => setName(e.target.value)} />
+            <input className="ob-input" type="email" placeholder="you@company.com" value={email} onChange={(e) => setEmail(e.target.value)} />
+            <button className="btn btn-primary" type="submit" disabled={busy}>{busy ? 'Setting up…' : 'Create my workspace →'}</button>
+          </form>
+          <button type="button" className="ob-skiplink" onClick={() => setPhase('review')}>← Back</button>
+        </section>
+      )}
+
+      {/* done — workspace ready */}
+      {phase === 'done' && (
+        <section className="ob-step ob-done">
+          {pwNote && <p className="ob-pwnote">✓ Check your inbox for a link to set your password.</p>}
+          <ul className="ob-done-summary">
+            {summary && <li>🏢 {summary.company}</li>}
+            {summary && <li>🔭 {summary.competitors} competitor{summary.competitors === 1 ? '' : 's'} tracked</li>}
+            {pbiResults.map((r, i) => <li key={i}>📈 {r.name} <span className="ob-pbi-cat">{r.category}</span></li>)}
+          </ul>
+          <button className="btn btn-primary ob-enter" onClick={finish}>Enter DeepLogic →</button>
+        </section>
+      )}
     </main>
   )
 }

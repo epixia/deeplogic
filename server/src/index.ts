@@ -14,15 +14,20 @@ import { orgsRouter } from './routes/orgs.js';
 import { modelsRouter } from './routes/models.js';
 import { ingestRouter } from './routes/ingest.js';
 import { missionRouter } from './routes/mission.js';
-import { studioRouter } from './routes/studio.js';
+import { studioRouter, onboardingPublicRouter } from './routes/studio.js';
 import { billingRouter, stripeWebhookHandler } from './routes/billing.js';
 import { adminRouter } from './routes/admin.js';
 import { sandboxRouter } from './routes/sandbox.js';
 import { dashboardsRouter } from './routes/dashboards.js';
-import { agentsRouter } from './routes/agents.js';
+import { agentsRouter, agentCallbackRouter } from './routes/agents.js';
+import { integrationsRouter } from './routes/integrations.js';
+import { memoryRouter } from './routes/memory.js';
 import { alertsRouter } from './routes/alerts.js';
+import { goalsRouter } from './routes/goals.js';
 import { searchRouter } from './routes/search.js';
 
+// Platform AI (onboarding/anonymous) uses a server env key, kept separate from
+// per-client workspace keys (org_ai_settings) — see serverFallbackAi().
 const PORT = Number(process.env.PORT) || 8787;
 
 const app = express();
@@ -49,6 +54,8 @@ app.get('/api/health', (_req, res) => {
 // Public routes — no auth required.
 app.use('/api', demoRouter);
 app.use('/api', inviteRouter);   // GET /invite/:token + POST /invite/:token/accept
+app.use('/api', agentCallbackRouter);  // POST /agent-callback/:id — VM→central, token-authed
+app.use('/api', onboardingPublicRouter);  // POST /onboarding/analyze — anonymous, pre-account
 
 // Everything else under /api requires authentication.
 app.use('/api', requireAuth);
@@ -65,7 +72,10 @@ app.use('/api', adminRouter);
 app.use('/api', sandboxRouter);
 app.use('/api', dashboardsRouter);
 app.use('/api', agentsRouter);
+app.use('/api', integrationsRouter);
+app.use('/api', memoryRouter);
 app.use('/api', alertsRouter);
+app.use('/api', goalsRouter);
 app.use('/api', searchRouter);
 
 app.listen(PORT, () => {

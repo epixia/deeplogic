@@ -1,13 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, Link } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import {
   listAgents,
   createAgent,
   updateAgent,
   deleteAgent,
+  suggestAgentTeam,
+  createAgentsBulk,
+  runAgentStream,
   type Agent,
+  type ProposedAgent,
 } from '../lib/api'
+import { startActivity, updateActivity, endActivity } from '../lib/agentActivity'
+import ExternalAgents from '../components/agents/ExternalAgents'
+import Orchestrator from '../components/agents/Orchestrator'
+import Skills from '../components/agents/Skills'
 import '../components/studio/studio.css'
 import './agents.css'
 
@@ -71,6 +79,9 @@ export default function Agents() {
   const [formError, setFormError] = useState<string | null>(null)
   const nameRef = useRef<HTMLInputElement>(null)
 
+  // AI team generator
+  const [showGenerate, setShowGenerate] = useState(false)
+
   const load = useCallback(async () => {
     setError(null)
     try {
@@ -88,6 +99,22 @@ export default function Agents() {
     setLoading(true)
     void load()
   }, [load])
+
+  // Quietly refresh so "running" badges reflect runs triggered elsewhere (e.g.
+  // the chat "spin up & run agents" flow). No spinner, no error clobbering.
+  useEffect(() => {
+    let alive = true
+    const tick = async () => {
+      try {
+        const t = await getAccessToken()
+        if (!t || !alive) return
+        const list = await listAgents(t, orgId)
+        if (alive) setAgents(list)
+      } catch { /* ignore transient poll errors */ }
+    }
+    const id = setInterval(() => { void tick() }, 5000)
+    return () => { alive = false; clearInterval(id) }
+  }, [getAccessToken, orgId])
 
   function openCreate() {
     setEditing(null)
@@ -160,6 +187,42 @@ export default function Agents() {
     }
   }
 
+  async function run(a: Agent) {
+    if (a.status === 'running') return
+    // Optimistic running state + a global activity toast that streams the
+    // agent's live thoughts and tool actions as it works.
+    setAgents((prev) => prev.map((x) => (x.id === a.id ? { ...x, status: 'running' } : x)))
+    const actId = `agent-${a.id}`
+    startActivity(actId, a.name, { icon: '▶️', text: 'Starting…' })
+    try {
+      const t = await getAccessToken()
+      if (!t) throw new Error('Session expired')
+      let done = false
+      for await (const ev of runAgentStream(t, orgId, a.id)) {
+        if (ev.type === 'step') {
+          updateActivity(actId, { icon: ev.icon, text: ev.text })
+        } else if (ev.type === 'done') {
+          done = true
+          setAgents((prev) => prev.map((x) => (x.id === a.id ? { ...x, status: 'idle', lastRunAt: new Date().toISOString(), lastRunStatus: 'ok' } : x)))
+          endActivity(actId, 'Finished')
+        } else if (ev.type === 'error') {
+          done = true
+          setAgents((prev) => prev.map((x) => (x.id === a.id ? { ...x, status: 'idle', lastRunStatus: 'error' } : x)))
+          setError(ev.error)
+          endActivity(actId, 'Failed', '✗')
+        }
+      }
+      if (!done) {
+        setAgents((prev) => prev.map((x) => (x.id === a.id ? { ...x, status: 'idle' } : x)))
+        endActivity(actId, 'Finished')
+      }
+    } catch (err) {
+      setAgents((prev) => prev.map((x) => (x.id === a.id ? { ...x, status: 'idle', lastRunStatus: 'error' } : x)))
+      setError(err instanceof Error ? err.message : 'Agent run failed.')
+      endActivity(actId, 'Failed', '✗')
+    }
+  }
+
   function set(patch: Partial<EditDraft>) {
     setDraft((d) => ({ ...d, ...patch }))
   }
@@ -174,12 +237,19 @@ export default function Agents() {
             Attach an agent to any widget or report to control how it generates content.
           </p>
         </div>
-        <button type="button" className="btn btn-primary" onClick={openCreate}>
-          + New agent
-        </button>
+        <div className="agents-head-actions">
+          <button type="button" className="btn btn-secondary agents-generate-btn" onClick={() => setShowGenerate(true)}>
+            ✨ Generate AI team
+          </button>
+          <button type="button" className="btn btn-primary" onClick={openCreate}>
+            + New agent
+          </button>
+        </div>
       </header>
 
       {error && <div className="studio-error">{error}</div>}
+
+      <Orchestrator />
 
       {loading ? (
         <div className="studio-empty">Loading agents…</div>
@@ -190,8 +260,10 @@ export default function Agents() {
               key={a.id}
               agent={a}
               busy={busyId === a.id}
+              orgId={orgId}
               onEdit={() => openEdit(a)}
               onDelete={() => void remove(a)}
+              onRun={() => void run(a)}
             />
           ))}
           <button type="button" className="studio-card studio-card-new" onClick={openCreate}>
@@ -200,6 +272,14 @@ export default function Agents() {
           </button>
         </div>
       )}
+
+      <Skills />
+
+      <ExternalAgents orgId={orgId} getToken={async () => {
+        const t = await getAccessToken()
+        if (!t) throw new Error('Session expired — please sign in again.')
+        return t
+      }} />
 
       {showModal && (
         <div className="studio-modal-backdrop" onClick={() => !saving && setShowModal(false)}>
@@ -289,39 +369,271 @@ export default function Agents() {
           </form>
         </div>
       )}
+
+      {showGenerate && (
+        <GenerateTeamModal
+          orgId={orgId}
+          getAccessToken={getAccessToken}
+          onClose={() => setShowGenerate(false)}
+          onCreated={(created) => {
+            setAgents((prev) => [...created, ...prev])
+            setShowGenerate(false)
+          }}
+        />
+      )}
     </main>
   )
 }
 
-function AgentCard({ agent, busy, onEdit, onDelete }: {
+// ---------------------------------------------------------------------------
+// Generate AI team — website → extrapolated business → proposed team → create
+// ---------------------------------------------------------------------------
+
+type GenStep = 'input' | 'analyzing' | 'review'
+
+function GenerateTeamModal({
+  orgId, getAccessToken, onClose, onCreated,
+}: {
+  orgId: string
+  getAccessToken: () => Promise<string | null>
+  onClose: () => void
+  onCreated: (created: Agent[]) => void
+}) {
+  const [step, setStep] = useState<GenStep>('input')
+  const [url, setUrl] = useState('')
+  const [notes, setNotes] = useState('')
+  const [error, setError] = useState<string | null>(null)
+
+  const [summary, setSummary] = useState('')
+  const [usedAI, setUsedAI] = useState(true)
+  const [proposed, setProposed] = useState<ProposedAgent[]>([])
+  const [selected, setSelected] = useState<boolean[]>([])
+  const [creating, setCreating] = useState(false)
+
+  async function analyze(e: React.FormEvent) {
+    e.preventDefault()
+    setError(null)
+    if (!url.trim()) { setError('Enter your website URL.'); return }
+    setStep('analyzing')
+    try {
+      const t = await getAccessToken()
+      if (!t) throw new Error('Session expired')
+      const res = await suggestAgentTeam(t, orgId, { url: url.trim(), notes: notes.trim() })
+      setSummary(res.businessSummary)
+      setUsedAI(res.usedAI)
+      setProposed(res.agents)
+      setSelected(res.agents.map(() => true))
+      setStep('review')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not analyze that site.')
+      setStep('input')
+    }
+  }
+
+  function patchAgent(i: number, patch: Partial<ProposedAgent>) {
+    setProposed((prev) => prev.map((a, idx) => (idx === i ? { ...a, ...patch } : a)))
+  }
+
+  async function create() {
+    const chosen = proposed.filter((_, i) => selected[i])
+    if (chosen.length === 0) { setError('Select at least one agent to create.'); return }
+    setCreating(true)
+    setError(null)
+    try {
+      const t = await getAccessToken()
+      if (!t) throw new Error('Session expired')
+      const created = await createAgentsBulk(t, orgId, chosen)
+      onCreated(created)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create agents.')
+      setCreating(false)
+    }
+  }
+
+  const selectedCount = selected.filter(Boolean).length
+
+  return (
+    <div className="studio-modal-backdrop" onClick={() => !creating && step !== 'analyzing' && onClose()}>
+      <div
+        className="studio-modal agents-gen-modal"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2>✨ Generate an AI team</h2>
+
+        {step === 'input' && (
+          <form onSubmit={analyze}>
+            <p className="agents-gen-lead">
+              Paste your website and we’ll read it, figure out what your business does, and
+              propose a team of AI agents tailored to you. You can edit everything before creating.
+            </p>
+            <label className="studio-field">
+              <span>Website URL</span>
+              <input
+                className="studio-input"
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                placeholder="acme.com"
+                autoFocus
+                spellCheck={false}
+              />
+            </label>
+            <label className="studio-field">
+              <span>Anything else? <span className="agents-optional">(optional)</span></span>
+              <textarea
+                className="studio-input agents-prompt"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="e.g. We care most about churn and weekly revenue reporting. Our data lives in Postgres + Stripe."
+                rows={3}
+              />
+            </label>
+            {error && <div className="studio-error">{error}</div>}
+            <div className="studio-modal-actions">
+              <button type="button" className="btn btn-ghost" onClick={onClose}>Cancel</button>
+              <button type="submit" className="btn btn-primary" disabled={!url.trim()}>
+                Analyze my site →
+              </button>
+            </div>
+          </form>
+        )}
+
+        {step === 'analyzing' && (
+          <div className="agents-gen-analyzing">
+            <div className="dl-spinner" />
+            <p>Reading <strong>{url.trim()}</strong> and designing your team…</p>
+            <span className="agents-optional">This can take a few seconds.</span>
+          </div>
+        )}
+
+        {step === 'review' && (
+          <div className="agents-gen-review">
+            <div className={`agents-gen-summary${usedAI ? '' : ' is-template'}`}>
+              <span className="agents-gen-summary-label">{usedAI ? 'What we understood' : 'Heads up'}</span>
+              <p>{summary}</p>
+            </div>
+
+            <div className="agents-gen-list">
+              {proposed.map((a, i) => (
+                <div key={i} className={`agents-gen-card${selected[i] ? ' is-selected' : ''}`}>
+                  <label className="agents-gen-card-head">
+                    <input
+                      type="checkbox"
+                      checked={selected[i]}
+                      onChange={(e) => setSelected((prev) => prev.map((v, idx) => (idx === i ? e.target.checked : v)))}
+                    />
+                    <input
+                      className="agents-gen-name"
+                      value={a.name}
+                      onChange={(e) => patchAgent(i, { name: e.target.value })}
+                    />
+                    <select
+                      className="agents-gen-model"
+                      value={a.model}
+                      onChange={(e) => patchAgent(i, { model: e.target.value })}
+                    >
+                      {MODELS.map((m) => <option key={m.id} value={m.id}>{m.label.split(' (')[0]}</option>)}
+                    </select>
+                  </label>
+                  <input
+                    className="agents-gen-desc"
+                    value={a.description}
+                    onChange={(e) => patchAgent(i, { description: e.target.value })}
+                    placeholder="What this agent does"
+                  />
+                  <details className="agents-gen-prompt-wrap">
+                    <summary>System prompt</summary>
+                    <textarea
+                      className="studio-input agents-prompt"
+                      value={a.systemPrompt}
+                      onChange={(e) => patchAgent(i, { systemPrompt: e.target.value })}
+                      rows={5}
+                    />
+                  </details>
+                  <div className="agents-gen-card-foot">
+                    <select
+                      className="agents-gen-sched"
+                      value={a.schedule ?? ''}
+                      onChange={(e) => patchAgent(i, { schedule: e.target.value || null })}
+                    >
+                      {SCHEDULES.filter((s) => s.value !== 'custom').map((s) => (
+                        <option key={s.value} value={s.value}>{s.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {error && <div className="studio-error">{error}</div>}
+            <div className="studio-modal-actions">
+              <button type="button" className="btn btn-ghost" onClick={() => setStep('input')} disabled={creating}>
+                ← Back
+              </button>
+              <button type="button" className="btn btn-primary" onClick={create} disabled={creating || selectedCount === 0}>
+                {creating ? 'Creating…' : `Create ${selectedCount} agent${selectedCount !== 1 ? 's' : ''}`}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function AgentCard({ agent, busy, orgId, onEdit, onDelete, onRun }: {
   agent: Agent
   busy: boolean
+  orgId: string
   onEdit: () => void
   onDelete: () => void
+  onRun: () => void
 }) {
+  const running = agent.status === 'running'
   return (
-    <div className="studio-card agent-card" style={{ position: 'relative' }}>
-      {agent.isOwner && (
-        <button
-          type="button"
-          className="sc-delete-btn"
-          disabled={busy}
-          title="Delete agent"
-          onClick={(e) => { e.stopPropagation(); onDelete() }}
-        >
-          ✕
-        </button>
-      )}
+    <div className={`studio-card agent-card${running ? ' agent-card--running' : ''}`} style={{ position: 'relative' }}>
+      <button
+        type="button"
+        className="agent-run-btn has-del"
+        disabled={running}
+        title={running ? 'Agent is running' : 'Run agent now'}
+        onClick={(e) => { e.stopPropagation(); onRun() }}
+      >
+        {running ? '⏳' : '▶'}
+      </button>
+      <button
+        type="button"
+        className="sc-delete-btn agent-del-btn"
+        disabled={busy}
+        title="Delete agent"
+        onClick={(e) => { e.stopPropagation(); onDelete() }}
+      >
+        ✕
+      </button>
       <div className="studio-card-link agent-card-body" onClick={onEdit} style={{ cursor: 'pointer' }}>
-        <h3>{agent.name}</h3>
+        <h3>
+          <span className={`agent-state-dot${running ? ' is-running' : ' is-idle'}`} aria-hidden />
+          {agent.name}
+        </h3>
         {agent.description && <p className="agent-card-desc">{agent.description}</p>}
         <div className="studio-card-meta" style={{ marginTop: 'auto' }}>
+          <span className={`studio-pill ${running ? 'agent-pill-running' : 'agent-pill-idle'}`}>
+            {running ? '● Running' : '○ Idle'}
+          </span>
           <span className="studio-pill studio-pill-org">{modelLabel(agent.model)}</span>
           {agent.schedule && <span className="studio-pill studio-pill-private">⏱ Scheduled</span>}
         </div>
         <div className="agent-card-foot">
           <span>Updated {fmtDate(agent.updatedAt)}</span>
-          {agent.lastRunAt && <span>Last run {fmtDate(agent.lastRunAt)}</span>}
+          {agent.lastRunAt && (
+            <span>Last run {fmtDate(agent.lastRunAt)}{agent.lastRunStatus === 'error' ? ' · failed' : ''}</span>
+          )}
+          <Link
+            className="agent-history-link"
+            to={`/app/${orgId}/activity?agent=${agent.id}`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            View runs ↗
+          </Link>
         </div>
       </div>
     </div>

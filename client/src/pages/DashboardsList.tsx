@@ -19,7 +19,7 @@ export default function DashboardsList() {
         const boards = await listDashboards(token, orgId)
         let board = boards[0]
         if (!board) {
-          board = await createDashboard(token, orgId, { name: orgName })
+          board = await createDashboard(token, orgId, { name: orgName, group: 'Company' })
         }
         if (active) navigate(`/app/${orgId}/dashboards/${board.id}`, { replace: true })
       } catch (e) {

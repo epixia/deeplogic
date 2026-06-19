@@ -1,0 +1,39 @@
+.sg-backdrop {
+  position: fixed; inset: 0; z-index: 1000;
+  background: rgba(6, 12, 20, 0.55); backdrop-filter: blur(3px);
+  display: flex; align-items: flex-start; justify-content: center;
+  padding: 7vh 16px; overflow-y: auto;
+}
+.sg-modal {
+  width: 100%; max-width: 560px;
+  background: var(--card); border: 1px solid var(--line); border-radius: 16px;
+  padding: 22px; box-shadow: 0 24px 60px rgba(0, 0, 0, 0.4);
+}
+.sg-head { display: flex; align-items: center; justify-content: space-between; }
+.sg-head h2 { font-size: 19px; font-weight: 800; }
+.sg-close {
+  width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--line);
+  background: transparent; color: var(--mut2); font-size: 13px; cursor: pointer;
+}
+.sg-close:hover { color: var(--ink); }
+.sg-sub { color: var(--mut); font-size: 13px; margin-top: 6px; }
+
+.sg-loading { display: flex; align-items: center; gap: 10px; color: var(--mut); font-size: 14px; padding: 28px 4px; }
+.sg-error { margin-top: 14px; color: var(--bad); border: 1px solid var(--line); background: var(--card2); border-radius: 8px; padding: 10px 12px; font-size: 13px; }
+.sg-note { margin-top: 14px; color: var(--mut); border: 1px dashed var(--line); background: var(--card2); border-radius: 8px; padding: 10px 12px; font-size: 12.5px; }
+
+.sg-list { display: flex; flex-direction: column; gap: 9px; margin-top: 16px; }
+.sg-card {
+  display: flex; align-items: flex-start; gap: 12px; width: 100%; text-align: left;
+  border: 1px solid var(--line); border-radius: 12px; background: var(--card2);
+  padding: 13px 14px; cursor: pointer; transition: border-color 0.15s, background 0.15s;
+}
+.sg-card:hover:not(:disabled) { border-color: color-mix(in srgb, var(--cyan) 45%, var(--line)); }
+.sg-card:disabled { opacity: 0.6; cursor: default; }
+.sg-card-ic { font-size: 17px; flex-shrink: 0; line-height: 1.3; }
+.sg-card-body { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
+.sg-card-title { font-size: 14.5px; font-weight: 700; color: var(--ink); }
+.sg-card-reason { font-size: 12.5px; color: var(--mut); line-height: 1.45; }
+.sg-card-use { flex-shrink: 0; align-self: center; font-size: 12.5px; font-weight: 700; color: var(--cyan); }
+
+.sg-actions { display: flex; justify-content: flex-end; margin-top: 14px; }

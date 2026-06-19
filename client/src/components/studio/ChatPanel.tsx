@@ -8,6 +8,7 @@ import { useAuth } from '../../auth/AuthContext'
 import { createContext, searchWeb } from '../../lib/api'
 import type { ModelListItem } from '../../types'
 import type { PromptAttachment, StudioMessage } from '../../lib/api'
+import SuggestIdeasModal from './SuggestIdeasModal'
 
 const ATTACH_ACCEPT =
   'image/*,.pdf,.html,.htm,.txt,.md,.csv,.json,.xml,.yaml,.yml'
@@ -298,6 +299,12 @@ export default function ChatPanel({
 
   const [webSearch, setWebSearch] = useState(false)
   const [searching, setSearching] = useState(false)
+  const [showIdeas, setShowIdeas] = useState(false)
+
+  function applyIdea(prompt: string) {
+    setDraft(prompt)
+    requestAnimationFrame(() => { autoResize(); textareaRef.current?.focus() })
+  }
 
   const [dragOver, setDragOver] = useState(false)
   function onDrop(e: DragEvent<HTMLDivElement>) {
@@ -417,6 +424,15 @@ export default function ChatPanel({
             >
               🔍
             </button>
+            <button
+              type="button"
+              className="chat-attach-btn"
+              onClick={() => setShowIdeas(true)}
+              disabled={generating}
+              title="Suggest report ideas from your Data Vault"
+            >
+              ✨
+            </button>
             <textarea
               ref={textareaRef}
               value={draft}
@@ -456,6 +472,15 @@ export default function ChatPanel({
           </div>
         </div>
       </div>
+
+      {showIdeas && (
+        <SuggestIdeasModal
+          orgId={orgId}
+          target="report"
+          onPick={(idea) => applyIdea(idea.prompt)}
+          onClose={() => setShowIdeas(false)}
+        />
+      )}
     </section>
   )
 }

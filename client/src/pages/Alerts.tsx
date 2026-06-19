@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
+import { useStickyTab } from '../lib/useStickyTab'
 import { useAuth } from '../auth/AuthContext'
 import {
   listAlerts,
@@ -19,6 +20,7 @@ import './alerts.css'
 interface LibraryItem { id: string; name: string; kind: string }
 
 type Tab = 'all' | 'active' | 'paused'
+const TABS: readonly Tab[] = ['all', 'active', 'paused']
 
 type Draft = {
   name: string
@@ -47,7 +49,7 @@ export default function Alerts() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [library, setLibrary] = useState<LibraryItem[]>([])
-  const [tab, setTab] = useState<Tab>('all')
+  const [tab, setTab] = useStickyTab<Tab>(`alerts.tab.${orgId}`, 'all', TABS)
 
   const [checkState, setCheckState] = useState<
     Record<string, { checking: boolean; fired?: boolean; summary?: string }>

@@ -1,7 +1,19 @@
 /* OrgSwitcher dropdown — hairline-bordered trigger + floating menu. */
 
+.dl-dashgroups {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .dl-orgsw {
   position: relative;
+}
+
+/* the group whose dashboard is currently open */
+.dl-orgsw__trigger.is-current {
+  border-color: rgba(111, 227, 240, 0.4);
+  color: var(--ink);
 }
 
 .dl-orgsw__trigger {
@@ -122,4 +134,13 @@
 .dl-orgsw__check {
   color: var(--cyan);
   font-weight: 700;
+}
+
+.dl-orgsw__group {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mut);
+  padding: 8px 10px 4px;
 }

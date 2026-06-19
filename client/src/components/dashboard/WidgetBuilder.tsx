@@ -37,8 +37,8 @@ export default function WidgetBuilder({ initial, libraryItems, onSave, onClose, 
   const [type, setType]       = useState<WidgetType>(initial?.type ?? 'kpi')
   const [prompt, setPrompt]   = useState(initial?.prompt ?? '')
   const [sources, setSources] = useState<WidgetSource[]>(initial?.sources ?? [])
-  const [gridW, setGridW]     = useState(initial?.gridW ?? 1)
-  const [gridH, setGridH]     = useState(initial?.gridH ?? 1)
+  const [gridW, setGridW]     = useState(initial?.gridW ?? 2)
+  const [gridH, setGridH]     = useState(initial?.gridH ?? 2)
   const [addRef, setAddRef]   = useState('')
 
   useEffect(() => {
@@ -130,43 +130,43 @@ export default function WidgetBuilder({ initial, libraryItems, onSave, onClose, 
 
           {/* Size */}
           <div className="wb-field">
-            <label className="wb-label">Size</label>
+            <label className="wb-label">Size <span className="wb-size-hint">drag to fine-tune on the dashboard</span></label>
             <div className="wb-size-visual">
-              {/* Width */}
+              {/* Width (6-column grid → half steps) */}
               <div className="wb-size-group">
-                {[1, 2, 3, 4].map((w) => (
+                {[{ v: 2, l: 'Small' }, { v: 3, l: 'Half' }, { v: 4, l: 'Wide' }, { v: 6, l: 'Full' }].map((o) => (
                   <button
-                    key={w}
+                    key={o.v}
                     type="button"
-                    className={`wb-size-btn${gridW === w ? ' selected' : ''}`}
-                    onClick={() => setGridW(w)}
-                    title={`${w} column${w > 1 ? 's' : ''}`}
+                    className={`wb-size-btn${gridW === o.v ? ' selected' : ''}`}
+                    onClick={() => setGridW(o.v)}
+                    title={`Width: ${o.l}`}
                   >
-                    <span className="wb-size-preview" style={{ '--cols': w } as React.CSSProperties}>
-                      {Array.from({ length: 4 }).map((_, i) => (
-                        <span key={i} className={`wb-size-cell${i < w ? ' on' : ''}`} />
+                    <span className="wb-size-preview" style={{ '--cols': o.v } as React.CSSProperties}>
+                      {Array.from({ length: 6 }).map((_, i) => (
+                        <span key={i} className={`wb-size-cell${i < o.v ? ' on' : ''}`} />
                       ))}
                     </span>
-                    <span className="wb-size-label">{w} col{w > 1 ? 's' : ''}</span>
+                    <span className="wb-size-label">{o.l}</span>
                   </button>
                 ))}
               </div>
-              {/* Height */}
+              {/* Height (half-height rows) */}
               <div className="wb-size-group">
-                {[1, 2].map((h) => (
+                {[{ v: 2, l: 'Short' }, { v: 3, l: 'Medium' }, { v: 4, l: 'Tall' }].map((o) => (
                   <button
-                    key={h}
+                    key={o.v}
                     type="button"
-                    className={`wb-size-btn${gridH === h ? ' selected' : ''}`}
-                    onClick={() => setGridH(h)}
-                    title={`${h} row${h > 1 ? 's' : ''}`}
+                    className={`wb-size-btn${gridH === o.v ? ' selected' : ''}`}
+                    onClick={() => setGridH(o.v)}
+                    title={`Height: ${o.l}`}
                   >
-                    <span className="wb-size-preview wb-size-preview--h" style={{ '--rows': h } as React.CSSProperties}>
-                      {Array.from({ length: 2 }).map((_, i) => (
-                        <span key={i} className={`wb-size-cell wb-size-cell--row${i < h ? ' on' : ''}`} />
+                    <span className="wb-size-preview wb-size-preview--h" style={{ '--rows': o.v } as React.CSSProperties}>
+                      {Array.from({ length: 4 }).map((_, i) => (
+                        <span key={i} className={`wb-size-cell wb-size-cell--row${i < o.v ? ' on' : ''}`} />
                       ))}
                     </span>
-                    <span className="wb-size-label">{h} row{h > 1 ? 's' : ''}</span>
+                    <span className="wb-size-label">{o.l}</span>
                   </button>
                 ))}
               </div>

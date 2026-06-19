@@ -59,8 +59,10 @@ const SYSTEM_PROMPT =
   'No markdown fences, no code blocks, no commentary — only the raw HTML file. ' +
   'Rules: ' +
   '1. Inline ALL CSS and JavaScript. Zero external CDN links or <link> stylesheet references. ' +
-  '2. Design it exactly as the user asks. You have full creative freedom — choose any colors, fonts, layout, animations. ' +
-  '3. Make it beautiful and polished. Use modern CSS (custom properties, flexbox, grid, gradients). ' +
+  '2. STAY ON-BRAND AND THEME-AWARE. DeepLogic has light AND dark modes; the platform sets data-theme="light"|"dark" on <html> and injects these CSS variables (they flip automatically) — USE them instead of hardcoded colors: ' +
+  'var(--bg) page background, var(--card) card/panel surfaces, var(--card2) subtle panels, var(--ink) primary text, var(--mut) muted text, var(--line) borders, var(--cyan) accent/links, var(--blue) secondary accent, var(--grad) gradient for emphasis, var(--good)/--warn/--bad status colors. ' +
+  'Set the document background to var(--bg) and text to var(--ink). Do NOT hardcode dark hex colors or a fixed background — the result MUST look correct in both light and dark. Use the system font stack (system-ui). ' +
+  '3. Make it beautiful and polished. Use modern CSS (custom properties, flexbox, grid). Reasonable accents/gradients are welcome, but keep within the palette above so it matches the platform. ' +
   '4. If context data is provided, use those real numbers and facts. Do not invent KPIs or metrics. ' +
   '5. If a current HTML file is provided, modify it to satisfy the request instead of rebuilding from scratch. ' +
   '6. When images appear in the ATTACHED IMAGES section, each one has a ready-made <img> tag with a complete ' +

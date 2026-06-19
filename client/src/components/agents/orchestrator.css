@@ -1,0 +1,62 @@
+.orch-wrap { margin: 22px 0 36px; }
+
+.orch-card {
+  border: 1px solid color-mix(in srgb, var(--cyan) 30%, var(--line));
+  border-radius: 18px;
+  background:
+    radial-gradient(120% 140% at 0% 0%, color-mix(in srgb, var(--cyan) 9%, transparent), transparent 60%),
+    var(--card);
+  padding: 22px;
+}
+
+.orch-id { display: flex; gap: 16px; align-items: flex-start; }
+.orch-avatar {
+  flex-shrink: 0;
+  width: 52px; height: 52px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 26px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--cyan) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--cyan) 35%, transparent);
+}
+.orch-titlerow { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.orch-name { font-size: 20px; font-weight: 800; letter-spacing: -0.01em; color: var(--ink); }
+.orch-badge {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.02em;
+  color: var(--cyan);
+  border: 1px solid color-mix(in srgb, var(--cyan) 40%, transparent);
+  border-radius: 99px; padding: 2px 9px;
+}
+.orch-status { font-size: 12px; font-weight: 600; color: #4caf7d; }
+.orch-desc { color: var(--mut); font-size: 14px; line-height: 1.55; margin-top: 7px; max-width: 80ch; }
+
+.orch-cols { display: grid; grid-template-columns: 1.6fr 1fr; gap: 26px; margin-top: 22px; }
+@media (max-width: 760px) { .orch-cols { grid-template-columns: 1fr; gap: 20px; } }
+
+.orch-h3 {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--mut2); margin-bottom: 12px;
+}
+.orch-h3--flow { margin-top: 20px; }
+
+.orch-caps { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+.orch-cap {
+  display: flex; gap: 10px; align-items: flex-start;
+  border: 1px solid var(--line); border-radius: 11px;
+  background: var(--card2); padding: 11px 12px;
+}
+.orch-cap-ic { font-size: 16px; line-height: 1.2; flex-shrink: 0; }
+.orch-cap-txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.orch-cap-name { font-size: 13px; font-weight: 700; color: var(--ink); }
+.orch-cap-blurb { font-size: 12px; color: var(--mut); line-height: 1.4; }
+
+.orch-coord { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 7px; }
+.orch-coord li {
+  display: flex; align-items: center; gap: 9px;
+  font-size: 13px; color: var(--ink);
+  border: 1px solid var(--line); border-radius: 9px;
+  background: var(--card2); padding: 8px 11px;
+}
+
+.orch-flow { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; }
+.orch-flow li { font-size: 13px; color: var(--mut); line-height: 1.45; }

@@ -1,0 +1,5 @@
+/* DeepLogic UI — single stylesheet entry. Designs receive this file's transitive
+   @import closure, so everything the components need is reachable from here. */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+@import './tokens.css';
+@import './components.css';

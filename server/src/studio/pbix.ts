@@ -74,6 +74,15 @@ function kindFromSignal(sig: string): Connector['kind'] | null {
   if (/sql\.database|sql\.databases|odbc\.|oledb\.|database/.test(s)) return 'sqlserver';
   if (/web\.contents|json\.document|odata|rest/.test(s)) return 'rest';
   if (/analysisservices|powerbi|pbi/.test(s)) return 'powerbi';
+  // Connection-string / hostname signals (present in Connections, DataModel,
+  // settings — even when the M source function isn't readable).
+  if (/snowflakecomputing\.com/.test(s)) return 'snowflake';
+  if (/\.salesforce\.com|force\.com/.test(s)) return 'salesforce';
+  if (/hubapi\.com|hubspot/.test(s)) return 'hubspot';
+  if (/spreadsheets\.google|sheets\.googleapis|docs\.google\.com\/spreadsheets/.test(s)) return 'sheets';
+  if (/database\.windows\.net|data source=|provider=|initial catalog=|server=tcp:|\.mysql\.|postgres|redshift|bigquery/.test(s)) return 'sqlserver';
+  if (/sharepoint|onedrive|\.xlsx|\.csv/.test(s)) return 'excel';
+  if (/https?:\/\//.test(s)) return 'rest';
   return null;
 }
 
@@ -88,22 +97,40 @@ function extractMashupM(zip: AdmZip): string {
   const sig = Buffer.from([0x50, 0x4b, 0x03, 0x04]);
   const at = raw.indexOf(sig);
   if (at === -1) return '';
+  let m = '';
   try {
     const inner = new AdmZip(raw.subarray(at));
-    let m = '';
     for (const e of inner.getEntries()) {
       if (/\.m$/i.test(e.entryName) || /Formulas\/Section/i.test(e.entryName)) {
-        try {
-          m += e.getData().toString('utf8') + '\n';
-        } catch {
-          /* skip */
-        }
+        try { m += e.getData().toString('utf8') + '\n'; } catch { /* skip */ }
       }
     }
-    return m;
   } catch {
-    return '';
+    /* inner-zip parse failed — fall back to scanning the raw buffer below */
   }
+  // Raw fallback: the M text is usually present as readable bytes even when the
+  // inner-zip extraction misses (newer mashup layouts). Scanning it lets the
+  // source-function regex still find connectors.
+  if (!m.trim()) m = raw.toString('utf8');
+  return m;
+}
+
+// Decode every plausibly-textual entry into one big string — a last-resort scan
+// surface for connector signals when the structured parts don't yield any.
+function scanAllText(zip: AdmZip): string {
+  let out = '';
+  for (const e of zip.getEntries()) {
+    if (e.isDirectory) continue;
+    if (/DataMashup$/i.test(e.entryName)) continue; // handled separately
+    try {
+      const buf = e.getData();
+      if (buf.length > 2_000_000) { out += buf.subarray(0, 2_000_000).toString('utf8'); continue; }
+      let t = buf.toString('utf16le');
+      if (!/[A-Za-z]{4}/.test(t)) t = buf.toString('utf8');
+      out += t + '\n';
+    } catch { /* skip unreadable entry */ }
+  }
+  return out;
 }
 
 function dedupeSources(
@@ -150,6 +177,26 @@ function parseConnectors(zip: AdmZip): { name: string; kind: Connector['kind'] }
   if (conn) {
     const kind = kindFromSignal(conn);
     if (kind) found.push({ name: KIND_LABEL[kind], kind });
+  }
+
+  // 3) Last resort — scan the whole archive's text for source functions AND
+  //    connection/hostname signals (catches DirectQuery/Live models, newer
+  //    layouts, and files where the mashup didn't decode).
+  if (found.length === 0) {
+    const all = scanAllText(zip);
+    SOURCE_FN_RE.lastIndex = 0;
+    while ((match = SOURCE_FN_RE.exec(all)) !== null) {
+      const kind = kindFromSignal(match[1]);
+      if (kind) found.push({ name: KIND_LABEL[kind], kind });
+    }
+    // Hostname / connection-string sweep, line by line.
+    for (const line of all.split(/[\n;,"']+/)) {
+      if (line.length < 6 || line.length > 300) continue;
+      if (/snowflakecomputing|salesforce\.com|hubapi|spreadsheets\.google|database\.windows\.net|data source=|provider=|initial catalog=|\.mysql\.|postgres|redshift|bigquery|sharepoint/i.test(line)) {
+        const kind = kindFromSignal(line);
+        if (kind) found.push({ name: KIND_LABEL[kind], kind });
+      }
+    }
   }
 
   return dedupeSources(found);
@@ -280,28 +327,35 @@ export function parsePbix(buf: Buffer, fallbackName: string): PbixSummary | null
     return null;
   }
 
-  try {
-    const sources = parseConnectors(zip);
-    const { pages, visuals } = parseVisuals(zip);
-    const { tables, measureCount } = parseModel(zip, visuals);
+  // Each stage is independently guarded — one throwing must not blank the others.
+  let sources: { name: string; kind: Connector['kind'] }[] = [];
+  let pages: string[] = [];
+  let visuals: PbixVisual[] = [];
+  let tables: PbixTable[] = [];
+  let measureCount = 0;
+  try { sources = parseConnectors(zip); } catch (e) { console.error(`[pbix] ${fallbackName} connectors stage threw:`, e); }
+  try { const v = parseVisuals(zip); pages = v.pages; visuals = v.visuals; } catch (e) { console.error(`[pbix] ${fallbackName} visuals stage threw:`, e); }
+  try { const m = parseModel(zip, visuals); tables = m.tables; measureCount = m.measureCount; } catch (e) { console.error(`[pbix] ${fallbackName} model stage threw:`, e); }
 
-    // If we couldn't extract anything meaningful, signal failure so the caller
-    // can fall back to a synthetic model.
-    if (sources.length === 0 && visuals.length === 0 && tables.length === 0) {
-      return null;
-    }
+  // Diagnostic: the archive's entries + what each stage extracted. This is the
+  // line to share when a real file yields nothing — it reveals the file format.
+  const entryNames = zip.getEntries().map((e) => e.entryName);
+  console.log(
+    `[pbix] ${fallbackName}: entries=[${entryNames.join(', ')}]` +
+    ` → sources=${sources.length} pages=${pages.length} visuals=${visuals.length} tables=${tables.length} measures=${measureCount}`,
+  );
 
-    return {
-      name: fallbackName,
-      pages,
-      sources: sources.length ? sources : [{ name: 'Power BI', kind: 'powerbi' }],
-      tables,
-      visuals,
-      measureCount,
-    };
-  } catch {
-    return null;
-  }
+  // Couldn't extract anything → signal failure.
+  if (sources.length === 0 && visuals.length === 0 && tables.length === 0) return null;
+
+  return {
+    name: fallbackName,
+    pages,
+    sources: sources.length ? sources : [{ name: 'Power BI', kind: 'powerbi' }],
+    tables,
+    visuals,
+    measureCount,
+  };
 }
 
 /* ----------------------------- outputs ----------------------------- */

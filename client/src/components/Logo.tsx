@@ -25,7 +25,7 @@ export default function Logo({ size = 30, className, title }: LogoProps) {
       className={className}
       width={size}
       height={size}
-      viewBox="0 0 120 120"
+      viewBox="0 -10 120 120"
       role="img"
       aria-label={title ?? 'DeepLogic'}
     >

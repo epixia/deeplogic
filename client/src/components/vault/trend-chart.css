@@ -1,0 +1,21 @@
+/* TrendChart — multi-line competitor interest chart. */
+
+.tc { width: 100%; }
+.tc-svg { width: 100%; height: auto; display: block; }
+
+.tc-grid { stroke: var(--line); stroke-dasharray: 3 4; opacity: .6; }
+.tc-ylabel, .tc-xlabel { fill: var(--mut); font-size: 11px; }
+.tc-line { stroke-linejoin: round; stroke-linecap: round; }
+
+.tc-legend {
+  list-style: none; display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 6px 0 0; padding: 0;
+}
+.tc-leg { display: flex; align-items: center; gap: 7px; font-size: 13px; }
+.tc-swatch { width: 11px; height: 11px; border-radius: 3px; flex: none; }
+.tc-leg-term { font-weight: 700; color: var(--ink); }
+.tc-leg-match { font-size: 12px; color: var(--mut); }
+.tc-leg-warn { color: #f59e0b; }
+
+.tc-note { font-size: 12px; color: var(--mut); margin-top: 8px; line-height: 1.45; }
+.tc-source { opacity: .85; }
+.tc-empty { font-size: 13px; color: var(--mut); padding: 18px 0; line-height: 1.5; }

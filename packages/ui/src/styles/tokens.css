@@ -1,0 +1,74 @@
+/* DeepLogic design tokens — colour, type & skin variables.
+   Ported from the app's theme.css (:root) + skins.ts (aurora / slate, dark+light).
+   Components read these via var(--*). Switch theme with html[data-theme='light'];
+   switch skin with html[data-skin='aurora'|'slate']. Defaults = Aurora dark. */
+
+:root {
+  --bg: #070b12;
+  --bg2: #0b1220;
+  --card: #0e1726;
+  --card2: #101c30;
+  --line: rgba(120, 180, 220, 0.14);
+  --cyan: #6fe3f0;
+  --blue: #3f86e0;
+  --ink: #eaf3fb;
+  --mut: #8ea3b8;
+  --mut2: #6b7e92;
+  --grad: linear-gradient(120deg, #6fe3f0 0%, #49a0e6 45%, #5560e8 100%);
+  --good: #5fcf8a;
+  --warn: #febc2e;
+  --bad: #ff5f57;
+
+  --dl-font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --dl-radius: 12px;
+  --dl-radius-sm: 8px;
+}
+
+/* ---- Light mode (Aurora light = corporate Fluent neutrals + comms blue) ---- */
+html[data-theme='light'] {
+  --bg: #faf9f8;
+  --bg2: #ffffff;
+  --card: #ffffff;
+  --card2: #f3f2f1;
+  --line: #e1dfdd;
+  --cyan: #0f6cbd;
+  --blue: #0078d4;
+  --ink: #201f1e;
+  --mut: #605e5c;
+  --mut2: #8a8886;
+  --good: #107c41;
+  --warn: #c19c00;
+  --bad: #d13438;
+  --dl-font: 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Inter', Roboto, Helvetica, Arial, sans-serif;
+}
+
+/* ---- Skin: Aurora (signature cyan→indigo) ---- */
+html[data-skin='aurora'] {
+  --bg: #070b12; --bg2: #0b1220; --card: #0e1726; --card2: #101c30;
+  --line: rgba(120, 180, 220, 0.14); --cyan: #6fe3f0; --blue: #3f86e0;
+  --ink: #eaf3fb; --mut: #8ea3b8; --mut2: #6b7e92;
+  --grad: linear-gradient(120deg, #6fe3f0 0%, #49a0e6 45%, #5560e8 100%);
+  --good: #5fcf8a; --warn: #febc2e; --bad: #ff5f57;
+}
+html[data-theme='light'][data-skin='aurora'] {
+  --bg: #faf9f8; --bg2: #ffffff; --card: #ffffff; --card2: #f3f2f1;
+  --line: #e1dfdd; --cyan: #0f6cbd; --blue: #0078d4;
+  --ink: #201f1e; --mut: #605e5c; --mut2: #8a8886;
+  --good: #107c41; --warn: #c19c00; --bad: #d13438;
+}
+
+/* ---- Skin: Slate Minimal (calm low-saturation greys, flat — no gradient) ---- */
+html[data-skin='slate'] {
+  --bg: #0c0e12; --bg2: #13161c; --card: #16191f; --card2: #1b1f27;
+  --line: rgba(160, 170, 185, 0.12); --cyan: #8fa6c4; --blue: #6b7f9e;
+  --ink: #e6e8ec; --mut: #9aa3b0; --mut2: #6b7280;
+  --grad: linear-gradient(0deg, #aeb9c9, #aeb9c9);
+  --good: #7fb98a; --warn: #d6b25e; --bad: #d98a8a;
+}
+html[data-theme='light'][data-skin='slate'] {
+  --bg: #f6f7f9; --bg2: #ffffff; --card: #ffffff; --card2: #f1f3f5;
+  --line: #e3e6ea; --cyan: #3f5670; --blue: #4a6080;
+  --ink: #1f2329; --mut: #5b6370; --mut2: #8b929c;
+  --grad: linear-gradient(0deg, #5b6f8c, #5b6f8c);
+  --good: #3f7a4e; --warn: #9a7b2e; --bad: #b5575b;
+}

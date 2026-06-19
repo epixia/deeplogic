@@ -47,6 +47,52 @@
   margin-top: 4px;
 }
 
+.agent-history-link { color: var(--cyan); text-decoration: none; }
+.agent-history-link:hover { text-decoration: underline; }
+
+/* run / state controls */
+.agent-del-btn { display: flex; }  /* always visible on agent cards, not only on hover */
+.agent-run-btn {
+  position: absolute; top: 8px; right: 8px; z-index: 2;
+  width: 26px; height: 26px; border-radius: 6px;
+  border: 1px solid color-mix(in srgb, #4caf7d 40%, var(--line));
+  background: rgba(76, 175, 125, 0.10); color: #4caf7d;
+  font-size: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+  transition: background 0.15s, border-color 0.15s;
+}
+/* When a delete button is also present, sit the run button to its left. */
+.agent-run-btn.has-del { right: 40px; }
+.agent-run-btn:hover:not(:disabled) { background: rgba(76, 175, 125, 0.2); border-color: #4caf7d; }
+.agent-run-btn:disabled { opacity: 0.55; cursor: default; }
+
+/* idle vs running indicator dot next to the name */
+.agent-state-dot {
+  display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+  margin-right: 7px; vertical-align: middle;
+}
+.agent-state-dot.is-idle { background: var(--mut2); opacity: 0.65; }
+.agent-state-dot.is-running {
+  background: #4caf7d;
+  box-shadow: 0 0 0 0 rgba(76, 175, 125, 0.6);
+  animation: agent-pulse 1.4s ease-out infinite;
+}
+@keyframes agent-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(76, 175, 125, 0.55); }
+  70% { box-shadow: 0 0 0 7px rgba(76, 175, 125, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(76, 175, 125, 0); }
+}
+.agent-card--running { border-color: color-mix(in srgb, #4caf7d 55%, var(--line)); }
+.agent-pill-running {
+  color: #4caf7d !important;
+  background: rgba(76, 175, 125, 0.12) !important;
+  border-color: rgba(76, 175, 125, 0.35) !important;
+}
+.agent-pill-idle {
+  color: var(--mut) !important;
+  background: var(--card2) !important;
+  border-color: var(--line) !important;
+}
+
 /* modal extras */
 .agents-modal { max-width: 560px; }
 .agents-optional { font-size: 11px; opacity: 0.6; font-style: italic; }
@@ -61,4 +107,119 @@
   border-radius: 4px;
   padding: 1px 4px;
   font-family: monospace;
+}
+
+/* header actions */
+.agents-head-actions { display: flex; gap: 10px; align-items: center; }
+.agents-generate-btn {
+  background: linear-gradient(120deg, rgba(111,227,240,.14), rgba(85,96,232,.14));
+  border: 1px solid rgba(111,227,240,.35);
+  color: var(--ink);
+}
+.agents-generate-btn:hover { border-color: rgba(111,227,240,.6); }
+
+/* generate-team modal */
+.agents-gen-modal { max-width: 720px; width: 92vw; }
+.agents-gen-lead { font-size: 14px; color: var(--mut2); line-height: 1.55; margin: 0 0 18px; }
+
+.agents-gen-analyzing {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 48px 20px;
+  text-align: center;
+}
+.agents-gen-analyzing p { margin: 0; font-size: 15px; color: var(--ink); }
+
+.agents-gen-review { display: flex; flex-direction: column; gap: 16px; }
+
+.agents-gen-summary {
+  border: 1px solid rgba(111,227,240,.3);
+  background: rgba(111,227,240,.06);
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+.agents-gen-summary.is-template {
+  border-color: rgba(224,166,90,.35);
+  background: rgba(224,166,90,.07);
+}
+.agents-gen-summary-label {
+  display: block;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--mut);
+  margin-bottom: 4px;
+}
+.agents-gen-summary p { margin: 0; font-size: 14px; line-height: 1.5; color: var(--ink); }
+
+.agents-gen-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 48vh;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.agents-gen-card {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px;
+  background: var(--bg2);
+  opacity: 0.55;
+  transition: opacity .15s, border-color .15s;
+}
+.agents-gen-card.is-selected { opacity: 1; border-color: rgba(111,227,240,.4); }
+
+.agents-gen-card-head { display: flex; align-items: center; gap: 10px; }
+.agents-gen-card-head input[type="checkbox"] { width: 16px; height: 16px; flex-shrink: 0; }
+.agents-gen-name {
+  flex: 1;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid transparent;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 600;
+  padding: 2px 0;
+}
+.agents-gen-name:focus { outline: none; border-bottom-color: var(--cyan); }
+.agents-gen-model {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--mut2);
+  font-size: 12px;
+  padding: 3px 6px;
+}
+.agents-gen-desc {
+  width: 100%;
+  margin-top: 8px;
+  background: transparent;
+  border: none;
+  color: var(--mut2);
+  font-size: 13px;
+  padding: 2px 0;
+}
+.agents-gen-desc:focus { outline: none; }
+
+.agents-gen-prompt-wrap { margin-top: 8px; }
+.agents-gen-prompt-wrap summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--mut);
+  user-select: none;
+}
+.agents-gen-prompt-wrap .agents-prompt { width: 100%; margin-top: 6px; }
+
+.agents-gen-card-foot { margin-top: 8px; }
+.agents-gen-sched {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--mut2);
+  font-size: 12px;
+  padding: 4px 8px;
 }

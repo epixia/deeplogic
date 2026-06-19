@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { useStickyTab } from '../lib/useStickyTab'
 import { useAuth } from '../auth/AuthContext'
 import {
   listOrgWidgets,
@@ -9,7 +10,12 @@ import {
   deleteOrgWidget,
   type Widget,
   type WidgetType,
+  type Idea,
 } from '../lib/api'
+import SuggestIdeasModal from '../components/studio/SuggestIdeasModal'
+import DashboardScopeBar, { useDashboardScope, ALL_SCOPE } from '../components/DashboardScope'
+import { useAppTheme } from '../components/studio/reportTheme'
+import { widgetFrameSrcDoc } from '../lib/genFrame'
 import '../components/studio/studio.css'
 import './dashboards.css'
 
@@ -31,6 +37,7 @@ function fmtDate(iso: string) {
 }
 
 type Tab = 'mine' | 'shared'
+const TABS: readonly Tab[] = ['mine', 'shared']
 
 export default function Dashboards() {
   const { orgId = '' } = useParams<{ orgId: string }>()
@@ -41,12 +48,13 @@ export default function Dashboards() {
   const [widgets, setWidgets] = useState<Widget[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [tab, setTab] = useState<Tab>('mine')
+  const [tab, setTab] = useStickyTab<Tab>(`dashboards.tab.${orgId}`, 'mine', TABS)
   const [showNew, setShowNew] = useState(false)
   const [newName, setNewName] = useState('')
   const [newType, setNewType] = useState<WidgetType>('kpi')
   const [creating, setCreating] = useState(false)
   const [busyId, setBusyId] = useState<string | null>(null)
+  const [scope, setScope] = useDashboardScope(orgId)
 
   const load = useCallback(async () => {
     setError(null)
@@ -66,13 +74,41 @@ export default function Dashboards() {
     void load()
   }, [load])
 
-  const mine = useMemo(() => widgets.filter((w) => w.isOwner !== false), [widgets])
-  const shared = useMemo(() => widgets.filter((w) => w.isOwner === false), [widgets])
+  const inScope = useCallback(
+    (w: Widget) => scope === ALL_SCOPE || w.dashboardId === scope,
+    [scope],
+  )
+  const mine = useMemo(() => widgets.filter((w) => w.isOwner !== false && inScope(w)), [widgets, inScope])
+  const shared = useMemo(() => widgets.filter((w) => w.isOwner === false && inScope(w)), [widgets, inScope])
 
   function openNew() {
     setNewName('')
     setNewType('kpi')
     setShowNew(true)
+  }
+
+  // Resolve which dashboard a new widget belongs to: the scoped one if chosen,
+  // otherwise the first dashboard (creating a Company one if none exist).
+  async function targetDashboardId(token: string): Promise<string> {
+    if (scope !== ALL_SCOPE) return scope
+    const boards = await listDashboards(token, orgId)
+    const board = boards[0] ?? await createDashboard(token, orgId, { name: orgName || 'Main', group: 'Company' })
+    return board.id
+  }
+
+  // "⚡ Generate" — suggest a widget from the Data Vault, scaffold it (name +
+  // type) and open the editor with the prompt queued to auto-generate.
+  const [showGen, setShowGen] = useState(false)
+  async function generateFromIdea(idea: Idea) {
+    const token = await getAccessToken()
+    if (!token) throw new Error('Session expired')
+    const dashId = await targetDashboardId(token)
+    const w = await createWidget(token, orgId, dashId, {
+      name: idea.title,
+      type: idea.widgetType ?? 'chart',
+      gridX: 0, gridY: 0, gridW: 2, gridH: 2,
+    })
+    navigate(`/app/${orgId}/widgets/${w.id}`, { state: { autoPrompt: idea.prompt } })
   }
 
   async function submitNew(e: React.FormEvent) {
@@ -82,18 +118,14 @@ export default function Dashboards() {
     try {
       const token = await getAccessToken()
       if (!token) throw new Error('Session expired')
-      let boards = await listDashboards(token, orgId)
-      let board = boards[0]
-      if (!board) {
-        board = await createDashboard(token, orgId, { name: orgName || 'Main' })
-      }
-      const w = await createWidget(token, orgId, board.id, {
+      const dashId = await targetDashboardId(token)
+      const w = await createWidget(token, orgId, dashId, {
         name: newName.trim(),
         type: newType,
         gridX: 0,
         gridY: 0,
-        gridW: 1,
-        gridH: 1,
+        gridW: 2,
+        gridH: 2,
       })
       navigate(`/app/${orgId}/widgets/${w.id}`)
     } catch (err) {
@@ -125,7 +157,17 @@ export default function Dashboards() {
             Chat to vibe-code self-contained HTML widgets with live preview. Add them to your dashboards.
           </p>
         </div>
+        <div className="studio-head-actions">
+          <button type="button" className="btn btn-primary" onClick={() => setShowGen(true)}>
+            ⚡ Generate
+          </button>
+          <button type="button" className="btn btn-ghost" onClick={openNew}>
+            + New widget
+          </button>
+        </div>
       </header>
+
+      <DashboardScopeBar orgId={orgId} scope={scope} onChange={setScope} noun="widgets" />
 
       <div className="studio-tabs">
         <button
@@ -230,6 +272,17 @@ export default function Dashboards() {
           </form>
         </div>
       )}
+
+      {showGen && (
+        <SuggestIdeasModal
+          orgId={orgId}
+          target="widget"
+          actionLabel="Generate →"
+          closeOnPick={false}
+          onPick={generateFromIdea}
+          onClose={() => setShowGen(false)}
+        />
+      )}
     </main>
   )
 }
@@ -273,6 +326,7 @@ function WidgetCard({
 }
 
 function WidgetThumb({ html, type }: { html: string | null; type: string }) {
+  const theme = useAppTheme()
   if (!html) {
     return (
       <div className="studio-thumb studio-thumb-empty">
@@ -285,7 +339,7 @@ function WidgetThumb({ html, type }: { html: string | null; type: string }) {
       <iframe
         className="studio-thumb-frame"
         title="widget preview"
-        srcDoc={`<!doctype html><html><head><meta charset="utf-8"><style>*{box-sizing:border-box}html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#0a1628}</style></head><body>${html}</body></html>`}
+        srcDoc={widgetFrameSrcDoc(html, theme)}
         sandbox="allow-scripts allow-popups"
         loading="lazy"
         style={{ width: '100%', height: '100%', transform: 'none', border: 'none' }}

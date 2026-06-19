@@ -26,6 +26,8 @@ const KIND_LABEL: Record<ContextKind, string> = {
   html: 'HTML',
   mcp: 'MCP',
   image: 'Image',
+  website: 'Website',
+  data: 'Data',
 }
 
 const ACCEPT = '.md,.txt,.html,.htm,.csv,.json,.xml,.yaml,.yml,.pdf'

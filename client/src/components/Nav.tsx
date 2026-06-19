@@ -6,9 +6,8 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import Logo from './Logo'
 import ThemeToggle from './ThemeToggle'
-import OrgSwitcher from './OrgSwitcher'
 import { useAuth } from '../auth/AuthContext'
-import { getBillingSubscription } from '../lib/api'
+import { getBillingSubscription, getOpenRouterBalance, type OpenRouterBalance } from '../lib/api'
 
 // ---------------------------------------------------------------------------
 // TrialBadge — shows days remaining in the org's trial. Fetches billing once
@@ -78,6 +77,67 @@ function TrialBadge({ orgId, getAccessToken }: TrialBadgeProps) {
 }
 
 // ---------------------------------------------------------------------------
+// OpenRouterBadge — live OpenRouter credit balance, polled every 60s.
+// ---------------------------------------------------------------------------
+
+function OpenRouterBadge({
+  orgId,
+  getAccessToken,
+}: {
+  orgId: string
+  getAccessToken: () => Promise<string | null>
+}) {
+  const [bal, setBal] = useState<OpenRouterBalance | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    async function load() {
+      const token = await getAccessToken()
+      if (!token || cancelled) return
+      try {
+        const b = await getOpenRouterBalance(token, orgId)
+        if (!cancelled) setBal(b)
+      } catch {
+        /* leave previous value */
+      }
+    }
+    void load()
+    const timer = window.setInterval(() => void load(), 60_000)
+    return () => { cancelled = true; clearInterval(timer) }
+  }, [orgId, getAccessToken])
+
+  if (!bal || !bal.configured || typeof bal.remaining !== 'number') return null
+
+  const remaining = bal.remaining
+  const color = remaining <= 1 ? '#e07a8a' : remaining <= 5 ? '#f0a854' : 'var(--c-muted)'
+
+  return (
+    <a
+      href="https://openrouter.ai/credits"
+      target="_blank"
+      rel="noreferrer"
+      title={`OpenRouter credits — $${(bal.totalUsage ?? 0).toFixed(2)} used of $${(bal.totalCredits ?? 0).toFixed(2)}`}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '5px',
+        fontSize: '12px',
+        fontWeight: 600,
+        color,
+        border: `1px solid ${color}`,
+        borderRadius: '99px',
+        padding: '2px 10px',
+        whiteSpace: 'nowrap',
+        textDecoration: 'none',
+      }}
+    >
+      <span style={{ opacity: 0.7, fontWeight: 700, letterSpacing: '0.04em' }}>OR</span>
+      ${remaining.toFixed(2)}
+    </a>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // UserMenu — avatar button with dropdown
 // ---------------------------------------------------------------------------
 
@@ -92,10 +152,14 @@ function initials(email: string) {
 
 function UserMenu({
   email,
+  name,
+  avatarUrl,
   activeOrgId,
   onSignOut,
 }: {
   email: string
+  name?: string
+  avatarUrl?: string
   activeOrgId?: string
   onSignOut: () => void
 }) {
@@ -119,8 +183,10 @@ function UserMenu({
         onClick={() => setOpen((o) => !o)}
         aria-label="User menu"
       >
-        <span className="dl-user-avatar">{initials(email)}</span>
-        <span className="dl-user-email">{email}</span>
+        {avatarUrl
+          ? <img className="dl-user-avatar dl-user-avatar--img" src={avatarUrl} alt="" />
+          : <span className="dl-user-avatar">{initials(email)}</span>}
+        <span className="dl-user-email">{name?.trim() || email}</span>
         <span className="dl-user-caret">▾</span>
       </button>
 
@@ -130,7 +196,7 @@ function UserMenu({
           <div className="dl-user-dropdown-divider" />
           {activeOrgId && (
             <Link className="dl-user-dropdown-item" to={`/app/${activeOrgId}/settings`}>
-              Dashboard settings
+              Settings
             </Link>
           )}
           <Link className="dl-user-dropdown-item" to="/reset-password">
@@ -155,7 +221,7 @@ function UserMenu({
 }
 
 export default function Nav() {
-  const { session, orgs, signOut, getAccessToken } = useAuth()
+  const { session, user, orgs, signOut, getAccessToken } = useAuth()
   const { pathname } = useLocation()
   const orgId = pathname.match(/^\/app\/([^/]+)/)?.[1]
   const navigate = useNavigate()
@@ -176,14 +242,18 @@ export default function Nav() {
     <nav className="dl-nav">
       <div className="wrap nav">
         <Link to={brandTo} className="brand">
-          <Logo size={30} className="mark" />
+          <Logo size={44} className="mark" />
           DEEPLOGIC
         </Link>
 
         <div className="nav-actions">
           {session ? (
             <>
-              <OrgSwitcher />
+              {activeOrgId && (
+                <Link className="btn btn-ghost" to={`/app/${activeOrgId}/dashboards/manage`}>
+                  Dashboards
+                </Link>
+              )}
               {activeOrgId && (
                 <Link className="btn btn-ghost" to={`/app/${activeOrgId}/studio`}>
                   Reports
@@ -195,13 +265,23 @@ export default function Nav() {
                 </Link>
               )}
               {activeOrgId && (
+                <Link className="btn btn-ghost" to={`/app/${activeOrgId}/alerts`}>
+                  Alerts
+                </Link>
+              )}
+              {activeOrgId && (
                 <Link className="btn btn-ghost" to={`/app/${activeOrgId}/agents`}>
                   Agents
                 </Link>
               )}
               {activeOrgId && (
-                <Link className="btn btn-ghost" to={`/app/${activeOrgId}/alerts`}>
-                  Alerts
+                <Link className="btn btn-ghost" to={`/app/${activeOrgId}/goals`}>
+                  Goals
+                </Link>
+              )}
+              {activeOrgId && (
+                <Link className="btn btn-ghost" to={`/app/${activeOrgId}/activity`}>
+                  Activity
                 </Link>
               )}
               {activeOrgId && (
@@ -210,10 +290,20 @@ export default function Nav() {
                 </Link>
               )}
               {activeOrgId && (
+                <Link className="btn btn-ghost" to={`/app/${activeOrgId}/memory`}>
+                  Memory
+                </Link>
+              )}
+              {activeOrgId && (
+                <OpenRouterBadge orgId={activeOrgId} getAccessToken={getAccessToken} />
+              )}
+              {activeOrgId && (
                 <TrialBadge orgId={activeOrgId} getAccessToken={getAccessToken} />
               )}
               <UserMenu
                 email={session.user.email ?? ''}
+                name={user?.name}
+                avatarUrl={user?.avatarUrl}
                 activeOrgId={activeOrgId}
                 onSignOut={handleSignOut}
               />
@@ -226,7 +316,7 @@ export default function Nav() {
               <Link className="btn btn-ghost" to="/login">
                 Login
               </Link>
-              <Link className="btn btn-primary" to="/signup">
+              <Link className="btn btn-primary" to="/onboarding">
                 Sign up
               </Link>
             </>

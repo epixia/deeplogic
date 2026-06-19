@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import {
   getOrgWidget,
@@ -14,6 +14,9 @@ import {
   type ContextItem,
   type StudioMessage,
 } from '../lib/api'
+import SuggestIdeasModal from '../components/studio/SuggestIdeasModal'
+import { useAppTheme } from '../components/studio/reportTheme'
+import { widgetFrameSrcDoc } from '../lib/genFrame'
 import '../components/studio/studio.css'
 import './dashboards.css'
 
@@ -42,6 +45,10 @@ export default function WidgetEditor() {
     orgId: string; widgetId: string
   }>()
   const { getAccessToken } = useAuth()
+  const location = useLocation()
+  const navigate = useNavigate()
+  const autoRanRef = useRef(false)
+  const theme = useAppTheme()
 
   const [widget, setWidget] = useState<Widget | null>(null)
   const [loading, setLoading] = useState(true)
@@ -50,9 +57,11 @@ export default function WidgetEditor() {
   const [name, setName] = useState('')
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [generating, setGenerating] = useState(false)
+  const [genPhase, setGenPhase] = useState<string | null>(null)
+  const phaseIvRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const [genError, setGenError] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
-  const [webSearch, setWebSearch] = useState(false)
+  const [webSearch, setWebSearch] = useState(true)
   const [searching, setSearching] = useState(false)
   const [listening, setListening] = useState(false)
   const [sources, setSources] = useState<WidgetSource[]>([])
@@ -64,6 +73,7 @@ export default function WidgetEditor() {
   const [uploading, setUploading] = useState(false)
   const [apiForm, setApiForm] = useState({ name: '', url: '', key: '', notes: '' })
   const [apiSaving, setApiSaving] = useState(false)
+  const [showIdeas, setShowIdeas] = useState(false)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -121,6 +131,17 @@ export default function WidgetEditor() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, generating])
+
+  // Auto-generate when arriving from a "⚡ Generate" suggestion (prompt passed
+  // via navigation state). Fires once, then clears the state.
+  useEffect(() => {
+    const seed = (location.state as { autoPrompt?: string } | null)?.autoPrompt
+    if (!seed || autoRanRef.current || loading || !widget) return
+    autoRanRef.current = true
+    navigate(location.pathname, { replace: true, state: null })
+    void onSend(seed)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location, loading, widget])
 
   // Close picker on outside click
   useEffect(() => {
@@ -221,6 +242,7 @@ export default function WidgetEditor() {
   }, [])
 
   useEffect(() => () => stopVoice(), [stopVoice])
+  useEffect(() => () => { if (phaseIvRef.current) clearInterval(phaseIvRef.current) }, [])
 
   function toggleVoice() {
     if (listening) { stopVoice(); return }
@@ -259,20 +281,23 @@ export default function WidgetEditor() {
     } catch { /* silent */ }
   }
 
-  async function onSend() {
+  async function onSend(promptArg?: string) {
     stopVoice()
-    const prompt = draft.trim()
+    const prompt = (promptArg ?? draft).trim()
     if (!prompt || generating || searching) return
     setDraft('')
     setGenError(null)
 
-    // Optionally prepend web search results to the prompt.
+    // Research the web when asked (toggle) OR when the request clearly needs
+    // outside data the Data Vault may not have (competitors, market, news…).
+    const needsResearch = /\b(competitor|competitors|market|industry|latest|recent|news|vs\.?|versus|compare|comparison|traffic|revenue|funding|valuation|stock|ticker|trend|benchmark|public(ly)?|headlines?)\b/i.test(prompt)
     let fullPrompt = prompt
-    if (webSearch) {
+    if (webSearch || needsResearch) {
+      setGenPhase('🔎 Researching the web for outside data…')
       setSearching(true)
       try {
         const t = await token()
-        const { results } = await searchWeb(t, orgId, prompt.slice(0, 300), 5)
+        const { results } = await searchWeb(t, orgId, prompt.slice(0, 300), 6)
         if (results.length > 0) {
           const resText = results
             .map((r, i) => `${i + 1}. ${r.title}\n   ${r.url}\n   ${r.snippet}`)
@@ -285,17 +310,39 @@ export default function WidgetEditor() {
 
     setGenerating(true)
     setMessages((prev) => [...prev, { role: 'user', content: prompt, ts: new Date().toISOString() }])
+
+    // Live, grounded progress — cycle through the real phases of the request.
+    const srcNames = sources.map((s) => s.name)
+    const phases = [
+      sources.length
+        ? `📂 Reading ${sources.length} source${sources.length > 1 ? 's' : ''}${srcNames.length ? ` — ${srcNames.slice(0, 3).join(', ')}${srcNames.length > 3 ? '…' : ''}` : ''}`
+        : '📂 Gathering your data & context…',
+      `🧠 Designing your ${widget?.type ?? 'widget'} from the data…`,
+      '✍️ Writing the layout, charts & styles…',
+      '🎨 Rendering the live preview…',
+    ]
+    let pi = 0
+    setGenPhase(phases[0])
+    if (phaseIvRef.current) clearInterval(phaseIvRef.current)
+    phaseIvRef.current = setInterval(() => { pi = Math.min(pi + 1, phases.length - 1); setGenPhase(phases[pi]) }, 1500)
+
     try {
       const t = await token()
       const { widget: updated } = await generateOrgWidget(t, orgId, widgetId, fullPrompt, messages, html)
       setHtml(updated.html ?? '')
       setWidget(updated)
-      setMessages((prev) => [...prev, { role: 'assistant', content: '✓ Widget generated successfully', ts: new Date().toISOString() }])
+      const usedSrc = sources.length
+      const note = updated.html
+        ? `✓ Built your ${updated.type} widget${usedSrc ? ` using ${usedSrc} source${usedSrc > 1 ? 's' : ''}` : ''}. Tell me what to change.`
+        : '✓ Done — but no preview came back. Try rephrasing your request.'
+      setMessages((prev) => [...prev, { role: 'assistant', content: note, ts: new Date().toISOString() }])
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Generation failed'
       setGenError(msg)
       setMessages((prev) => [...prev, { role: 'assistant', content: `⚠ ${msg}`, ts: new Date().toISOString() }])
     } finally {
+      if (phaseIvRef.current) { clearInterval(phaseIvRef.current); phaseIvRef.current = null }
+      setGenPhase(null)
       setGenerating(false)
     }
   }
@@ -390,12 +437,12 @@ export default function WidgetEditor() {
                     </div>
                   )
                 ))}
-                {generating && (
+                {(generating || searching) && (
                   <div className="chat-row chat-row--ai">
                     <div className="chat-ai-avatar">✦</div>
                     <div className="chat-working">
                       <span className="chat-working-dots"><span /><span /><span /></span>
-                      Generating widget…
+                      {genPhase ?? 'Generating widget…'}
                     </div>
                   </div>
                 )}
@@ -435,6 +482,14 @@ export default function WidgetEditor() {
                 title="Add a new API connector"
               >
                 🔌 Add connector
+              </button>
+              <button
+                type="button"
+                className="wg-add-connector-btn"
+                onClick={() => setShowIdeas(true)}
+                title="Suggest widget ideas from your Data Vault"
+              >
+                ✨ Ideas
               </button>
             </div>
             <div className="wg-composer">
@@ -585,10 +640,10 @@ export default function WidgetEditor() {
           {html ? (
             <iframe
               className="wg-iframe"
-              srcDoc={`<!doctype html><html><head><meta charset="utf-8"><style>*{box-sizing:border-box}html,body{margin:0;padding:0;width:100%;height:100%;background:#060d1a;color:#e8f4f8;font-family:system-ui,sans-serif}</style></head><body>${html}</body></html>`}
+              srcDoc={widgetFrameSrcDoc(html, theme)}
               sandbox="allow-scripts allow-popups"
               title="Widget preview"
-              style={{ width: '100%', height: '100%', border: 'none', background: '#060d1a' }}
+              style={{ width: '100%', height: '100%', border: 'none', background: 'transparent' }}
             />
           ) : (
             <div className="preview-empty">
@@ -598,6 +653,16 @@ export default function WidgetEditor() {
           )}
         </div>
       </div>
+
+      {showIdeas && (
+        <SuggestIdeasModal
+          orgId={orgId}
+          target="widget"
+          widgetType={widget.type}
+          onPick={(idea) => { setDraft(idea.prompt); requestAnimationFrame(() => textareaRef.current?.focus()) }}
+          onClose={() => setShowIdeas(false)}
+        />
+      )}
     </main>
   )
 }

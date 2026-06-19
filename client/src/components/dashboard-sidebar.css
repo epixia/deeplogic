@@ -1,0 +1,103 @@
+.dbsb {
+  flex: 0 0 232px;
+  width: 232px;
+  border-right: 1px solid var(--line);
+  padding: 20px 12px 32px;
+  overflow-y: auto;
+  align-self: stretch;
+}
+.dbsb-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mut2);
+  padding: 0 8px 12px;
+}
+.dbsb-manage {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: var(--cyan);
+  text-decoration: none;
+}
+.dbsb-manage:hover { text-decoration: underline; }
+.dbsb-groups { display: flex; flex-direction: column; gap: 4px; }
+.dbsb-group { display: flex; flex-direction: column; }
+
+.dbsb-group-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 8px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  border-radius: 8px;
+  text-align: left;
+}
+.dbsb-group-head:hover { color: var(--cyan); }
+.dbsb-chev {
+  display: inline-block;
+  font-size: 10px;
+  color: var(--mut);
+  transition: transform 0.15s ease;
+  width: 10px;
+}
+.dbsb-chev.open { transform: rotate(90deg); }
+.dbsb-group-icon { font-size: 14px; }
+.dbsb-group-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dbsb-group-count {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--mut2);
+  background: var(--bg2);
+  border-radius: 99px;
+  padding: 1px 7px;
+}
+
+.dbsb-items {
+  list-style: none;
+  margin: 2px 0 6px;
+  padding: 0 0 0 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.dbsb-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px 7px 18px;
+  border: 0;
+  border-left: 2px solid transparent;
+  background: transparent;
+  color: var(--mut);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  border-radius: 0 7px 7px 0;
+  text-align: left;
+}
+.dbsb-item:hover { color: var(--ink); }
+.dbsb-item.active {
+  color: var(--ink);
+  font-weight: 600;
+  border-left-color: var(--cyan);
+}
+.dbsb-item-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dbsb-item-count { font-size: 11px; color: var(--mut2); flex-shrink: 0; }
+
+@media (max-width: 760px) {
+  .dbsb { flex-basis: 100%; width: 100%; border-right: 0; border-bottom: 1px solid var(--line); }
+}

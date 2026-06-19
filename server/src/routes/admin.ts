@@ -9,6 +9,10 @@
 //   PATCH /api/admin/orgs/:orgId/subscription    — override plan/status/trial
 //   DELETE /api/admin/orgs/:orgId/members/:userId — remove a member (admin action)
 //   GET  /api/admin/users?page&limit&search       — paginated user list
+//   GET  /api/admin/users/:userId                 — user detail + memberships
+//   PATCH /api/admin/users/:userId                — suspend/unsuspend/set_password/set_email/confirm_email
+//   POST /api/admin/users/:userId/reset-email     — send password-reset email
+//   DELETE /api/admin/users/:userId               — permanently delete user
 
 import { utimesSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -45,7 +49,10 @@ function requireAdmin(req: Request, res: Response, next: NextFunction): void {
 }
 
 // All admin routes require auth (set upstream in index.ts) + admin role.
-adminRouter.use(requireAdmin);
+// Scope the guard to /admin/* only: this router is mounted at '/api', so an
+// unscoped guard would 403 every other /api request that falls through to here
+// (agents, alerts, dashboards, …) before it reaches its own router.
+adminRouter.use('/admin', requireAdmin);
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -73,6 +80,12 @@ const PLAN_PRICE: Record<string, number> = {
   business: 79,
   enterprise: 0,
 };
+
+/** A GoTrue user is suspended when banned_until is set and still in the future. */
+function isSuspended(user: { banned_until?: string | null }): boolean {
+  const until = user.banned_until;
+  return !!until && new Date(until) > new Date();
+}
 
 // ---------------------------------------------------------------------------
 // GET /api/admin/me
@@ -408,15 +421,190 @@ adminRouter.get('/admin/users', async (req: Request, res: Response) => {
 
     res.json({
       users: filtered.map((u) => ({
-        id:        u.id,
-        email:     u.email ?? '',
-        createdAt: u.created_at,
-        orgs:      membersByUser.get(u.id) ?? [],
+        id:           u.id,
+        email:        u.email ?? '',
+        createdAt:    u.created_at,
+        lastSignInAt: u.last_sign_in_at ?? null,
+        suspended:    isSuspended(u),
+        orgs:         membersByUser.get(u.id) ?? [],
       })),
       total: filtered.length,
     });
   } catch (err) {
     console.error('GET admin/users failed', err);
     res.status(500).json({ error: 'Failed to list users' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/admin/users/:userId — full user detail + org memberships
+// ---------------------------------------------------------------------------
+adminRouter.get('/admin/users/:userId', async (req: Request, res: Response) => {
+  const { userId } = req.params;
+  try {
+    const { data, error } = await serviceClient.auth.admin.getUserById(userId);
+    if (error || !data?.user) { res.status(404).json({ error: 'User not found' }); return; }
+    const u = data.user;
+
+    // Org memberships (with org names + roles)
+    const { data: memberRows } = await serviceClient
+      .from('org_members')
+      .select('org_id, role, created_at')
+      .eq('user_id', userId);
+
+    const orgIds = [...new Set(((memberRows ?? []) as { org_id: string }[]).map((m) => m.org_id))];
+    const { data: orgRows } = orgIds.length
+      ? await serviceClient.from('organizations').select('id, name, slug').in('id', orgIds)
+      : { data: [] };
+    const orgMap = new Map(
+      ((orgRows ?? []) as { id: string; name: string; slug: string }[]).map((o) => [o.id, o])
+    );
+    const orgs = ((memberRows ?? []) as { org_id: string; role: string; created_at: string }[])
+      .map((m) => {
+        const org = orgMap.get(m.org_id);
+        return org
+          ? { orgId: m.org_id, orgName: org.name, orgSlug: org.slug, role: m.role, joinedAt: m.created_at }
+          : null;
+      })
+      .filter(Boolean);
+
+    res.json({
+      id:              u.id,
+      email:           u.email ?? '',
+      phone:           u.phone ?? null,
+      createdAt:       u.created_at,
+      lastSignInAt:    u.last_sign_in_at ?? null,
+      emailConfirmed:  !!u.email_confirmed_at,
+      suspended:       isSuspended(u),
+      bannedUntil:     (u as { banned_until?: string | null }).banned_until ?? null,
+      provider:        (u.app_metadata?.provider as string) ?? 'email',
+      providers:       (u.app_metadata?.providers as string[]) ?? [],
+      orgs,
+    });
+  } catch (err) {
+    console.error('GET admin/users/:userId failed', err);
+    res.status(500).json({ error: 'Failed to load user' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// PATCH /api/admin/users/:userId
+// Body: { action: 'suspend'|'unsuspend'|'set_password'|'set_email'|'confirm_email', password?, email? }
+// ---------------------------------------------------------------------------
+adminRouter.patch('/admin/users/:userId', async (req: Request, res: Response) => {
+  const { userId } = req.params;
+  const { action, password, email } = (req.body || {}) as {
+    action?: string; password?: string; email?: string;
+  };
+
+  // Guard: admins cannot suspend or lock themselves out of their own account.
+  if (userId === req.user!.id && (action === 'suspend')) {
+    res.status(400).json({ error: 'You cannot suspend your own account.' });
+    return;
+  }
+
+  let attrs: Record<string, unknown>;
+  switch (action) {
+    case 'suspend':
+      // ~100 years — effectively indefinite until an admin unsuspends.
+      attrs = { ban_duration: '876000h' };
+      break;
+    case 'unsuspend':
+      attrs = { ban_duration: 'none' };
+      break;
+    case 'set_password':
+      if (!password || String(password).length < 6) {
+        res.status(400).json({ error: 'Password must be at least 6 characters.' });
+        return;
+      }
+      attrs = { password: String(password) };
+      break;
+    case 'set_email':
+      if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(email))) {
+        res.status(400).json({ error: 'A valid email is required.' });
+        return;
+      }
+      attrs = { email: String(email), email_confirm: true };
+      break;
+    case 'confirm_email':
+      attrs = { email_confirm: true };
+      break;
+    default:
+      res.status(400).json({ error: 'Unknown or missing action.' });
+      return;
+  }
+
+  try {
+    const { data, error } = await serviceClient.auth.admin.updateUserById(userId, attrs);
+    if (error) throw new Error(error.message);
+
+    // Never log raw passwords — record only that a change occurred.
+    const logPayload = action === 'set_password' ? { action } : { action, ...attrs };
+    await logAdminAction(req.user!.email, action!, 'user', userId, logPayload);
+
+    const u = data.user;
+    res.json({
+      id:             u.id,
+      email:          u.email ?? '',
+      suspended:      isSuspended(u),
+      bannedUntil:    (u as { banned_until?: string | null }).banned_until ?? null,
+      emailConfirmed: !!u.email_confirmed_at,
+    });
+  } catch (err) {
+    console.error('PATCH admin/users/:userId failed', err);
+    res.status(500).json({ error: 'Failed to update user' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/admin/users/:userId/reset-email — send a password-reset email
+// Triggers the standard recovery flow (lands in Inbucket locally / real SMTP
+// in prod). Uses the public recover endpoint with the anon key.
+// ---------------------------------------------------------------------------
+adminRouter.post('/admin/users/:userId/reset-email', async (req: Request, res: Response) => {
+  const { userId } = req.params;
+  try {
+    const { data, error } = await serviceClient.auth.admin.getUserById(userId);
+    if (error || !data?.user?.email) { res.status(404).json({ error: 'User not found' }); return; }
+    const email = data.user.email;
+
+    const recoverRes = await fetch(`${process.env.SUPABASE_URL}/auth/v1/recover`, {
+      method: 'POST',
+      headers: {
+        apikey: process.env.SUPABASE_ANON_KEY ?? '',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ email }),
+    });
+    if (!recoverRes.ok) {
+      const body = await recoverRes.text().catch(() => '');
+      throw new Error(`recover ${recoverRes.status}: ${body}`);
+    }
+
+    await logAdminAction(req.user!.email, 'send_reset_email', 'user', userId, { email });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('POST admin reset-email failed', err);
+    res.status(500).json({ error: 'Failed to send reset email' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// DELETE /api/admin/users/:userId — permanently delete an auth user
+// ---------------------------------------------------------------------------
+adminRouter.delete('/admin/users/:userId', async (req: Request, res: Response) => {
+  const { userId } = req.params;
+  if (userId === req.user!.id) {
+    res.status(400).json({ error: 'You cannot delete your own account.' });
+    return;
+  }
+  try {
+    const { error } = await serviceClient.auth.admin.deleteUser(userId);
+    if (error) throw new Error(error.message);
+    await logAdminAction(req.user!.email, 'delete_user', 'user', userId);
+    res.status(204).end();
+  } catch (err) {
+    console.error('DELETE admin/users/:userId failed', err);
+    res.status(500).json({ error: 'Failed to delete user' });
   }
 });

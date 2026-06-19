@@ -16,6 +16,9 @@ import {
 } from '../lib/api'
 import ReactGridLayout, { type Layout, type LayoutItem } from 'react-grid-layout/legacy'
 import WidgetBuilder from '../components/dashboard/WidgetBuilder'
+import DashboardSidebar from '../components/DashboardSidebar'
+import { useAppTheme } from '../components/studio/reportTheme'
+import { widgetFrameSrcDoc } from '../lib/genFrame'
 import 'react-grid-layout/css/styles.css'
 import 'react-resizable/css/styles.css'
 import './dashboards.css'
@@ -25,17 +28,18 @@ const TYPE_ICONS: Record<string, string> = {
 }
 
 
-const COLS = 3
-const ROW_HEIGHT = 200
+// Half-step grid: 6 columns + half-height rows so widgets resize by halves.
+const COLS = 6
+const ROW_HEIGHT = 100
 
 interface LibraryItem { id: string; name: string; kind: string }
 
 export default function DashboardEditor() {
   const { orgId, dashboardId } = useParams<{ orgId: string; dashboardId: string }>()
   const navigate = useNavigate()
-  const { session, orgs, getAccessToken } = useAuth()
+  const { session, getAccessToken } = useAuth()
+  const theme = useAppTheme()
   const token = session?.access_token ?? ''
-  const orgName = orgs.find((o) => o.id === orgId)?.name ?? ''
 
   const [board, setBoard] = useState<Dashboard | null>(null)
   const boardRef = useRef<Dashboard | null>(null)
@@ -84,7 +88,7 @@ export default function DashboardEditor() {
       boardRef.current = d
       const initLayout = d.widgets.map((w: Widget) => ({
         i: w.id, x: w.gridX, y: w.gridY, w: w.gridW, h: w.gridH,
-        minW: 1, minH: 1, maxW: COLS, maxH: 5,
+        minW: 1, minH: 1, maxW: COLS, maxH: 10,
       }))
       widgetKeyRef.current = d.widgets.map((w: Widget) =>
         `${w.id}:${w.gridX},${w.gridY},${w.gridW},${w.gridH}`
@@ -101,6 +105,16 @@ export default function DashboardEditor() {
   // Keep boardRef in sync with board state so callbacks always see the latest board
   useEffect(() => { boardRef.current = board }, [board])
 
+  // Deselect the active widget when clicking anywhere outside a widget card.
+  useEffect(() => {
+    if (!selected) return
+    function onDown(e: MouseEvent) {
+      if (!(e.target as HTMLElement).closest('.wg-cell')) setSelected(null)
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [selected])
+
   // Sync localLayout when widget set or grid positions change (load, add, remove, server-side edits)
   const widgetKey = useMemo(
     () => (board?.widgets ?? []).map((w) => `${w.id}:${w.gridX},${w.gridY},${w.gridW},${w.gridH}`).join('|'),
@@ -112,7 +126,7 @@ export default function DashboardEditor() {
     setLocalLayout(
       board.widgets.map((w) => ({
         i: w.id, x: w.gridX, y: w.gridY, w: w.gridW, h: w.gridH,
-        minW: 1, minH: 1, maxW: COLS, maxH: 5,
+        minW: 1, minH: 1, maxW: COLS, maxH: 10,
       }))
     )
   }, [board, widgetKey])
@@ -135,7 +149,7 @@ export default function DashboardEditor() {
     const clamp = (l: LayoutItem) => ({
       x: l.x, y: l.y,
       w: Math.min(COLS, Math.max(1, l.w)),
-      h: Math.min(5, Math.max(1, l.h)),
+      h: Math.min(10, Math.max(1, l.h)),
     })
     const snapshot = boardRef.current.widgets.slice()
     setBoard((prev) => {
@@ -251,9 +265,10 @@ export default function DashboardEditor() {
     setShowPicker(true)
     setPickLoading(true)
     try {
+      // Show every existing widget in the org that isn't already on this board.
       const all = await listOrgWidgets(token, orgId!)
       const inBoard = new Set(board?.widgets.map((w) => w.id) ?? [])
-      setPickerWidgets(all.filter((w) => !inBoard.has(w.id) && !!w.html))
+      setPickerWidgets(all.filter((w) => !inBoard.has(w.id)))
     } catch { /* silent */ }
     finally { setPickLoading(false) }
   }
@@ -306,13 +321,12 @@ export default function DashboardEditor() {
           {saveMsg.ok ? '✓' : '✗'} {saveMsg.text}
         </div>
       )}
+      <DashboardSidebar orgId={orgId ?? ''} activeId={dashboardId} refreshKey={`${board.id}:${board.group ?? ''}:${board.name}`} />
       <main className="dbe-main">
         <div className="dbe-header">
           <div className="dbe-header-left">
-            <h1 className="dbe-title">{orgName || board.name}</h1>
-            {orgName && board.name !== orgName && (
-              <span className="dbe-subtitle">{board.name}</span>
-            )}
+            <h1 className="dbe-title">{board.name}</h1>
+            {board.group && <span className="dbe-subtitle">{board.group}</span>}
           </div>
           <div className="dbe-header-actions">
             <button type="button" className="btn btn-primary" onClick={openPicker}>
@@ -390,7 +404,7 @@ export default function DashboardEditor() {
                       </div>
                     </div>
                   ) : w.html ? (
-                    <WidgetFrame html={w.html} />
+                    <WidgetFrame html={w.html} theme={theme} />
                   ) : (
                     <div className="wg-placeholder">
                       <div className="wg-placeholder-icon">{TYPE_ICONS[w.type] ?? '📊'}</div>
@@ -453,16 +467,7 @@ export default function DashboardEditor() {
                 {pickerWidgets.map((w) => (
                   <div key={w.id} className="dpicker-card">
                     <div className="dpicker-thumb">
-                      {w.html ? (
-                        <iframe
-                          srcDoc={`<!doctype html><html><head><meta charset="utf-8"><style>*{box-sizing:border-box}html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#0a1628}</style></head><body>${w.html}</body></html>`}
-                          sandbox="allow-scripts allow-popups"
-                          title="preview"
-                          style={{ width: '100%', height: '100%', border: 'none' }}
-                        />
-                      ) : (
-                        <span className="dpicker-thumb-icon">{TYPE_ICONS[w.type] ?? '📊'}</span>
-                      )}
+                      <span className="dpicker-thumb-icon">{TYPE_ICONS[w.type] ?? '📊'}</span>
                     </div>
                     <div className="dpicker-info">
                       <div className="dpicker-name">{w.name}</div>
@@ -480,7 +485,9 @@ export default function DashboardEditor() {
                 ))}
 
                 {pickerWidgets.length === 0 && (
-                  <p className="dpicker-hint">No generated widgets available yet — build one above or generate a widget on the Widgets page first.</p>
+                  <p className="dpicker-hint">
+                    No other widgets yet — build a new one above, or create widgets on the Widgets page.
+                  </p>
                 )}
               </div>
             )}
@@ -491,11 +498,11 @@ export default function DashboardEditor() {
   )
 }
 
-function WidgetFrame({ html }: { html: string }) {
+function WidgetFrame({ html, theme }: { html: string; theme: string }) {
   return (
     <iframe
       className="wg-iframe"
-      srcDoc={`<!doctype html><html><head><meta charset="utf-8"><style>*{box-sizing:border-box}html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:transparent}</style></head><body>${html}</body></html>`}
+      srcDoc={widgetFrameSrcDoc(html, theme)}
       sandbox="allow-scripts allow-popups"
       title="Widget preview"
     />

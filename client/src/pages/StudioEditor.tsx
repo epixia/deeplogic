@@ -11,7 +11,7 @@
 // from useAuth().getAccessToken(). Uses the design tokens + studio.css.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import {
   generateStudioReport,
@@ -48,6 +48,9 @@ export default function StudioEditor() {
     projectId: string
   }>()
   const { getAccessToken } = useAuth()
+  const location = useLocation()
+  const navigate = useNavigate()
+  const autoRanRef = useRef(false)
 
   const [project, setProject] = useState<StudioProject | null>(null)
   const [loading, setLoading] = useState(true)
@@ -118,6 +121,17 @@ export default function StudioEditor() {
   }, [token, orgId, projectId, hydrate])
 
   const isOwner = project?.isOwner ?? false
+
+  // Auto-generate when arriving from a "⚡ Generate" suggestion (prompt passed
+  // via navigation state). Fires once, then clears the state.
+  useEffect(() => {
+    const seed = (location.state as { autoPrompt?: string } | null)?.autoPrompt
+    if (!seed || autoRanRef.current || loading || !project || !project.isOwner) return
+    autoRanRef.current = true
+    navigate(location.pathname, { replace: true, state: null })
+    void onSend(seed)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location, loading, project])
 
   // lazy-load grounding models (owner only)
   useEffect(() => {

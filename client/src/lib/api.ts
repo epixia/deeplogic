@@ -13,8 +13,18 @@ import type {
   ModelListItem,
   SemanticModel,
 } from '../types'
+import { supabase } from './supabase'
 
 const BASE = '/api'
+
+// Guards a single sign-out on terminal auth failure (avoids loops/duplicates).
+let signedOutOn401 = false
+async function handleExpiredSession() {
+  if (signedOutOn401) return
+  signedOutOn401 = true
+  // Signing out flips AuthContext → RequireAuth routes to /login (SPA nav).
+  try { await supabase.auth.signOut() } catch { /* ignore */ }
+}
 
 /* ---------------- shared tenant types ---------------- */
 
@@ -47,13 +57,33 @@ async function jsonFetch<T>(
   path: string,
   init?: RequestInit,
 ): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    ...init,
-    headers: authHeaders(token, {
-      'Content-Type': 'application/json',
-      ...(init?.headers ?? {}),
-    }),
-  })
+  const doFetch = (tok: string) =>
+    fetch(`${BASE}${path}`, {
+      ...init,
+      headers: authHeaders(tok, {
+        'Content-Type': 'application/json',
+        ...(init?.headers ?? {}),
+      }),
+    })
+
+  let res = await doFetch(token)
+
+  // On 401, try a single token refresh + retry before giving up.
+  if (res.status === 401) {
+    let fresh: string | null = null
+    try {
+      const { data } = await supabase.auth.refreshSession()
+      fresh = data.session?.access_token ?? null
+    } catch { /* refresh failed */ }
+    if (fresh && fresh !== token) {
+      res = await doFetch(fresh)
+    }
+    if (res.status === 401) {
+      await handleExpiredSession()
+      throw new Error('Your session expired — please sign in again.')
+    }
+  }
+
   if (!res.ok) {
     throw new Error(await errorDetail(res))
   }
@@ -533,6 +563,7 @@ export interface StudioProjectListItem {
   ownerEmail?: string | null
   isOwner: boolean
   html: string
+  dashboardId: string | null
   updatedAt: string
 }
 
@@ -654,6 +685,62 @@ export interface VaultDocument {
   scope: string | null
   deleteRef: string
   ownerEmail: string | null
+  url?: string | null
+  format?: string | null
+}
+
+export interface PowerBiInspection {
+  summary?: Record<string, number>
+  connectors?: { id: string; type: string; displayName: string; server?: string; database?: string; url?: string; workspace?: string; dataset?: string; filePath?: string; queryNames: string[]; confidence: string }[]
+  kpis?: { id: string; name: string; source: string; expression?: string; table?: string; businessMeaningGuess?: string; confidence: string }[]
+  entities?: { id: string; name: string; sourceNames: string[]; confidence: string }[]
+  sourceSystems?: { name: string; type: string; server?: string; database?: string; connectorId?: string }[]
+  businessKeys?: { entity: string; column: string; reason: string }[]
+  risks?: { id: string; severity: string; category: string; message: string }[]
+  queries?: { name: string; sourceTables: { name: string; schema?: string }[]; selectedColumns: string[]; steps: number; outputEntityGuess?: string }[]
+  relationships?: { fromTable: string; fromColumn: string; toTable: string; toColumn: string }[]
+  lineageCount?: number
+  limitations?: string[]
+}
+
+export interface VaultPowerBI {
+  id: string
+  name: string
+  deleteRef: string
+  createdAt: string
+  tables: { name: string; columns: string[]; measures: string[] }[]
+  connectors: { name: string; kind: string }[]
+  kpis: string[]
+  measureCount: number
+  pages: string[]
+  inspection?: PowerBiInspection | null
+}
+
+// GET /api/orgs/:orgId/vault/powerbi — parsed Power BI reports (tables/connectors/KPIs)
+export function listVaultPowerBI(token: string, orgId: string): Promise<VaultPowerBI[]> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/vault/powerbi`)
+}
+
+export interface VaultKpi {
+  name: string
+  businessMeaning?: string
+  source: string
+  confidence: string
+  expression?: string
+  table?: string
+  origins: { type: string; name: string }[]
+}
+
+// GET /api/orgs/:orgId/vault/kpis — company KPIs detected across the workspace
+export function listVaultKpis(token: string, orgId: string): Promise<{ kpis: VaultKpi[]; sourceCounts: Record<string, number> }> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/vault/kpis`)
+}
+
+// DELETE /api/orgs/:orgId/vault/kpis/:name — remove a detected KPI from every
+// source it was detected in (by name, case-insensitive). Returns how many
+// source records were updated.
+export function deleteVaultKpi(token: string, orgId: string, name: string): Promise<{ removed: number }> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/vault/kpis/${enc(name)}`, { method: 'DELETE' })
 }
 
 // GET /api/orgs/:orgId/vault
@@ -662,6 +749,26 @@ export function getOrgVault(
   orgId: string,
 ): Promise<{ connectors: VaultConnector[]; documents: VaultDocument[] }> {
   return jsonFetch(token, `/orgs/${enc(orgId)}/vault`)
+}
+
+export type VaultCategory = 'data' | 'website' | 'image' | 'document' | 'powerbi' | 'note'
+
+export interface IngestResult {
+  item: { id: string; kind: string; category: string; name: string; profile: Record<string, unknown>; tags: string[] }
+  category: VaultCategory
+  confidence: number
+}
+
+// POST /api/orgs/:orgId/vault/ingest — unified intake (file / URL / text), AI auto-routed
+export function ingestToVault(
+  token: string,
+  orgId: string,
+  input: { name?: string; url?: string; text?: string; dataBase64?: string; mediaType?: string; filename?: string },
+): Promise<IngestResult> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/vault/ingest`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
 }
 
 // GET /api/orgs/:orgId/vault/doc/content?ref=...
@@ -795,6 +902,7 @@ export interface StudioProject {
   isOwner: boolean
   html: string
   modelId: string | null
+  dashboardId: string | null
   messages: StudioMessage[]
   versions: StudioVersion[]
   vault: VaultItem[]
@@ -802,7 +910,7 @@ export interface StudioProject {
 }
 
 export type ContextScope = 'user' | 'org'
-export type ContextKind = 'doc' | 'html' | 'mcp' | 'note' | 'image'
+export type ContextKind = 'doc' | 'html' | 'mcp' | 'note' | 'image' | 'website' | 'data'
 
 export interface ContextItem {
   id: string
@@ -827,7 +935,7 @@ export function listStudioProjects(
 export function createStudioProject(
   token: string,
   orgId: string,
-  body: { name: string; seedHtml?: string; modelId?: string | null },
+  body: { name: string; seedHtml?: string; modelId?: string | null; dashboardId?: string | null },
 ): Promise<StudioProject> {
   return jsonFetch(token, `/orgs/${enc(orgId)}/studio/projects`, {
     method: 'POST',
@@ -1089,8 +1197,31 @@ export interface AdminUser {
   id: string
   email: string
   createdAt: string
+  lastSignInAt: string | null
+  suspended: boolean
   orgs: { orgId: string; orgName: string; orgSlug: string; role: string }[]
 }
+
+export interface AdminUserDetail {
+  id: string
+  email: string
+  phone: string | null
+  createdAt: string
+  lastSignInAt: string | null
+  emailConfirmed: boolean
+  suspended: boolean
+  bannedUntil: string | null
+  provider: string
+  providers: string[]
+  orgs: { orgId: string; orgName: string; orgSlug: string; role: string; joinedAt: string }[]
+}
+
+export type AdminUserAction =
+  | 'suspend'
+  | 'unsuspend'
+  | 'set_password'
+  | 'set_email'
+  | 'confirm_email'
 
 // GET /api/admin/me
 export function adminMe(token: string): Promise<{ isAdmin: boolean; email: string }> {
@@ -1152,6 +1283,33 @@ export function adminListUsers(
   return jsonFetch(token, `/admin/users${qs}`)
 }
 
+// GET /api/admin/users/:userId
+export function adminGetUser(token: string, userId: string): Promise<AdminUserDetail> {
+  return jsonFetch(token, `/admin/users/${enc(userId)}`)
+}
+
+// PATCH /api/admin/users/:userId — suspend / unsuspend / set_password / set_email / confirm_email
+export function adminUpdateUser(
+  token: string,
+  userId: string,
+  body: { action: AdminUserAction; password?: string; email?: string },
+): Promise<{ id: string; email: string; suspended: boolean; bannedUntil: string | null; emailConfirmed: boolean }> {
+  return jsonFetch(token, `/admin/users/${enc(userId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  })
+}
+
+// POST /api/admin/users/:userId/reset-email — send a password-reset email
+export function adminResetUserEmail(token: string, userId: string): Promise<{ ok: boolean }> {
+  return jsonFetch(token, `/admin/users/${enc(userId)}/reset-email`, { method: 'POST' })
+}
+
+// DELETE /api/admin/users/:userId — permanently delete a user
+export function adminDeleteUser(token: string, userId: string): Promise<void> {
+  return jsonFetch(token, `/admin/users/${enc(userId)}`, { method: 'DELETE' })
+}
+
 // POST /api/admin/restart
 export function adminRestart(token: string): Promise<{ ok: boolean; message: string }> {
   return jsonFetch(token, '/admin/restart', { method: 'POST' })
@@ -1202,6 +1360,7 @@ export interface DashboardListItem {
   slug: string
   visibility: DashboardVisibility
   description: string | null
+  group: string | null
   ownerId: string
   isOwner: boolean
   widgetCount: number
@@ -1222,7 +1381,7 @@ export function listDashboards(token: string, orgId: string): Promise<DashboardL
 export function createDashboard(
   token: string,
   orgId: string,
-  body: { name: string; description?: string },
+  body: { name: string; description?: string; group?: string },
 ): Promise<DashboardListItem> {
   return jsonFetch(token, `/orgs/${enc(orgId)}/dashboards`, {
     method: 'POST',
@@ -1240,7 +1399,7 @@ export function updateDashboard(
   token: string,
   orgId: string,
   id: string,
-  patch: { name?: string; visibility?: DashboardVisibility; description?: string },
+  patch: { name?: string; visibility?: DashboardVisibility; description?: string; group?: string },
 ): Promise<{ ok: boolean }> {
   return jsonFetch(token, `/orgs/${enc(orgId)}/dashboards/${enc(id)}`, {
     method: 'PATCH',
@@ -1401,9 +1560,91 @@ export interface Agent {
   systemPrompt: string
   schedule: string | null
   lastRunAt: string | null
+  status: 'idle' | 'running'
+  lastRunStatus: 'ok' | 'error' | null
   isOwner: boolean
   createdAt: string
   updatedAt: string
+}
+
+// POST /api/orgs/:orgId/agents/:id/run — run an agent on demand
+export function runAgent(token: string, orgId: string, id: string): Promise<{ ok: boolean; name: string; output: string; ranAt: string; runId: string | null }> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/agents/${enc(id)}/run`, { method: 'POST' })
+}
+
+export type AgentRunStreamEvent =
+  | { type: 'step'; icon: string; text: string }
+  | { type: 'done'; output: string; runId: string | null }
+  | { type: 'error'; error: string }
+
+// POST /agents/:id/run/stream — run an agent, streaming its live thoughts (SSE)
+export async function* runAgentStream(
+  token: string, orgId: string, id: string, signal?: AbortSignal,
+): AsyncGenerator<AgentRunStreamEvent> {
+  const res = await fetch(`${BASE}/orgs/${enc(orgId)}/agents/${enc(id)}/run/stream`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    signal,
+  })
+  if (!res.ok || !res.body) { yield { type: 'error', error: `Server error: ${res.status}` }; return }
+  const reader = res.body.getReader()
+  const dec = new TextDecoder()
+  let buf = ''
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buf += dec.decode(value, { stream: true })
+    const lines = buf.split('\n')
+    buf = lines.pop() ?? ''
+    for (const line of lines) {
+      if (line.startsWith('data: ')) {
+        try { yield JSON.parse(line.slice(6)) as AgentRunStreamEvent } catch { /* ignore */ }
+      }
+    }
+  }
+}
+
+// AI Activity Log — a unified record of every agent run + its trace.
+export interface AgentRun {
+  id: string
+  orgId: string
+  agentId: string | null
+  externalAgentId: string | null
+  agentKind: 'internal' | 'external'
+  agentName: string
+  trigger: 'manual' | 'schedule' | 'chat' | 'goal' | 'orchestrator' | 'deploy'
+  status: 'running' | 'succeeded' | 'failed' | 'cancelled'
+  groupId: string | null
+  groupLabel: string | null
+  model: string | null
+  triggerContext: Record<string, unknown>
+  result: string | null
+  error: string | null
+  tokensIn: number | null
+  tokensOut: number | null
+  startedAt: string
+  finishedAt: string | null
+  createdAt: string
+}
+export interface AgentRunEvent {
+  id: string
+  kind: 'step' | 'tool_call' | 'tool_result' | 'reasoning' | 'output'
+  icon: string | null
+  message: string
+  data: unknown
+  createdAt: string
+}
+
+export function listAgentRuns(token: string, orgId: string, opts?: { agentId?: string; limit?: number }): Promise<AgentRun[]> {
+  const q = new URLSearchParams()
+  if (opts?.agentId) q.set('agentId', opts.agentId)
+  if (opts?.limit) q.set('limit', String(opts.limit))
+  const qs = q.toString()
+  return jsonFetch(token, `/orgs/${enc(orgId)}/agent-runs${qs ? `?${qs}` : ''}`)
+}
+
+export function getAgentRun(token: string, orgId: string, runId: string): Promise<AgentRun & { events: AgentRunEvent[] }> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/agent-runs/${enc(runId)}`)
 }
 
 export function listAgents(token: string, orgId: string): Promise<Agent[]> {
@@ -1435,6 +1676,524 @@ export function updateAgent(
 
 export function deleteAgent(token: string, orgId: string, agentId: string): Promise<void> {
   return jsonFetch(token, `/orgs/${enc(orgId)}/agents/${enc(agentId)}`, { method: 'DELETE' })
+}
+
+/* ---------------- external agents (Hermes / OpenClaw, VM-deployed) ---------------- */
+
+export type ExternalAgentProvider = 'hermes' | 'openclaw'
+export type ExternalAgentStatus = 'provisioning' | 'running' | 'stopped' | 'failed'
+export type MissionStatus = 'pending' | 'in_progress' | 'completed' | 'failed'
+export type AgentEventKind =
+  | 'deployed' | 'provisioned' | 'mission_started' | 'progress' | 'completed' | 'failed' | 'message'
+
+// One entry in an external agent's back-channel timeline (what it reported to central).
+export interface ExternalAgentEvent {
+  id: string
+  kind: AgentEventKind
+  message: string
+  data: unknown
+  createdAt: string
+}
+
+export interface ExternalAgent {
+  id: string
+  orgId: string
+  provider: ExternalAgentProvider
+  name: string
+  status: ExternalAgentStatus
+  region: string | null
+  size: string | null
+  host: string | null
+  runtime: 'orgo' | 'simulated'
+  mission: string
+  reason: string
+  deployedVia: 'ui' | 'chat'
+  missionStatus: MissionStatus
+  result: unknown
+  missionStartedAt: string | null
+  missionCompletedAt: string | null
+  events: ExternalAgentEvent[]
+  createdAt: string
+  updatedAt: string
+}
+
+export function listExternalAgents(token: string, orgId: string): Promise<ExternalAgent[]> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/external-agents`)
+}
+
+export function deployExternalAgent(
+  token: string,
+  orgId: string,
+  body: { provider: ExternalAgentProvider; name: string; region?: string; size?: string; mission?: string; reason?: string },
+): Promise<ExternalAgent> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/external-agents/deploy`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
+export function stopExternalAgent(token: string, orgId: string, id: string): Promise<ExternalAgent> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/external-agents/${enc(id)}/stop`, { method: 'POST' })
+}
+
+export function deleteExternalAgent(token: string, orgId: string, id: string): Promise<void> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/external-agents/${enc(id)}`, { method: 'DELETE' })
+}
+
+/* ---------------- memory graph ---------------- */
+
+export interface MemoryEntity { id: string; name: string; type: string; summary: string }
+export interface MemoryFact {
+  id: string
+  subjectId: string
+  objectId: string | null
+  objectText: string | null
+  predicate: string
+  statement: string
+  validTo: string | null
+}
+export interface MemoryGraphData { entities: MemoryEntity[]; facts: MemoryFact[] }
+
+export function getMemoryGraph(token: string, orgId: string, includeStale = false): Promise<MemoryGraphData> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/memory/graph?includeStale=${includeStale}`)
+}
+
+export interface MemoryRebuildResult { processed: number; totalItems: number; entities: number; facts: number; superseded: number }
+
+export function rebuildMemory(token: string, orgId: string, reset = true): Promise<MemoryRebuildResult> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/memory/rebuild?reset=${reset}`, { method: 'POST' })
+}
+
+export function recallMemory(token: string, orgId: string, q: string, k = 12): Promise<{ facts: { statement: string; predicate: string; validFrom: string; validTo: string | null }[] }> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/memory/recall?q=${encodeURIComponent(q)}&k=${k}`)
+}
+
+/* ---------------- integrations (Orgo.ai) ---------------- */
+
+export interface IntegrationsView {
+  orgo: { enabled: boolean; hasKey: boolean }
+}
+
+export function getIntegrations(token: string, orgId: string): Promise<IntegrationsView> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/integrations`)
+}
+
+export function saveOrgoIntegration(
+  token: string,
+  orgId: string,
+  body: { enabled?: boolean; apiKey?: string },
+): Promise<IntegrationsView> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/integrations/orgo`, { method: 'PUT', body: JSON.stringify(body) })
+}
+
+export function testOrgoIntegration(
+  token: string,
+  orgId: string,
+  apiKey?: string,
+): Promise<{ ok: boolean; error?: string }> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/integrations/orgo/test`, {
+    method: 'POST',
+    body: JSON.stringify(apiKey ? { apiKey } : {}),
+  })
+}
+
+// A single agent proposed by the AI team generator (pre-creation, editable).
+export interface ProposedAgent {
+  name: string
+  description: string
+  model: string
+  systemPrompt: string
+  schedule: string | null
+}
+
+export interface TeamSuggestion {
+  businessSummary: string
+  agents: ProposedAgent[]
+  usedAI: boolean
+  sourceTitle?: string
+  aiError?: string
+}
+
+// POST /api/orgs/:orgId/agents/suggest — extrapolate a team from a website
+export function suggestAgentTeam(
+  token: string,
+  orgId: string,
+  body: { url: string; notes?: string },
+): Promise<TeamSuggestion> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/agents/suggest`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
+// POST /api/orgs/:orgId/agents/bulk — create several agents at once
+export function createAgentsBulk(
+  token: string,
+  orgId: string,
+  agents: ProposedAgent[],
+): Promise<Agent[]> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/agents/bulk`, {
+    method: 'POST',
+    body: JSON.stringify({ agents }),
+  })
+}
+
+/* ---------------- URL analysis ---------------- */
+
+export type AnalysisLens = 'api' | 'company' | 'competitive' | 'metrics'
+
+export interface ProposedConnector {
+  name: string
+  connectorType: string
+  url: string
+  description: string
+  reason: string
+}
+export interface ApiLens {
+  summary: string
+  connectors: ProposedConnector[]
+}
+export interface CompanyLens {
+  summary: string
+  facts: { label: string; value: string }[]
+}
+export interface CompetitiveLens {
+  summary: string
+  competitors: { name: string; note: string }[]
+  strengths: string[]
+  weaknesses: string[]
+}
+export interface MetricsLens {
+  summary: string
+  kpis: string[]
+  agents: ProposedAgent[]
+}
+export interface UrlAnalysis {
+  url: string
+  sourceTitle?: string
+  usedAI: boolean
+  api?: ApiLens
+  company?: CompanyLens
+  competitive?: CompetitiveLens
+  metrics?: MetricsLens
+  aiError?: string
+}
+
+export interface SiteInsights {
+  url: string
+  domain: string
+  title: string
+  age: { createdAt: string; ageYears: number } | null
+  overview: string
+  facts: { label: string; value: string }[]
+  sources: { title: string; url: string; snippet: string }[]
+  usedAI: boolean
+}
+
+// GET /api/orgs/:orgId/studio/site-insights?url= — insights about a website
+export function getSiteInsights(token: string, orgId: string, url: string): Promise<SiteInsights> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/studio/site-insights?url=${encodeURIComponent(url)}`)
+}
+
+// POST site-insights/persist — store insights (DB + Vault .md) and, by default,
+// add a card to the competitor's dashboard.
+export function persistSiteInsights(
+  token: string, orgId: string, body: { url: string; name?: string; toDashboard?: boolean },
+): Promise<{ ok: boolean; itemId: string | null; dashboardId: string | null; widgetId: string | null; savedAt: string; usedAI: boolean }> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/studio/site-insights/persist`, { method: 'POST', body: JSON.stringify(body) })
+}
+
+export interface CompetitorTrends {
+  source: string
+  unit: string
+  months: number
+  series: {
+    term: string
+    title: string | null     // matched Wikipedia article, or null if none found
+    confident: boolean        // false = best-guess match, surface a warning
+    points: { date: string; value: number }[]
+  }[]
+}
+
+// GET /api/orgs/:orgId/studio/competitor-trends?terms=a,b,c — free monthly
+// public-interest series (Wikipedia pageviews) for up to 5 companies.
+export function getCompetitorTrends(
+  token: string,
+  orgId: string,
+  terms: string[],
+  months = 12,
+): Promise<CompetitorTrends> {
+  const q = encodeURIComponent(terms.slice(0, 5).join(','))
+  return jsonFetch(token, `/orgs/${enc(orgId)}/studio/competitor-trends?terms=${q}&months=${months}`)
+}
+
+// POST /api/orgs/:orgId/studio/analyze-url — fetch a URL and analyse it
+export function analyzeUrl(
+  token: string,
+  orgId: string,
+  body: { url: string; lenses: AnalysisLens[] },
+): Promise<UrlAnalysis> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/studio/analyze-url`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
+/* ---------------- idea suggestions ---------------- */
+
+export type IdeaTarget = 'report' | 'widget'
+
+export interface Idea {
+  title: string
+  prompt: string
+  widgetType?: WidgetType
+  reason: string
+}
+export interface IdeasResult {
+  ideas: Idea[]
+  usedAI: boolean
+  inventoryCount: number
+  aiError?: string
+}
+
+// POST /api/orgs/:orgId/studio/suggest-ideas — propose reports/widgets from the vault
+export function suggestIdeas(
+  token: string,
+  orgId: string,
+  body: { target: IdeaTarget; widgetType?: WidgetType },
+): Promise<IdeasResult> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/studio/suggest-ideas`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
+/* ---------------- suggest competitors ---------------- */
+
+export interface CompetitorSuggestion {
+  name: string
+  website: string
+  reason: string
+}
+export interface CompetitorsResult {
+  competitors: CompetitorSuggestion[]
+  usedAI: boolean
+  aiError?: string
+  note?: string
+}
+
+// POST /api/orgs/:orgId/studio/suggest-competitors — propose competitors from the company profile
+export function suggestCompetitors(
+  token: string,
+  orgId: string,
+  existing: string[] = [],
+): Promise<CompetitorsResult> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/studio/suggest-competitors`, {
+    method: 'POST',
+    body: JSON.stringify({ existing }),
+  })
+}
+
+// POST /api/orgs/:orgId/assistant/title — concise title for a markdown note
+export function generateMdTitle(token: string, orgId: string, content: string): Promise<{ title: string }> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/assistant/title`, {
+    method: 'POST',
+    body: JSON.stringify({ content }),
+  })
+}
+
+/* ---------------- platform status ---------------- */
+
+export interface PlatformStatus {
+  api: { ok: boolean }
+  database: { ok: boolean }
+  auth: { ok: boolean }
+  ai: { configured: boolean; provider: string | null; model: string | null; envKey: boolean }
+  webSearch: { mode: 'brave' | 'duckduckgo'; ok: boolean }
+  checkedAt: string
+}
+
+// GET /api/orgs/:orgId/status — platform health
+export function getPlatformStatus(token: string, orgId: string): Promise<PlatformStatus> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/status`)
+}
+
+/* ---------------- OpenRouter balance ---------------- */
+
+export interface OpenRouterBalance {
+  configured: boolean
+  totalCredits?: number
+  totalUsage?: number
+  remaining?: number
+  error?: string
+}
+
+// GET /api/orgs/:orgId/ai/openrouter-balance — live OpenRouter credit balance
+export function getOpenRouterBalance(token: string, orgId: string): Promise<OpenRouterBalance> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/ai/openrouter-balance`)
+}
+
+/* ---------------- global assistant ---------------- */
+
+export interface AssistantMessage {
+  role: 'user' | 'assistant'
+  content: string
+}
+export interface SuggestedAction { label: string; prompt: string }
+export interface AssistantChatResult {
+  text: string
+  usedAI: boolean
+  aiError?: string
+  actions?: string[]
+  suggestions?: SuggestedAction[]
+  sources: { title: string; url: string; snippet: string }[]
+}
+
+// POST /api/orgs/:orgId/assistant/chat — global platform assistant
+export function assistantChat(
+  token: string,
+  orgId: string,
+  body: { messages: AssistantMessage[]; webResearch?: boolean },
+): Promise<AssistantChatResult> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/assistant/chat`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
+export interface AssistantStep { icon: string; text: string }
+export type AssistantStreamEvent =
+  | ({ type: 'step' } & AssistantStep)
+  | ({ type: 'done' } & AssistantChatResult)
+  | { type: 'error'; error: string }
+
+// POST /api/orgs/:orgId/assistant/chat/stream — streams live "thinking" steps (SSE)
+export async function* assistantChatStream(
+  token: string,
+  orgId: string,
+  body: { messages: AssistantMessage[]; webResearch?: boolean },
+  signal?: AbortSignal,
+): AsyncGenerator<AssistantStreamEvent> {
+  const res = await fetch(`${BASE}/orgs/${enc(orgId)}/assistant/chat/stream`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(body),
+    signal,
+  })
+  if (!res.ok || !res.body) {
+    yield { type: 'error', error: `Server error: ${res.status}` }
+    return
+  }
+  const reader = res.body.getReader()
+  const dec = new TextDecoder()
+  let buf = ''
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buf += dec.decode(value, { stream: true })
+    const lines = buf.split('\n')
+    buf = lines.pop() ?? ''
+    for (const line of lines) {
+      if (line.startsWith('data: ')) {
+        try { yield JSON.parse(line.slice(6)) as AssistantStreamEvent }
+        catch { /* ignore malformed */ }
+      }
+    }
+  }
+}
+
+/* ---------------- guided onboarding (live AI monitor) ---------------- */
+
+export interface ProposedAgentLite { name: string; description: string; model: string; systemPrompt: string; schedule: string | null }
+
+export type OnboardingEvent =
+  | { type: 'step'; icon: string; text: string }
+  | { type: 'detail'; text: string }
+  | { type: 'company'; name: string; summary: string; facts: { label: string; value: string }[] }
+  | { type: 'stats'; domain: string; age: { createdAt: string; ageYears: number } | null; sources: { title: string; url: string }[] }
+  | { type: 'product'; name: string; description: string }
+  | { type: 'competitor'; name: string; website: string; reason: string }
+  | ({ type: 'agent' } & ProposedAgentLite)
+  | { type: 'done'; summary: { company: string; website: string; competitors: number; products: number; agents: number; domainAgeYears: number | null; sources: number; usedAI: boolean } }
+  | { type: 'error'; error: string }
+
+// Anonymous (no auth) — analyse a website and stream the AI's live decisions
+// WITHOUT saving anything. Results are persisted only after the visitor claims
+// a workspace (onboardingPersist).
+export async function* onboardingAnalyzeStream(
+  website: string,
+  signal?: AbortSignal,
+): AsyncGenerator<OnboardingEvent> {
+  const res = await fetch(`${BASE}/onboarding/analyze`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ website }),
+    signal,
+  })
+  if (!res.ok || !res.body) {
+    yield { type: 'error', error: `Server error: ${res.status}` }
+    return
+  }
+  const reader = res.body.getReader()
+  const dec = new TextDecoder()
+  let buf = ''
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buf += dec.decode(value, { stream: true })
+    const lines = buf.split('\n')
+    buf = lines.pop() ?? ''
+    for (const line of lines) {
+      if (line.startsWith('data: ')) {
+        try { yield JSON.parse(line.slice(6)) as OnboardingEvent }
+        catch { /* ignore malformed */ }
+      }
+    }
+  }
+}
+
+export interface PowerBIScan {
+  ok: boolean
+  name: string
+  connectors: { name: string; kind: string }[]
+  tables: { name: string; columns: string[]; measures: string[] }[]
+  tableCount: number
+  measureCount: number
+  pages: string[]
+}
+
+// Anonymous (no auth) — parse a Power BI export and return detected connectors,
+// tables & measures without saving. For live feedback on the onboarding upload.
+export function scanPowerBI(dataBase64: string, filename: string): Promise<PowerBIScan> {
+  return fetch(`${BASE}/onboarding/scan-powerbi`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ dataBase64, filename }),
+  }).then(async (r) => {
+    if (!r.ok) throw new Error(`Scan failed: ${r.status}`)
+    return r.json() as Promise<PowerBIScan>
+  })
+}
+
+export interface OnboardingPersistPayload {
+  website: string
+  company: { name: string; summary: string; facts: { label: string; value: string }[] } | null
+  competitors: { name: string; website: string; reason: string }[]
+  products: { name: string; description: string }[]
+  agents: ProposedAgentLite[]
+}
+
+// POST /orgs/:orgId/onboarding/persist — save the anonymously-gathered data into
+// the new workspace (company profile, competitors, memory). No AI re-analysis.
+export function onboardingPersist(
+  token: string,
+  orgId: string,
+  payload: OnboardingPersistPayload,
+): Promise<{ ok: boolean; company: string; competitors: number }> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/onboarding/persist`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
 }
 
 /* ---------------- alerts ---------------- */
@@ -1492,6 +2251,90 @@ export function checkAlert(token: string, orgId: string, alertId: string): Promi
 
 export function listAlertEvents(token: string, orgId: string, alertId: string): Promise<AlertEvent[]> {
   return jsonFetch(token, `/orgs/${enc(orgId)}/alerts/${enc(alertId)}/events`)
+}
+
+/* ---------------- goals ---------------- */
+
+export interface GoalAgent { name: string; role: string }
+
+export interface Goal {
+  id: string
+  orgId: string
+  title: string
+  plan: string[]
+  agents: GoalAgent[]
+  status: 'active' | 'done' | 'archived'
+  createdAt: string
+  updatedAt: string
+}
+
+export function listGoals(token: string, orgId: string): Promise<Goal[]> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/goals`)
+}
+
+export interface GoalSuggestion { title: string; reason: string }
+
+// Suggest valuable goals grounded in the Data Vault.
+export function suggestGoals(token: string, orgId: string): Promise<{ goals: GoalSuggestion[]; usedAI: boolean; inventoryCount: number; aiError?: string }> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/goals/suggest`, { method: 'POST' })
+}
+
+// AI-draft a plan + suggested agents from a goal title.
+export function draftGoal(token: string, orgId: string, title: string): Promise<{ plan: string[]; agents: GoalAgent[] }> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/goals/draft`, { method: 'POST', body: JSON.stringify({ title }) })
+}
+
+export function createGoal(
+  token: string,
+  orgId: string,
+  body: { title: string; plan?: string[]; agents?: GoalAgent[]; status?: Goal['status'] },
+): Promise<Goal> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/goals`, { method: 'POST', body: JSON.stringify(body) })
+}
+
+export function updateGoal(
+  token: string,
+  orgId: string,
+  goalId: string,
+  body: Partial<{ title: string; plan: string[]; agents: GoalAgent[]; status: Goal['status'] }>,
+): Promise<Goal> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/goals/${enc(goalId)}`, { method: 'PATCH', body: JSON.stringify(body) })
+}
+
+export function deleteGoal(token: string, orgId: string, goalId: string): Promise<void> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/goals/${enc(goalId)}`, { method: 'DELETE' })
+}
+
+export type GoalRunStreamEvent =
+  | { type: 'step'; icon: string; text: string }
+  | { type: 'done'; results: { agent: string; ok: boolean; output?: string; error?: string }[] }
+  | { type: 'error'; error: string }
+
+// POST /goals/:id/run/stream — spin up & run a goal's agents, streaming live
+export async function* runGoalStream(
+  token: string, orgId: string, goalId: string, signal?: AbortSignal,
+): AsyncGenerator<GoalRunStreamEvent> {
+  const res = await fetch(`${BASE}/orgs/${enc(orgId)}/goals/${enc(goalId)}/run/stream`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    signal,
+  })
+  if (!res.ok || !res.body) { yield { type: 'error', error: `Server error: ${res.status}` }; return }
+  const reader = res.body.getReader()
+  const dec = new TextDecoder()
+  let buf = ''
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buf += dec.decode(value, { stream: true })
+    const lines = buf.split('\n')
+    buf = lines.pop() ?? ''
+    for (const line of lines) {
+      if (line.startsWith('data: ')) {
+        try { yield JSON.parse(line.slice(6)) as GoalRunStreamEvent } catch { /* ignore */ }
+      }
+    }
+  }
 }
 
 

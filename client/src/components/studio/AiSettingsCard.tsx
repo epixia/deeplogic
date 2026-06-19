@@ -179,7 +179,9 @@ export default function AiSettingsCard({
       )}
 
       <div className="ais-list">
-        {PROVIDERS.map((p) => {
+        {[...PROVIDERS]
+          .sort((a, b) => Number(rows[b.id].hasKey) - Number(rows[a.id].hasKey))
+          .map((p) => {
           const r = rows[p.id]
           const test = tests[p.id]
           const isActive = active === p.id

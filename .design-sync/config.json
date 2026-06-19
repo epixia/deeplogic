@@ -1,0 +1,14 @@
+{
+  "pkg": "@deeplogic/ui",
+  "globalName": "DeepLogicUI",
+  "projectId": "fe31ce54-5a0d-479c-9c8a-127a32cc3ce3",
+  "shape": "package",
+  "buildCmd": "npm --prefix packages/ui run build",
+  "cssEntry": "dist/styles.css",
+  "readmeHeader": ".design-sync/conventions.md",
+  "overrides": {
+    "Modal": { "cardMode": "single", "viewport": "520x320", "primaryStory": "Confirm" },
+    "Input": { "cardMode": "column" },
+    "Textarea": { "cardMode": "column" }
+  }
+}

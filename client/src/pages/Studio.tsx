@@ -12,6 +12,7 @@ import {
   type FormEvent,
 } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useStickyTab } from '../lib/useStickyTab'
 import { useAuth } from '../auth/AuthContext'
 import {
   createStudioProject,
@@ -24,9 +25,13 @@ import {
 import type { ModelListItem } from '../types'
 import ContextLibrary from '../components/studio/ContextLibrary'
 import ReportThumb from '../components/studio/ReportThumb'
+import SuggestIdeasModal from '../components/studio/SuggestIdeasModal'
+import DashboardScopeBar, { useDashboardScope, ALL_SCOPE } from '../components/DashboardScope'
+import type { Idea } from '../lib/api'
 import '../components/studio/studio.css'
 
 type Tab = 'mine' | 'shared' | 'context'
+const TABS: readonly Tab[] = ['mine', 'shared', 'context']
 type StartMode = 'blank' | 'upload' | 'model'
 
 function visibilityPill(v: StudioVisibility) {
@@ -52,7 +57,8 @@ export default function Studio() {
   const { getAccessToken } = useAuth()
   const navigate = useNavigate()
 
-  const [tab, setTab] = useState<Tab>('mine')
+  const [tab, setTab] = useStickyTab<Tab>(`studio.tab.${orgId}`, 'mine', TABS)
+  const [scope, setScope] = useDashboardScope(orgId)
   const [projects, setProjects] = useState<StudioProjectListItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -69,6 +75,19 @@ export default function Studio() {
   const [creating, setCreating] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
+
+  // "⚡ Generate" — suggest a report from the Data Vault, then scaffold it and
+  // open the editor with the prompt queued to auto-generate.
+  const [showGen, setShowGen] = useState(false)
+  async function generateFromIdea(idea: Idea) {
+    const token = await getAccessToken()
+    if (!token) throw new Error('Session expired — please sign in again.')
+    const project = await createStudioProject(token, orgId, {
+      name: idea.title,
+      dashboardId: scope === ALL_SCOPE ? undefined : scope,
+    })
+    navigate(`/app/${orgId}/studio/${project.id}`, { state: { autoPrompt: idea.prompt } })
+  }
 
   const load = useCallback(async () => {
     setError(null)
@@ -88,11 +107,12 @@ export default function Studio() {
     void load()
   }, [load])
 
-  const mine = useMemo(() => projects.filter((p) => p.isOwner), [projects])
+  const inScope = (p: StudioProjectListItem) => scope === ALL_SCOPE || p.dashboardId === scope
+  const mine = useMemo(() => projects.filter((p) => p.isOwner && inScope(p)), [projects, scope])
   const shared = useMemo(
     () =>
-      projects.filter((p) => !p.isOwner && p.visibility !== 'private'),
-    [projects],
+      projects.filter((p) => !p.isOwner && p.visibility !== 'private' && inScope(p)),
+    [projects, scope],
   )
 
   function openNew() {
@@ -150,6 +170,7 @@ export default function Studio() {
         name: name.trim(),
         seedHtml: startMode === 'upload' ? seedHtml : undefined,
         modelId: startMode === 'model' ? modelId : undefined,
+        dashboardId: scope === ALL_SCOPE ? undefined : scope,
       })
       navigate(`/app/${orgId}/studio/${project.id}`)
     } catch (err) {
@@ -230,10 +251,17 @@ export default function Studio() {
             library. Share to your org or publish.
           </p>
         </div>
-        <button type="button" className="btn btn-primary" onClick={openNew}>
-          + New report
-        </button>
+        <div className="studio-head-actions">
+          <button type="button" className="btn btn-primary" onClick={() => setShowGen(true)}>
+            ⚡ Generate
+          </button>
+          <button type="button" className="btn btn-ghost" onClick={openNew}>
+            + New report
+          </button>
+        </div>
       </header>
+
+      <DashboardScopeBar orgId={orgId} scope={scope} onChange={setScope} noun="reports" />
 
       <div className="studio-tabs">
         <button
@@ -422,6 +450,17 @@ export default function Studio() {
             </div>
           </form>
         </div>
+      )}
+
+      {showGen && (
+        <SuggestIdeasModal
+          orgId={orgId}
+          target="report"
+          actionLabel="Generate →"
+          closeOnPick={false}
+          onPick={generateFromIdea}
+          onClose={() => setShowGen(false)}
+        />
       )}
     </main>
   )

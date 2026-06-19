@@ -4,6 +4,8 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import DropZone from '../components/ingest/DropZone'
+import HeroOrchestration from '../components/HeroOrchestration'
+import Footer from '../components/Footer'
 import { demoIngestSample, demoIngestUpload, demoSamples } from '../lib/api'
 import './home.css'
 import './ingest.css'
@@ -63,110 +65,87 @@ export default function Home() {
       <header className="dlh-hero">
         <div className="dlh-hero-copy">
           <span className="pill">
-            <span className="dot" /> Agentic analytics for your own company data
+            <span className="dot" /> AI agents that work 24/7
           </span>
           <h1 className="dlh-h1">
-            From reports to a{' '}
-            <span className="grad-text">control room that thinks</span>.
+            Turn your reports and data into{' '}
+            <span className="grad-text">agents working for you 24/7</span>.
           </h1>
           <p className="dlh-sub">
-            DeepLogic reads your reports and data, learns your connectors and
-            KPIs, and automatically builds an interactive dashboard and a live
-            mission control center — driven by an agentic workflow that watches,
-            explains, and acts.
+            Connect your reports and data once. DeepLogic turns them into smart
+            agents that work around the clock — finding answers, building charts,
+            watching your numbers, and telling you what to do next.
           </p>
           <div className="dlh-cta">
-            <a href="#demo" className="btn btn-primary">
-              Try the demo →
-            </a>
-            <Link to="/app" className="btn btn-ghost">
-              Open the product
+            <Link to="/onboarding" className="btn btn-primary">
+              Get Started →
             </Link>
           </div>
           <p className="dlh-micro">
-            No sign-up needed — pick a sample report or upload your own, and
-            watch a mission control center generate in seconds.
+            Start with your website — we'll read it, learn your business, find your
+            competitors, and set up your workspace while you watch.
           </p>
         </div>
 
-        {/* live console mockup (decorative) */}
-        <div className="console" aria-hidden="true">
-          <div className="con-top">
-            <i className="dot-r" />
-            <i className="dot-y" />
-            <i className="dot-g" />
-            <span className="con-title">DeepLogic · Mission Control</span>
-          </div>
-          <div className="grid2">
-            <div className="kpi">
-              <div className="k">Revenue</div>
-              <div className="v up">$4.2M</div>
-              <div className="d">▲ 12.4%</div>
-            </div>
-            <div className="kpi">
-              <div className="k">Active</div>
-              <div className="v">18.6k</div>
-              <div className="d">▲ 5.1%</div>
-            </div>
-            <div className="kpi">
-              <div className="k">Churn</div>
-              <div className="v">2.3%</div>
-              <div className="d">▼ 0.4%</div>
-            </div>
-            <div className="kpi">
-              <div className="k">NPS</div>
-              <div className="v up">61</div>
-              <div className="d">▲ 3</div>
-            </div>
+        {/* value-prop animation: orchestrator brain deploying agents around your data */}
+        <HeroOrchestration />
+      </header>
 
-            <div className="panel half">
-              <div className="ph">
-                <span>Pipeline by stage</span>
-                <span>Q2</span>
-              </div>
-              <div className="bars">
-                <b style={{ height: '40%' }} />
-                <b style={{ height: '62%' }} />
-                <b style={{ height: '48%' }} />
-                <b style={{ height: '78%' }} />
-                <b style={{ height: '90%' }} />
-                <b style={{ height: '66%' }} />
-                <b style={{ height: '84%' }} />
-              </div>
-            </div>
-            <div className="panel half">
-              <div className="ph">
-                <span>Agentic workflow</span>
-                <span style={{ color: 'var(--cyan)' }}>● live</span>
-              </div>
-              <div className="agent">
-                <span className="ic">1</span> Ingested report model{' '}
-                <span className="ok">done</span>
-              </div>
-              <div className="agent">
-                <span className="ic">2</span> Mapped 14 connectors{' '}
-                <span className="ok">done</span>
-              </div>
-              <div className="agent">
-                <span className="ic">3</span> Detected KPI anomaly{' '}
-                <span className="run">running</span>
-              </div>
-              <div className="agent">
-                <span className="ic">4</span> Drafting action brief{' '}
-                <span className="run">running</span>
-              </div>
-            </div>
+      {/* ---------------- partners ---------------- */}
+      <section className="dlh-partners" aria-label="Technology partners">
+        <span className="dlh-partners-label">In partnership with</span>
+        <div className="dlh-partners-logos">
+          {/* Microsoft */}
+          <span className="dlh-logo" title="Microsoft partner">
+            <svg viewBox="0 0 23 23" className="dlh-logo-mark" aria-hidden="true">
+              <rect x="0" y="0" width="10.5" height="10.5" fill="#F25022" />
+              <rect x="12.5" y="0" width="10.5" height="10.5" fill="#7FBA00" />
+              <rect x="0" y="12.5" width="10.5" height="10.5" fill="#00A4EF" />
+              <rect x="12.5" y="12.5" width="10.5" height="10.5" fill="#FFB900" />
+            </svg>
+            <span className="dlh-logo-word">Microsoft</span>
+          </span>
+
+          {/* NVIDIA */}
+          <span className="dlh-logo" title="NVIDIA partner">
+            <span className="dlh-logo-word dlh-logo-word--nvidia">NVIDIA</span>
+            <span className="dlh-logo-tm">Inception</span>
+          </span>
+        </div>
+      </section>
+
+      {/* ---------------- why / reassurance ---------------- */}
+      <section className="dlh-how">
+        <h2 className="dlh-h2">AI agents, without the risk or the rocket science.</h2>
+        <p className="dlh-lead">
+          You don't need to be technical. DeepLogic is the simple, secure way for
+          business owners to put the new wave of AI agents to work.
+        </p>
+        <div className="dlh-steps">
+          <div className="dlh-step">
+            <div className="n">✓</div>
+            <h3>Simple to start</h3>
+            <p>No code. No IT project. Connect your data and you're up and running in minutes.</p>
+          </div>
+          <div className="dlh-step">
+            <div className="n">🔒</div>
+            <h3>Safe by design</h3>
+            <p>Your data stays private. Agents follow your rules — and you approve anything important before it happens.</p>
+          </div>
+          <div className="dlh-step">
+            <div className="n">⏰</div>
+            <h3>Always on</h3>
+            <p>Your agents keep working day and night — researching, watching your numbers, and flagging what needs you.</p>
           </div>
         </div>
-      </header>
+      </section>
 
       {/* ---------------- live demo ---------------- */}
       <section id="demo" className="dlh-demo">
-        <h2 className="dlh-h2">See your mission control center generate.</h2>
+        <h2 className="dlh-h2">See it for yourself.</h2>
         <p className="dlh-lead">
-          Use a sample report, or bring your own. DeepLogic analyzes it,
-          maps the KPIs, and spins up an interactive mission control you can click
-          through — instantly, no account required.
+          Pick an example or add your own file. In a few seconds you'll get
+          charts you can click around. No account needed.
         </p>
 
         {error && (
@@ -180,7 +159,7 @@ export default function Home() {
           <div className="dli-samples">
             <div className="dli-section-head">
               <p className="dli-section-sub">
-                Pre-built sample reports — ingested instantly.
+                Ready-made examples — open one in a click.
               </p>
             </div>
             <div className="dli-sample-grid">
@@ -223,48 +202,40 @@ export default function Home() {
       {/* ---------------- how it works ---------------- */}
       <section id="how" className="dlh-how">
         <h2 className="dlh-h2">
-          From a report to a thinking control center.
+          How it works
         </h2>
         <p className="dlh-lead">
-          No re-platforming, no rebuilding your stack. DeepLogic starts from
-          what you already have and layers intelligence on top.
+          Three easy steps. No setup headaches — start with what you already have.
         </p>
         <div className="dlh-steps">
           <div className="dlh-step">
             <div className="n">1</div>
-            <h3>Ingest &amp; understand</h3>
+            <h3>Add your data</h3>
             <p>
-              Drop in a report or pick a sample. DeepLogic parses the
-              data model, relationships, measures and visuals to understand your
-              connectors and KPIs.
+              Drop in a file or pick an example. DeepLogic reads it and learns
+              your numbers — no setup needed.
             </p>
           </div>
           <div className="dlh-step">
             <div className="n">2</div>
-            <h3>Generate dashboards</h3>
+            <h3>Get clear charts</h3>
             <p>
-              It automatically assembles clean, interactive dashboards — the
-              right charts for the right metrics — and a unified mission control
-              view across every connected system.
+              It builds easy charts and one simple page that shows how your
+              business is really doing.
             </p>
           </div>
           <div className="dlh-step">
             <div className="n">3</div>
-            <h3>Deploy agents</h3>
+            <h3>Your agents work 24/7</h3>
             <p>
-              An agentic workflow monitors KPIs, surfaces anomalies, explains
-              the "why," and recommends or triggers the next action — so the
-              dashboard works for you.
+              Your agents never clock out — they watch your numbers, flag
+              problems, explain why, and tell you the next move.
             </p>
           </div>
         </div>
-
-        <div className="dlh-bottom-cta">
-          <Link to="/signup" className="btn btn-primary">
-            Get started free →
-          </Link>
-        </div>
       </section>
+
+      <Footer />
     </main>
   )
 }

@@ -1,6 +1,6 @@
 // Settings — workspace settings with General, Members, AI Providers, and Billing tabs.
 
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import {
@@ -21,6 +21,9 @@ import {
   type BillingSubscription,
 } from '../lib/api'
 import AiSettingsCard from '../components/studio/AiSettingsCard'
+import OrgoIntegrationCard from '../components/settings/OrgoIntegrationCard'
+import { SKINS, readSkin, saveSkin } from '../styles/skins'
+import { getPlatformStatus, type PlatformStatus } from '../lib/api'
 import './settings.css'
 
 const ROLES: OrgRole[] = ['owner', 'admin', 'member']
@@ -32,7 +35,7 @@ const PLAN_LABELS: Record<string, string> = {
   enterprise: 'Enterprise',
 }
 
-type Tab = 'general' | 'members' | 'ai' | 'billing'
+type Tab = 'general' | 'members' | 'ai' | 'integrations' | 'billing' | 'appearance' | 'profile' | 'status'
 
 export default function Settings() {
   const { orgId = '' } = useParams<{ orgId: string }>()
@@ -41,7 +44,11 @@ export default function Settings() {
   const activeTab: Tab =
     rawTab === 'members' ? 'members' :
     rawTab === 'ai' ? 'ai' :
+    rawTab === 'integrations' ? 'integrations' :
     rawTab === 'billing' ? 'billing' :
+    rawTab === 'appearance' ? 'appearance' :
+    rawTab === 'profile' ? 'profile' :
+    rawTab === 'status' ? 'status' :
     'general'
 
   const { orgs, user, getAccessToken, refreshOrgs } = useAuth()
@@ -56,10 +63,14 @@ export default function Settings() {
   }
 
   const TABS: { id: Tab; label: string }[] = [
-    { id: 'general',  label: 'General' },
-    { id: 'members',  label: 'Team' },
-    { id: 'ai',       label: 'AI Providers' },
-    { id: 'billing',  label: 'Billing' },
+    { id: 'profile',    label: 'Profile' },
+    { id: 'general',    label: 'General' },
+    { id: 'appearance', label: 'Appearance' },
+    { id: 'members',    label: 'Team' },
+    { id: 'ai',         label: 'AI Providers' },
+    { id: 'integrations', label: 'Integrations' },
+    { id: 'billing',    label: 'Billing' },
+    { id: 'status',     label: 'Status' },
   ]
 
   return (
@@ -108,9 +119,21 @@ export default function Settings() {
         />
       )}
 
+      {activeTab === 'profile' && <ProfileTab />}
+
+      {activeTab === 'status' && <StatusTab orgId={orgId} getAccessToken={getAccessToken} />}
+
+      {activeTab === 'appearance' && <AppearanceTab />}
+
       {activeTab === 'ai' && (
         <div className="dl-set__tab-body">
           <AiSettingsCard orgId={orgId} getToken={() => getAccessToken().then((t) => t ?? '')} />
+        </div>
+      )}
+
+      {activeTab === 'integrations' && (
+        <div className="dl-set__tab-body">
+          <OrgoIntegrationCard orgId={orgId} getToken={() => getAccessToken().then((t) => t ?? '')} />
         </div>
       )}
 
@@ -291,6 +314,318 @@ function GeneralTab({ orgId, orgName, orgSlug, canManage, getAccessToken, refres
               </div>
               {o.id === orgId && <span className="dl-set__ws-current">current</span>}
             </div>
+          ))}
+        </div>
+      </section>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Profile tab — your name, avatar, and password (Supabase auth user)
+// ---------------------------------------------------------------------------
+
+function initialsOf(name: string, email: string): string {
+  const base = name.trim() || email.split('@')[0] || '?'
+  const parts = base.split(/[\s._-]+/).filter(Boolean)
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase()
+  return base.slice(0, 2).toUpperCase()
+}
+
+// Resize an image client-side to a small square data URI (avatar).
+function avatarDataUri(file: File, size = 160): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    const url = URL.createObjectURL(file)
+    img.onload = () => {
+      URL.revokeObjectURL(url)
+      const canvas = document.createElement('canvas')
+      canvas.width = size
+      canvas.height = size
+      const ctx = canvas.getContext('2d')
+      if (!ctx) { reject(new Error('canvas unsupported')); return }
+      const s = Math.min(img.naturalWidth, img.naturalHeight)
+      const sx = (img.naturalWidth - s) / 2
+      const sy = (img.naturalHeight - s) / 2
+      ctx.drawImage(img, sx, sy, s, s, 0, 0, size, size)
+      resolve(canvas.toDataURL('image/jpeg', 0.85))
+    }
+    img.onerror = () => reject(new Error('Could not read image'))
+    img.src = url
+  })
+}
+
+function ProfileTab() {
+  const { user, updateProfile, updatePassword } = useAuth()
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  const [name, setName] = useState(user?.name ?? '')
+  const [nameBusy, setNameBusy] = useState(false)
+  const [nameMsg, setNameMsg] = useState<string | null>(null)
+
+  const [avatar, setAvatar] = useState(user?.avatarUrl ?? '')
+  const [avatarBusy, setAvatarBusy] = useState(false)
+  const [avatarErr, setAvatarErr] = useState<string | null>(null)
+
+  const [pw, setPw] = useState('')
+  const [pw2, setPw2] = useState('')
+  const [pwBusy, setPwBusy] = useState(false)
+  const [pwMsg, setPwMsg] = useState<string | null>(null)
+  const [pwErr, setPwErr] = useState<string | null>(null)
+
+  useEffect(() => { setName(user?.name ?? ''); setAvatar(user?.avatarUrl ?? '') }, [user?.name, user?.avatarUrl])
+
+  async function saveName(e: FormEvent) {
+    e.preventDefault()
+    setNameBusy(true); setNameMsg(null)
+    const { error } = await updateProfile({ name: name.trim() })
+    setNameMsg(error ?? 'Saved')
+    setNameBusy(false)
+    if (!error) setTimeout(() => setNameMsg(null), 2500)
+  }
+
+  async function onPickAvatar(file: File | undefined) {
+    if (!file) return
+    setAvatarErr(null); setAvatarBusy(true)
+    try {
+      const uri = await avatarDataUri(file)
+      const { error } = await updateProfile({ avatarUrl: uri })
+      if (error) setAvatarErr(error)
+      else setAvatar(uri)
+    } catch (e) {
+      setAvatarErr(e instanceof Error ? e.message : 'Upload failed')
+    } finally {
+      setAvatarBusy(false)
+      if (fileRef.current) fileRef.current.value = ''
+    }
+  }
+
+  async function removeAvatar() {
+    setAvatarBusy(true); setAvatarErr(null)
+    const { error } = await updateProfile({ avatarUrl: '' })
+    if (error) setAvatarErr(error); else setAvatar('')
+    setAvatarBusy(false)
+  }
+
+  async function savePw(e: FormEvent) {
+    e.preventDefault()
+    setPwErr(null); setPwMsg(null)
+    if (pw.length < 6) { setPwErr('Password must be at least 6 characters.'); return }
+    if (pw !== pw2) { setPwErr('Passwords do not match.'); return }
+    setPwBusy(true)
+    const { error } = await updatePassword(pw)
+    if (error) setPwErr(error)
+    else { setPwMsg('Password updated.'); setPw(''); setPw2('') }
+    setPwBusy(false)
+  }
+
+  return (
+    <div className="dl-set__tab-body">
+      <section className="rounded-card dl-set__card">
+        <div className="dl-set__cardhead"><h2>Profile</h2></div>
+
+        <div className="dl-prof-row">
+          <div className="dl-prof-avatar">
+            {avatar
+              ? <img src={avatar} alt="Profile" />
+              : <span>{initialsOf(name, user?.email ?? '')}</span>}
+          </div>
+          <div className="dl-prof-avatar-actions">
+            <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }}
+              onChange={(e) => void onPickAvatar(e.target.files?.[0])} />
+            <button className="btn btn-secondary" type="button" disabled={avatarBusy}
+              onClick={() => fileRef.current?.click()}>
+              {avatarBusy ? 'Uploading…' : avatar ? 'Change photo' : 'Upload photo'}
+            </button>
+            {avatar && (
+              <button className="btn btn-ghost" type="button" disabled={avatarBusy} onClick={() => void removeAvatar()}>
+                Remove
+              </button>
+            )}
+            {avatarErr && <div className="dl-set__error">{avatarErr}</div>}
+          </div>
+        </div>
+
+        <form className="dl-set__rename-form" onSubmit={saveName}>
+          <label className="dl-prof-field">
+            <span>Name</span>
+            <input className="dl-input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" maxLength={80} />
+          </label>
+          <label className="dl-prof-field">
+            <span>Email</span>
+            <input className="dl-input" value={user?.email ?? ''} readOnly disabled />
+          </label>
+          <div className="dl-set__rename-actions">
+            <button className="btn btn-primary" type="submit" disabled={nameBusy}>{nameBusy ? 'Saving…' : 'Save'}</button>
+            {nameMsg && <span className="dl-set__success">{nameMsg}</span>}
+          </div>
+        </form>
+      </section>
+
+      <section className="rounded-card dl-set__card">
+        <div className="dl-set__cardhead"><h2>Change password</h2></div>
+        {pwErr && <div className="dl-set__error" role="alert">{pwErr}</div>}
+        {pwMsg && <div className="dl-set__success" role="status">{pwMsg}</div>}
+        <form className="dl-set__rename-form" onSubmit={savePw}>
+          <label className="dl-prof-field">
+            <span>New password</span>
+            <input className="dl-input" type="password" value={pw} onChange={(e) => setPw(e.target.value)} autoComplete="new-password" placeholder="••••••••" />
+          </label>
+          <label className="dl-prof-field">
+            <span>Confirm password</span>
+            <input className="dl-input" type="password" value={pw2} onChange={(e) => setPw2(e.target.value)} autoComplete="new-password" placeholder="••••••••" />
+          </label>
+          <div className="dl-set__rename-actions">
+            <button className="btn btn-primary" type="submit" disabled={pwBusy || !pw}>{pwBusy ? 'Updating…' : 'Update password'}</button>
+          </div>
+        </form>
+      </section>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Status tab — platform health
+// ---------------------------------------------------------------------------
+
+function StatusTab({
+  orgId,
+  getAccessToken,
+}: {
+  orgId: string
+  getAccessToken: () => Promise<string | null>
+}) {
+  const [status, setStatus] = useState<PlatformStatus | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const token = await getAccessToken()
+      if (!token) throw new Error('Session expired')
+      setStatus(await getPlatformStatus(token, orgId))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load status.')
+    } finally {
+      setLoading(false)
+    }
+  }, [getAccessToken, orgId])
+
+  useEffect(() => { void load() }, [load])
+
+  type Row = { label: string; state: 'ok' | 'warn' | 'down'; detail: string }
+  const rows: Row[] = status ? [
+    { label: 'API server', state: status.api.ok ? 'ok' : 'down', detail: status.api.ok ? 'Online' : 'Unreachable' },
+    { label: 'Database', state: status.database.ok ? 'ok' : 'down', detail: status.database.ok ? 'Connected' : 'Unreachable' },
+    { label: 'Authentication', state: status.auth.ok ? 'ok' : 'down', detail: status.auth.ok ? 'Verified' : 'Failing' },
+    {
+      label: 'AI provider',
+      state: status.ai.configured ? 'ok' : (status.ai.envKey ? 'ok' : 'warn'),
+      detail: status.ai.configured
+        ? `Connected · ${status.ai.provider}${status.ai.model ? ` (${status.ai.model})` : ''}`
+        : status.ai.envKey ? 'Using server ANTHROPIC_API_KEY' : 'Not configured — add a key in AI Providers',
+    },
+    {
+      label: 'Web research',
+      state: 'ok',
+      detail: status.webSearch.mode === 'brave' ? 'Brave Search (API key)' : 'DuckDuckGo (keyless)',
+    },
+  ] : []
+
+  const DOT: Record<Row['state'], { color: string; label: string }> = {
+    ok: { color: '#5fcf8a', label: 'Operational' },
+    warn: { color: '#febc2e', label: 'Attention' },
+    down: { color: '#ff5f57', label: 'Down' },
+  }
+  const allOk = rows.every((r) => r.state === 'ok')
+
+  return (
+    <div className="dl-set__tab-body">
+      <section className="rounded-card dl-set__card">
+        <div className="dl-set__cardhead">
+          <h2>Platform status</h2>
+          {status && (
+            <span className={`dl-status-overall ${allOk ? 'ok' : 'warn'}`}>
+              {allOk ? 'All systems operational' : 'Needs attention'}
+            </span>
+          )}
+          <button className="btn btn-ghost btn-xs" onClick={() => void load()} disabled={loading} style={{ marginLeft: 'auto' }}>
+            {loading ? 'Checking…' : '↻ Refresh'}
+          </button>
+        </div>
+
+        {error && <div className="dl-set__error" role="alert">{error}</div>}
+        {loading && !status ? (
+          <div className="dl-set__empty">Checking services…</div>
+        ) : (
+          <div className="dl-status-list">
+            {rows.map((r) => (
+              <div className="dl-status-row" key={r.label}>
+                <span className="dl-status-dot" style={{ background: DOT[r.state].color }} />
+                <span className="dl-status-name">{r.label}</span>
+                <span className="dl-status-detail">{r.detail}</span>
+                <span className="dl-status-state" style={{ color: DOT[r.state].color }}>{DOT[r.state].label}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        {status && (
+          <div className="dl-status-checked">Last checked {new Date(status.checkedAt).toLocaleTimeString()}</div>
+        )}
+      </section>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Appearance tab — skin picker (applies to both light & dark, per-device)
+// ---------------------------------------------------------------------------
+
+function AppearanceTab() {
+  const [skin, setSkinState] = useState<string>(readSkin)
+
+  function choose(id: string) {
+    setSkinState(id)
+    saveSkin(id) // dispatches event → ThemeManager re-applies instantly
+  }
+
+  return (
+    <div className="dl-set__tab-body">
+      <section className="rounded-card dl-set__card">
+        <div className="dl-set__cardhead">
+          <h2>Theme style</h2>
+        </div>
+        <p className="dl-set__hint">
+          Pick a palette for the whole platform — it restyles both light and dark mode
+          (toggle modes with 🌙 / ☀️ in the top bar). Generated widgets &amp; reports follow
+          your choice too. Saved on this device.
+        </p>
+
+        <div className="dl-skin-grid">
+          {SKINS.map((s) => (
+            <button
+              key={s.id}
+              type="button"
+              className={`dl-skin-card${skin === s.id ? ' selected' : ''}`}
+              onClick={() => choose(s.id)}
+            >
+              <span className="dl-skin-preview" style={{ background: s.swatch.bg }}>
+                <span className="dl-skin-preview-card" style={{ background: s.swatch.card }}>
+                  <span className="dl-skin-preview-dot" style={{ background: s.swatch.accent }} />
+                  <span className="dl-skin-preview-line" style={{ background: s.swatch.ink, opacity: 0.85 }} />
+                  <span className="dl-skin-preview-line short" style={{ background: s.swatch.ink, opacity: 0.4 }} />
+                </span>
+              </span>
+              <span className="dl-skin-meta">
+                <span className="dl-skin-name">
+                  {s.label}
+                  {skin === s.id && <span className="dl-skin-check">✓</span>}
+                </span>
+                <span className="dl-skin-desc">{s.description}</span>
+              </span>
+            </button>
           ))}
         </div>
       </section>

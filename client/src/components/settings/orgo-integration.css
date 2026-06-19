@@ -1,0 +1,51 @@
+/* Orgo.ai integration card — Settings → Integrations */
+
+.orgo-card {
+  border: 1px solid var(--line); border-radius: 16px; background: var(--card);
+  padding: 20px 22px; max-width: 720px; display: flex; flex-direction: column; gap: 16px;
+}
+.orgo-empty { color: var(--mut); font-size: 14px; }
+
+.orgo-head { display: flex; align-items: flex-start; gap: 14px; }
+.orgo-logo {
+  width: 42px; height: 42px; flex: none; border-radius: 11px;
+  display: flex; align-items: center; justify-content: center; font-size: 22px;
+  background: var(--bg2); border: 1px solid var(--line);
+}
+.orgo-head-text { flex: 1; min-width: 0; }
+.orgo-head-text h2 { font-size: 17px; font-weight: 800; letter-spacing: -.02em; }
+.orgo-head-text p { font-size: 13px; color: var(--mut); line-height: 1.5; margin-top: 3px; }
+
+/* toggle switch */
+.orgo-switch { flex: none; cursor: pointer; }
+.orgo-switch input { position: absolute; opacity: 0; width: 0; height: 0; }
+.orgo-switch-track {
+  display: block; width: 42px; height: 24px; border-radius: 99px;
+  background: var(--line); transition: background .15s; position: relative;
+}
+.orgo-switch-thumb {
+  position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%;
+  background: #fff; transition: transform .15s; box-shadow: 0 1px 3px rgba(0,0,0,.3);
+}
+.orgo-switch.is-on .orgo-switch-track { background: var(--cyan); }
+.orgo-switch.is-on .orgo-switch-thumb { transform: translateX(18px); }
+
+.orgo-status { font-size: 12.5px; line-height: 1.4; padding: 9px 12px; border-radius: 10px; }
+.orgo-status--on { color: var(--good); background: rgba(95, 207, 138, .08); border: 1px solid rgba(95, 207, 138, .3); }
+.orgo-status--off { color: var(--mut); background: var(--bg2); border: 1px solid var(--line); }
+
+.orgo-field { display: flex; flex-direction: column; gap: 6px; }
+.orgo-field > span { font-size: 13px; font-weight: 600; }
+.orgo-haskey { color: var(--good); font-weight: 500; font-style: normal; font-size: 12px; }
+.orgo-input {
+  width: 100%; padding: 9px 12px; border-radius: 10px;
+  border: 1px solid var(--line); background: var(--bg2); color: var(--ink); font-size: 13.5px;
+}
+.orgo-input:focus { outline: none; border-color: var(--cyan); }
+.orgo-hint { font-size: 12px; color: var(--mut); line-height: 1.4; }
+.orgo-hint a { color: var(--cyan); }
+
+.orgo-error { font-size: 13px; color: var(--bad); }
+.orgo-note { font-size: 13px; color: var(--good); }
+
+.orgo-actions { display: flex; gap: 10px; justify-content: flex-end; }

@@ -75,6 +75,7 @@ dashboardsRouter.get('/orgs/:orgId/dashboards', requireMember(), async (req: Req
       slug: b.slug,
       visibility: b.visibility,
       description: b.description,
+      group: b.group_name ?? null,
       ownerId: b.owner_id,
       isOwner: b.owner_id === req.user!.id,
       widgetCount: counts[b.id] ?? 0,
@@ -90,7 +91,7 @@ dashboardsRouter.get('/orgs/:orgId/dashboards', requireMember(), async (req: Req
 // POST /orgs/:orgId/dashboards { name, description? }
 dashboardsRouter.post('/orgs/:orgId/dashboards', requireMember(), async (req: Request, res: Response) => {
   const { orgId } = req.params;
-  const { name, description } = req.body ?? {};
+  const { name, description, group } = req.body ?? {};
   if (!name?.trim()) { res.status(400).json({ error: 'Name required' }); return; }
 
   let slug = slugify(name.trim());
@@ -105,13 +106,13 @@ dashboardsRouter.post('/orgs/:orgId/dashboards', requireMember(), async (req: Re
   try {
     const { data, error } = await req.db!
       .from('dashboards')
-      .insert({ id: randomUUID(), org_id: orgId, owner_id: req.user!.id, name: name.trim(), slug, description: description?.trim() || null })
+      .insert({ id: randomUUID(), org_id: orgId, owner_id: req.user!.id, name: name.trim(), slug, description: description?.trim() || null, group_name: (typeof group === 'string' && group.trim()) ? group.trim() : null })
       .select('*')
       .single();
     if (error) throw new Error(error.message);
     res.status(201).json({
       id: data.id, name: data.name, slug: data.slug, visibility: data.visibility,
-      description: data.description, ownerId: data.owner_id, isOwner: true, widgetCount: 0,
+      description: data.description, group: data.group_name ?? null, ownerId: data.owner_id, isOwner: true, widgetCount: 0,
       createdAt: data.created_at, updatedAt: data.updated_at,
     });
   } catch (err) {
@@ -135,7 +136,7 @@ dashboardsRouter.get('/orgs/:orgId/dashboards/:id', requireMember(), async (req:
 
     res.json({
       id: board.id, name: board.name, slug: board.slug, visibility: board.visibility,
-      description: board.description, ownerId: board.owner_id,
+      description: board.description, group: board.group_name ?? null, ownerId: board.owner_id,
       isOwner: board.owner_id === req.user!.id,
       widgets: (widgets ?? []).map((r) => mapWidget(r as Record<string, unknown>)),
       createdAt: board.created_at, updatedAt: board.updated_at,
@@ -157,6 +158,7 @@ dashboardsRouter.patch('/orgs/:orgId/dashboards/:id', requireMember(), async (re
     if (typeof body.name === 'string' && body.name.trim()) patch.name = body.name.trim();
     if (['private', 'org', 'published'].includes(body.visibility)) patch.visibility = body.visibility;
     if (typeof body.description === 'string') patch.description = body.description.trim() || null;
+    if (typeof body.group === 'string') patch.group_name = body.group.trim() || null;
     const { error } = await req.db!.from('dashboards').update(patch).eq('id', id).eq('org_id', orgId);
     if (error) throw new Error(error.message);
     res.json({ ok: true });
@@ -205,24 +207,27 @@ function mapWidget(row: Record<string, unknown>, userId?: string) {
   };
 }
 
-const WIDGET_SYSTEM = `You are a data widget generator for a dark-theme business intelligence dashboard.
+const WIDGET_SYSTEM = `You are a data widget generator for the DeepLogic dashboard — a platform with BOTH light and dark themes.
 Generate a SINGLE self-contained HTML fragment (no <html>/<head>/<body> wrapper) — just a root <div class="wg"> with inline styles and vanilla JS/SVG if needed.
 
-Design rules:
-- Background: #0a1628 or transparent (parent is dark)
-- Primary text: #e8f4f8
-- Accent / highlight: #6fe3f0
-- Success: #3ecf8e  Error/alert: #e07a8a  Muted: #6b7f96
-- Font: system-ui, -apple-system, sans-serif
-- Rounded corners: 12px cards inside the widget
-- The widget fills 100% of its container width and height
+CRITICAL — stay on-brand and theme-aware. The platform injects these CSS variables (they flip automatically between light and dark). USE them and do NOT hardcode hex colors or a fixed/opaque page background:
+- primary text: var(--ink)    muted text: var(--mut)
+- card/panel surface: var(--card)    subtle panel: var(--card2)
+- borders: var(--line)
+- accent / highlight / links: var(--cyan)    secondary accent: var(--blue)
+- success: var(--good)    warning: var(--warn)    error/alert: var(--bad)
+- gradient for emphasis (big numbers, bars): var(--grad)
+The widget's own background must be transparent or var(--card) — never a fixed dark color. Font: inherit (system-ui). It MUST look correct in both light and dark.
+
+Layout: rounded 12px cards; the widget fills 100% of its container width and height.
 
 Widget type rules:
-- kpi: show the key metric very large (≥32px), a label above, trend arrow + pct vs prev period, sparkline if data available
-- chart: pure SVG chart (bar, line, or pie) — NO external libraries; label axes, include legend
-- table: max 10 rows, sticky header, alternate row shading (#0d1e35 / #0a1628)
-- insight: a short AI-written narrative paragraph with a headline, styled like a card
-- alert: large icon (✓ or ⚠), status label, metric value, threshold shown; green when ok, red when fired
+- kpi: key metric very large (≥32px) in var(--ink); label above in var(--mut); trend arrow + pct vs prev period in var(--good)/var(--bad); sparkline if data available
+- chart: pure inline SVG (bar, line, or pie) — NO external libraries; series in var(--cyan)/var(--blue), axes/labels in var(--mut), gridlines in var(--line); include a legend
+- table: max 10 rows, sticky header; alternate row shading with a faint neutral overlay like rgba(127,127,127,0.06) so it works on any background
+- insight: a short AI-written narrative with a headline, in a card using var(--card) + 1px var(--line) border
+- alert: large icon (✓ or ⚠), status label, metric value, threshold; var(--good) when ok, var(--bad) when fired
+- news: list of headlines with source + time in var(--mut); links in var(--cyan)
 - embed: not generated by AI — skip
 
 Return ONLY the HTML starting with <div class="wg". No markdown fences, no explanation.`;
@@ -302,8 +307,8 @@ dashboardsRouter.post(
         .insert({
           id: wid, org_id: orgId, dashboard_id: dashboardId, owner_id: req.user!.id,
           name: name.trim(), type: type ?? 'insight', html: seedHtml ?? null, prompt: prompt ?? null,
-          grid_x: gridX, grid_y: gridY, grid_w: Math.min(4, Math.max(1, gridW)),
-          grid_h: Math.min(5, Math.max(1, gridH)),
+          grid_x: gridX, grid_y: gridY, grid_w: Math.min(12, Math.max(1, gridW)),
+          grid_h: Math.min(12, Math.max(1, gridH)),
           sources: sources ?? [], alert_rule: alertRule ?? null,
           created_at: now, updated_at: now,
         })
@@ -331,8 +336,8 @@ dashboardsRouter.patch(
       if (typeof body.prompt === 'string') patch.prompt = body.prompt;
       if (typeof body.gridX === 'number') patch.grid_x = body.gridX;
       if (typeof body.gridY === 'number') patch.grid_y = body.gridY;
-      if (typeof body.gridW === 'number') patch.grid_w = Math.min(4, Math.max(1, body.gridW));
-      if (typeof body.gridH === 'number') patch.grid_h = Math.min(5, Math.max(1, body.gridH));
+      if (typeof body.gridW === 'number') patch.grid_w = Math.min(12, Math.max(1, body.gridW));
+      if (typeof body.gridH === 'number') patch.grid_h = Math.min(12, Math.max(1, body.gridH));
       if (Array.isArray(body.sources)) patch.sources = body.sources;
       if (body.alertRule !== undefined) patch.alert_rule = body.alertRule;
       const { data, error } = await serviceClient
@@ -424,8 +429,8 @@ dashboardsRouter.patch('/orgs/:orgId/widgets/:wid', requireMember(), async (req:
     const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
     if (typeof body.name === 'string' && body.name.trim()) patch.name = body.name.trim();
     if (typeof body.prompt === 'string') patch.prompt = body.prompt;
-    if (typeof body.gridW === 'number') patch.grid_w = Math.min(4, Math.max(1, body.gridW));
-    if (typeof body.gridH === 'number') patch.grid_h = Math.min(5, Math.max(1, body.gridH));
+    if (typeof body.gridW === 'number') patch.grid_w = Math.min(12, Math.max(1, body.gridW));
+    if (typeof body.gridH === 'number') patch.grid_h = Math.min(12, Math.max(1, body.gridH));
     if (Array.isArray(body.sources)) patch.sources = body.sources;
     const { data, error } = await req.db!.from('widgets').update(patch).eq('id', wid).eq('org_id', orgId).select('*').maybeSingle();
     if (error || !data) { res.status(404).json({ error: 'Widget not found' }); return; }

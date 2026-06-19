@@ -142,6 +142,12 @@ button {
   opacity: 0.12;
 }
 
+/* Slate skin: flat & grey — no colored glow blobs. */
+[data-skin='slate'] .glow::before,
+[data-skin='slate'] .glow::after {
+  display: none;
+}
+
 /* ---------- buttons (ported from landing) ---------- */
 .btn {
   display: inline-flex;
@@ -172,6 +178,16 @@ button {
 .btn-primary:hover {
   opacity: 0.92;
   transform: translateY(-1px);
+}
+/* Light mode: subtle neutral-grey primary buttons with white text (no blue-grey). */
+[data-theme='light'] .btn-primary {
+  background: #4a4d52;
+  color: #ffffff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+[data-theme='light'] .btn-primary:hover {
+  background: #3c3f44;
+  opacity: 1;
 }
 .btn-ghost {
   border-color: var(--line);
@@ -231,12 +247,12 @@ nav.dl-nav {
   gap: 11px;
   font-weight: 700;
   letter-spacing: 0.14em;
-  font-size: 15px;
+  font-size: 22px;
   color: var(--ink);
 }
 .brand .mark {
-  width: 30px;
-  height: 30px;
+  width: 44px;
+  height: 44px;
 }
 .links {
   display: flex;
@@ -275,7 +291,7 @@ nav.dl-nav {
   width: 26px;
   height: 26px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #6fe3f0, #5560e8);
+  background: var(--grad);
   color: #fff;
   font-size: 11px;
   font-weight: 700;
@@ -283,6 +299,11 @@ nav.dl-nav {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  overflow: hidden;
+}
+.dl-user-avatar--img {
+  object-fit: cover;
+  background: transparent;
 }
 .dl-user-email {
   max-width: 160px;

@@ -7,7 +7,7 @@
 // under the caller's RLS context (defense in depth on top of the route checks).
 
 import type { Request, Response, NextFunction } from 'express';
-import { getUserFromToken, userClientFor, serviceClient } from './supabase.js';
+import { getUserFromToken, userClientFor, mintPgToken, serviceClient } from './supabase.js';
 import { getOrgLimits, getMonthlyTokens, type PlanLimits } from './billing.js';
 
 /** Pull the JWT from Authorization: Bearer or the ?token query (for SSE). */
@@ -38,7 +38,9 @@ export async function requireAuth(
   }
   req.user = user;
   req.token = token;
-  req.db = userClientFor(token);
+  // Use a server-minted HS256 token PostgREST trusts (the incoming token may be
+  // ES256, which the local data layer can't validate). RLS still scopes to this user.
+  req.db = userClientFor(mintPgToken(user.id, user.email));
   next();
 }
 

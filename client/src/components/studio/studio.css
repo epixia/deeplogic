@@ -25,6 +25,39 @@
   letter-spacing: -0.02em;
   margin-top: 8px;
 }
+.studio-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+/* Dashboard scope selector (isolate widgets/reports by dashboard) */
+.dl-scopebar {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0 0 18px;
+}
+.dl-scopebar-label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--mut);
+}
+.dl-scopebar-select {
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 9px;
+  border: 1px solid var(--line);
+  background: var(--bg2);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.dl-scopebar-select:focus { outline: none; border-color: var(--cyan); }
 .studio-head p.studio-lead {
   color: var(--mut);
   font-size: 15px;

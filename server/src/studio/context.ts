@@ -130,6 +130,8 @@ export async function compileContext(
   const htmls = enabled.filter((i) => i.kind === 'html');
   const mcps = enabled.filter((i) => i.kind === 'mcp');
   const notes = enabled.filter((i) => i.kind === 'note');
+  const websites = enabled.filter((i) => i.kind === 'website');
+  const dataFiles = enabled.filter((i) => i.kind === 'data');
 
   const parts: string[] = [];
   parts.push('# CONTEXT.md');
@@ -140,6 +142,37 @@ export async function compileContext(
 
   // Per-report Data Vault first — it's the most specific to this report.
   parts.push(...(await renderVault(vault ?? [])));
+
+  if (websites.length) {
+    parts.push('## Websites');
+    parts.push('Live website content fetched at compile time. Use it as up-to-date reference material.');
+    for (const w of websites) {
+      const meta = (w.meta ?? {}) as Record<string, unknown>;
+      const url = typeof meta.url === 'string' ? meta.url : '';
+      parts.push(`### ${w.name}${url ? ` (${url})` : ''}`);
+      if (url) {
+        const data = await fetchUrlContent(url);
+        parts.push('```\n' + data + '\n```');
+      } else if (w.content) {
+        parts.push(w.content);
+      }
+    }
+  }
+
+  if (dataFiles.length) {
+    parts.push('## Data files');
+    parts.push('Uploaded tabular data (CSV / spreadsheets). Use these exact rows and numbers; do not invent values.');
+    for (const d of dataFiles) {
+      const meta = (d.meta ?? {}) as Record<string, unknown>;
+      const fmt = typeof meta.format === 'string' ? meta.format : '';
+      parts.push(`### ${d.name}${fmt ? ` (${fmt})` : ''}`);
+      if (d.content) {
+        parts.push('```\n' + d.content + '\n```');
+      } else {
+        parts.push('(Binary spreadsheet attached — export to CSV for full analysis.)');
+      }
+    }
+  }
 
   if (docs.length) {
     parts.push('## Documents');

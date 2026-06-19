@@ -4,12 +4,14 @@
 // overrides) flips with the app toggle.
 
 import { useEffect, useState } from 'react'
+import { skinFrameCss, SKIN_EVENT } from '../../styles/skins'
 
 /** Current app theme ('light' | 'dark'), reacting to the nav toggle. */
 export function useAppTheme(): string {
   const read = () =>
     document.documentElement.getAttribute('data-theme') || 'dark'
   const [theme, setTheme] = useState<string>(read)
+  const [, force] = useState(0)
   useEffect(() => {
     const update = () => setTheme(read())
     const mo = new MutationObserver(update)
@@ -17,20 +19,39 @@ export function useAppTheme(): string {
       attributes: true,
       attributeFilter: ['data-theme'],
     })
+    // Re-render theme consumers (and re-read the active skin) on skin change.
+    const onSkin = () => force((n) => n + 1)
+    window.addEventListener(SKIN_EVENT, onSkin)
     update()
-    return () => mo.disconnect()
+    return () => { mo.disconnect(); window.removeEventListener(SKIN_EVENT, onSkin) }
   }, [])
   return theme
 }
 
-/** Inject (or replace) data-theme on the report's <html> tag. */
+/**
+ * Make a report respect the app theme: set data-theme on <html> AND inject the
+ * platform palette CSS variables (so report CSS using var(--ink), var(--bg) … —
+ * as instructed by the system prompt — resolves and flips with the theme).
+ */
 export function applyReportTheme(html: string, theme: string): string {
   if (!html) return html
-  if (/<html[\s>]/i.test(html)) {
-    return html.replace(/<html([^>]*)>/i, (_m, attrs: string) => {
+  let out = html
+  // 1) data-theme on <html>
+  if (/<html[\s>]/i.test(out)) {
+    out = out.replace(/<html([^>]*)>/i, (_m, attrs: string) => {
       const cleaned = attrs.replace(/\s*data-theme="[^"]*"/i, '')
       return `<html${cleaned} data-theme="${theme}">`
     })
+  } else {
+    out = `<!doctype html><html data-theme="${theme}"><head></head><body>${out}</body></html>`
   }
-  return `<!doctype html><html data-theme="${theme}"><body>${html}</body></html>`
+  // 2) inject the active skin's palette variables (replace any prior block)
+  const styleTag = `<style id="dl-theme-vars">${skinFrameCss()}</style>`
+  out = out.replace(/<style id="dl-theme-vars">[\s\S]*?<\/style>/i, '')
+  if (/<head[^>]*>/i.test(out)) {
+    out = out.replace(/<head([^>]*)>/i, (m) => `${m}${styleTag}`)
+  } else {
+    out = out.replace(/<html([^>]*)>/i, (m) => `${m}<head>${styleTag}</head>`)
+  }
+  return out
 }

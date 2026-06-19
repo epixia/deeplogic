@@ -136,6 +136,7 @@ export interface StudioProject {
   isOwner: boolean;
   html: string;
   modelId: string | null;
+  dashboardId: string | null;
   messages: StudioMessage[];
   versions: StudioVersion[];
   vault: VaultItem[];
@@ -145,7 +146,7 @@ export interface StudioProject {
 export interface ContextItem {
   id: string;
   scope: 'user' | 'org';
-  kind: 'doc' | 'html' | 'mcp' | 'note' | 'image';
+  kind: 'doc' | 'html' | 'mcp' | 'note' | 'image' | 'website' | 'data';
   name: string;
   content: string;
   meta: Record<string, unknown>;

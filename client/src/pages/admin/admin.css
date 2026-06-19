@@ -374,6 +374,67 @@
 .dl-admin__badge--trialing { color: var(--cyan); border-color: rgba(111,227,240,.3); }
 .dl-admin__badge--past_due { color: var(--bad); border-color: rgba(255,95,87,.35); background: rgba(255,95,87,.07); }
 .dl-admin__badge--canceled { color: var(--mut); }
+.dl-admin__badge--suspended { color: var(--bad); border-color: rgba(255,95,87,.35); background: rgba(255,95,87,.07); }
+
+/* ---- User management actions ---- */
+.dl-admin__user-action {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.dl-admin__user-action > div { flex: 1; min-width: 220px; }
+
+.dl-admin__action-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  margin-bottom: 6px;
+}
+
+.dl-admin__action-input {
+  width: 100%;
+  height: 38px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--bg2);
+  color: var(--ink);
+  font-size: 14px;
+}
+.dl-admin__action-input:focus { outline: none; border-color: var(--cyan); }
+
+.dl-admin__action-sep {
+  border: none;
+  border-top: 1px solid var(--line);
+  margin: 18px 0;
+}
+
+.dl-admin__action-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 0;
+}
+.dl-admin__action-row + .dl-admin__action-row { border-top: 1px solid var(--line); }
+
+.dl-admin__btn-warn {
+  border: 1px solid rgba(255,95,87,.4);
+  background: transparent;
+  color: var(--bad);
+}
+.dl-admin__btn-warn:hover:not(:disabled) { background: rgba(255,95,87,.08); }
+
+.dl-admin__btn-danger {
+  border: 1px solid var(--bad);
+  background: var(--bad);
+  color: #fff;
+}
+.dl-admin__btn-danger:hover:not(:disabled) { filter: brightness(1.08); }
+.dl-admin__btn-danger:disabled,
+.dl-admin__btn-warn:disabled { opacity: .5; cursor: not-allowed; }
 
 /* ---- Error / success (shared) ---- */
 .dl-admin__error {

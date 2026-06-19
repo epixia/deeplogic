@@ -1,0 +1,177 @@
+/* Memory — Obsidian-style markdown knowledge base. */
+
+.mem { padding: 40px 0 80px; }
+.btn.mem-on { border-color: var(--cyan); color: var(--cyan); }
+
+.mem-grid {
+  display: grid;
+  grid-template-columns: 240px 1fr 250px;
+  gap: 16px;
+  align-items: start;
+}
+@media (max-width: 960px) {
+  .mem-grid { grid-template-columns: 1fr; }
+}
+
+/* note list */
+.mem-list {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--bg2);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  position: sticky;
+  top: 76px;
+}
+.mem-search {
+  height: 34px; padding: 0 11px; border-radius: 9px;
+  border: 1px solid var(--line); background: var(--card); color: var(--ink);
+  font: inherit; font-size: 13px;
+}
+.mem-search:focus { outline: none; border-color: var(--cyan); }
+.mem-tagclear {
+  align-self: flex-start; font-size: 11.5px; font-weight: 700; color: var(--cyan);
+  background: rgba(111, 227, 240, .08); border: 1px solid rgba(111, 227, 240, .35);
+  border-radius: 99px; padding: 2px 9px; cursor: pointer;
+}
+.mem-list-items { display: flex; flex-direction: column; gap: 2px; max-height: 60vh; overflow-y: auto; }
+.mem-list-item {
+  text-align: left; padding: 8px 10px; border-radius: 8px; border: none;
+  background: transparent; color: var(--ink); font-size: 13px; cursor: pointer;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.mem-list-item:hover { background: rgba(255, 255, 255, .05); }
+[data-theme='light'] .mem-list-item:hover { background: rgba(20, 55, 90, .05); }
+.mem-list-item.active { background: rgba(111, 227, 240, .1); color: var(--cyan); font-weight: 600; }
+.mem-empty { font-size: 12.5px; color: var(--mut); padding: 8px; }
+
+/* main */
+.mem-main {
+  border: 1px solid var(--line); border-radius: 14px; background: var(--card);
+  padding: 18px 20px; min-height: 60vh;
+}
+.mem-main-head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+.mem-title { font-size: 22px; font-weight: 800; letter-spacing: -.01em; flex: 1; }
+.mem-title-input {
+  flex: 1; height: 36px; padding: 0 10px; border-radius: 9px; font-size: 18px; font-weight: 700;
+  border: 1px solid var(--line); background: var(--bg2); color: var(--ink);
+}
+.mem-main-actions { display: flex; gap: 8px; flex: none; }
+.mem-del { color: var(--bad); }
+.mem-editor {
+  width: 100%; min-height: 52vh; resize: vertical; padding: 14px;
+  border: 1px solid var(--line); border-radius: 10px; background: var(--bg2); color: var(--ink);
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 13.5px; line-height: 1.6;
+}
+.mem-editor:focus { outline: none; border-color: var(--cyan); }
+
+/* markdown preview */
+.mem-preview { font-size: 14.5px; line-height: 1.65; color: var(--ink); }
+.mem-preview h1, .mem-preview h2, .mem-preview h3 { font-weight: 800; letter-spacing: -.01em; margin: 18px 0 8px; }
+.mem-preview h1 { font-size: 24px; }
+.mem-preview h2 { font-size: 19px; }
+.mem-preview h3 { font-size: 16px; }
+.mem-preview p { margin: 10px 0; }
+.mem-preview ul, .mem-preview ol { margin: 10px 0; padding-left: 22px; }
+.mem-preview li { margin: 4px 0; }
+.mem-preview a { color: var(--cyan); }
+.mem-preview code { background: var(--bg2); border: 1px solid var(--line); border-radius: 5px; padding: 1px 5px; font-size: 12.5px; }
+.mem-preview pre { background: var(--bg2); border: 1px solid var(--line); border-radius: 10px; padding: 12px; overflow-x: auto; }
+.mem-preview pre code { border: none; background: transparent; padding: 0; }
+.mem-preview blockquote { border-left: 3px solid var(--line); margin: 10px 0; padding: 2px 14px; color: var(--mut); }
+.mem-preview hr { border: none; border-top: 1px solid var(--line); margin: 18px 0; }
+.md-wikilink { color: var(--cyan); cursor: pointer; text-decoration: none; border-bottom: 1px dashed rgba(111, 227, 240, .5); }
+.md-wikilink:hover { border-bottom-style: solid; }
+.md-tag {
+  color: var(--blue); cursor: pointer; font-weight: 600; text-decoration: none;
+  background: rgba(63, 134, 224, .1); border-radius: 5px; padding: 0 5px;
+}
+
+/* rail */
+.mem-rail { display: flex; flex-direction: column; gap: 16px; position: sticky; top: 76px; }
+.mem-rail-sec {
+  border: 1px solid var(--line); border-radius: 14px; background: var(--bg2); padding: 12px 13px;
+}
+.mem-rail-sec h4 {
+  font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--mut); margin-bottom: 8px;
+}
+.mem-rail-empty { font-size: 12px; color: var(--mut); }
+.mem-rail-link {
+  display: block; width: 100%; text-align: left; font-size: 13px; color: var(--ink);
+  background: transparent; border: none; padding: 5px 7px; border-radius: 7px; cursor: pointer;
+}
+.mem-rail-link:hover { background: rgba(111, 227, 240, .08); color: var(--cyan); }
+.mem-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.mem-tag {
+  font-size: 12px; color: var(--blue); background: rgba(63, 134, 224, .08);
+  border: 1px solid var(--line); border-radius: 99px; padding: 2px 9px; cursor: pointer;
+}
+.mem-tag.active { border-color: var(--blue); color: var(--blue); background: rgba(63, 134, 224, .16); }
+
+/* graph — force-directed canvas */
+.mem-graph {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background:
+    radial-gradient(ellipse at center, rgba(111, 227, 240, 0.05), transparent 70%),
+    var(--bg);
+  padding: 6px;
+  overflow: hidden;
+}
+.mem-graph-svg { width: 100%; height: auto; display: block; }
+.mem-edge { stroke: rgba(120, 180, 220, 0.22); stroke-width: 1; transition: stroke .12s, opacity .12s; }
+.mem-edge.lit { stroke: var(--cyan); stroke-width: 1.6; }
+.mem-node { cursor: pointer; transition: opacity .15s; }
+.mem-node circle {
+  fill: var(--card);
+  stroke: var(--cyan);
+  stroke-width: 1.5;
+  transition: fill .12s, r .2s ease;
+}
+.mem-node.hover circle, .mem-node:hover circle { fill: rgba(111, 227, 240, 0.18); }
+.mem-node.active circle { fill: var(--cyan); stroke: var(--cyan); filter: drop-shadow(0 0 6px rgba(111, 227, 240, 0.6)); }
+.mem-node text {
+  fill: var(--mut); font-size: 10.5px; font-weight: 500;
+  font-family: 'Inter', system-ui, sans-serif; pointer-events: none;
+}
+.mem-node.hover text, .mem-node.active text { fill: var(--ink); font-weight: 700; }
+[data-theme='light'] .mem-graph { background: radial-gradient(ellipse at center, rgba(15, 108, 189, 0.05), transparent 70%), var(--bg); }
+[data-theme='light'] .mem-edge { stroke: rgba(20, 55, 90, 0.18); }
+
+/* ---- knowledge graph ---- */
+.mem-kg-wrap { display: flex; flex-direction: column; gap: 12px; }
+.mem-kg-bar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.mem-kg-stats { font-size: 13px; color: var(--mut); }
+.mem-kg-stats strong { color: var(--ink); }
+.mem-kg-toggle { font-size: 12.5px; color: var(--mut); display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.mem-kg-bar .btn:last-child { margin-left: auto; }
+.mem-kg-note { font-size: 12.5px; color: var(--mut); background: var(--bg2); border: 1px solid var(--line); border-radius: 8px; padding: 7px 11px; }
+
+.mem-kg-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; }
+.mem-kg-leg { font-size: 11.5px; color: var(--mut); display: flex; align-items: center; gap: 5px; text-transform: capitalize; }
+.mem-kg-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; display: inline-block; }
+
+.mem-kg-stage { position: relative; }
+.mem-kg-edgelabel { fill: var(--cyan); font-size: 10px; text-anchor: middle; pointer-events: none; }
+
+.mem-kg-panel {
+  position: absolute; top: 10px; right: 10px; width: 290px; max-height: 92%;
+  overflow-y: auto; background: var(--card); border: 1px solid var(--line);
+  border-radius: 12px; padding: 13px 15px; box-shadow: 0 10px 30px rgba(0,0,0,.25);
+}
+.mem-kg-panel-head { display: flex; align-items: center; gap: 7px; }
+.mem-kg-panel-head strong { font-size: 14px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mem-kg-type { font-size: 10.5px; color: var(--mut); text-transform: uppercase; letter-spacing: .04em; }
+.mem-kg-close { background: none; border: none; color: var(--mut); cursor: pointer; font-size: 13px; padding: 0 2px; }
+.mem-kg-close:hover { color: var(--ink); }
+.mem-kg-summary { font-size: 12.5px; color: var(--mut); line-height: 1.5; margin: 8px 0; }
+.mem-kg-panel h5 { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--mut); margin: 6px 0; }
+.mem-kg-facts { list-style: none; display: flex; flex-direction: column; gap: 7px; margin: 0; padding: 0; }
+.mem-kg-facts li { font-size: 12.5px; line-height: 1.45; color: var(--ink); padding-left: 11px; position: relative; }
+.mem-kg-facts li::before { content: '•'; position: absolute; left: 0; color: var(--cyan); }
+.mem-kg-facts li.is-stale { color: var(--mut); text-decoration: line-through; }
+.mem-kg-facts li.is-stale em { text-decoration: none; font-style: normal; }
+.mem-kg-empty { color: var(--mut); }

@@ -64,7 +64,7 @@ export default function PreviewPane({ orgId, html, generating, fileBase }: Props
       if (currentId) {
         // Update existing sandbox
         try {
-          await updateSandbox(token, orgId, currentId, html)
+          await updateSandbox(token, orgId, currentId, applyReportTheme(html, theme))
           if (!cancelled) setPreviewKey((k) => k + 1)
         } catch (err: unknown) {
           // 410 = sandbox expired — create a fresh one
@@ -86,7 +86,7 @@ export default function PreviewPane({ orgId, html, generating, fileBase }: Props
       setSandboxLoading(true)
       setSandboxError(null)
       try {
-        const info = await createSandbox(token, orgId, html)
+        const info = await createSandbox(token, orgId, applyReportTheme(html, theme))
         if (cancelled) {
           killSandbox(token, orgId, info.sandboxId).catch(() => {})
           return
@@ -103,7 +103,7 @@ export default function PreviewPane({ orgId, html, generating, fileBase }: Props
 
     void syncSandbox()
     return () => { cancelled = true }
-  }, [html, generating, orgId, getAccessToken])
+  }, [html, generating, orgId, getAccessToken, theme])
 
   async function copy() {
     try {
@@ -127,7 +127,7 @@ export default function PreviewPane({ orgId, html, generating, fileBase }: Props
 
   // Decide what to render in the preview tab
   const showSandbox = sandboxUrl && !sandboxLoading && !sandboxError
-  const fallbackSrcDoc = html || applyReportTheme(EMPTY_DOC, theme)
+  const fallbackSrcDoc = html ? applyReportTheme(html, theme) : applyReportTheme(EMPTY_DOC, theme)
 
   return (
     <section className="studio-panel">
