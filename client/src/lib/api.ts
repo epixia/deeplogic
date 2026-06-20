@@ -1797,6 +1797,54 @@ export function testOrgoIntegration(
   })
 }
 
+/* ---------------- platform APIs (first-party data providers) ---------------- */
+
+// State of a single provider. Credentials never leave the server — the client
+// only learns whether a key is set and whether the provider is enabled.
+export interface PlatformApiState {
+  enabled: boolean
+  hasCreds: boolean
+}
+export interface PlatformApisView {
+  providers: Record<string, PlatformApiState>
+}
+
+export function getPlatformApis(token: string, orgId: string): Promise<PlatformApisView> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/platform-apis`)
+}
+
+export function savePlatformApi(
+  token: string,
+  orgId: string,
+  provider: string,
+  body: { enabled?: boolean; credentials?: Record<string, string> },
+): Promise<PlatformApisView> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/platform-apis/${enc(provider)}`, {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  })
+}
+
+export function deletePlatformApi(
+  token: string,
+  orgId: string,
+  provider: string,
+): Promise<PlatformApisView> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/platform-apis/${enc(provider)}`, { method: 'DELETE' })
+}
+
+export function testPlatformApi(
+  token: string,
+  orgId: string,
+  provider: string,
+  credentials?: Record<string, string>,
+): Promise<{ ok: boolean; error?: string }> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/platform-apis/${enc(provider)}/test`, {
+    method: 'POST',
+    body: JSON.stringify(credentials ? { credentials } : {}),
+  })
+}
+
 // A single agent proposed by the AI team generator (pre-creation, editable).
 export interface ProposedAgent {
   name: string
@@ -1991,6 +2039,38 @@ export function suggestCompetitors(
   return jsonFetch(token, `/orgs/${enc(orgId)}/studio/suggest-competitors`, {
     method: 'POST',
     body: JSON.stringify({ existing }),
+  })
+}
+
+// SEO metrics fetched from DataForSEO for a competitor domain.
+export interface CompetitorSeo {
+  provider: string
+  domain: string
+  organicKeywords: number | null
+  organicTraffic: number | null
+  organicTrafficCost: number | null
+  pos1: number | null
+  pos2_3: number | null
+  fetchedAt: string
+}
+export interface CompetitorAnalyzeResult {
+  id: string
+  name: string
+  ok: boolean
+  error?: string
+  seo?: CompetitorSeo
+}
+
+// POST /api/orgs/:orgId/studio/competitors/analyze — fetch DataForSEO SEO data
+// for the selected competitors and store it on each competitor's vault note.
+export function analyzeCompetitors(
+  token: string,
+  orgId: string,
+  ids: string[],
+): Promise<{ results: CompetitorAnalyzeResult[] }> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/studio/competitors/analyze`, {
+    method: 'POST',
+    body: JSON.stringify({ ids }),
   })
 }
 

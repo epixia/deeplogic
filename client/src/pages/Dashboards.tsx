@@ -38,6 +38,8 @@ function fmtDate(iso: string) {
 
 type Tab = 'mine' | 'shared'
 const TABS: readonly Tab[] = ['mine', 'shared']
+type ViewMode = 'cards' | 'list'
+const VIEWS: readonly ViewMode[] = ['cards', 'list']
 
 export default function Dashboards() {
   const { orgId = '' } = useParams<{ orgId: string }>()
@@ -49,6 +51,7 @@ export default function Dashboards() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [tab, setTab] = useStickyTab<Tab>(`dashboards.tab.${orgId}`, 'mine', TABS)
+  const [view, setView] = useStickyTab<ViewMode>(`dashboards.view.${orgId}`, 'cards', VIEWS)
   const [showNew, setShowNew] = useState(false)
   const [newName, setNewName] = useState('')
   const [newType, setNewType] = useState<WidgetType>('kpi')
@@ -148,6 +151,59 @@ export default function Dashboards() {
     }
   }
 
+  function WidgetCollection({
+    items,
+    canDelete,
+    withNew,
+  }: {
+    items: Widget[]
+    canDelete: boolean
+    withNew?: boolean
+  }) {
+    if (view === 'list') {
+      return (
+        <div className="studio-list">
+          {items.map((w) => (
+            <WidgetRow
+              key={w.id}
+              w={w}
+              canDelete={canDelete}
+              busyId={busyId}
+              onOpen={() => navigate(`/app/${orgId}/widgets/${w.id}`)}
+              onDelete={() => void remove(w)}
+            />
+          ))}
+          {withNew && (
+            <button type="button" className="studio-row studio-row-new" onClick={openNew}>
+              <span className="plus">+</span>
+              New widget
+            </button>
+          )}
+        </div>
+      )
+    }
+    return (
+      <div className="studio-grid">
+        {items.map((w) => (
+          <WidgetCard
+            key={w.id}
+            w={w}
+            canDelete={canDelete}
+            busyId={busyId}
+            onOpen={() => navigate(`/app/${orgId}/widgets/${w.id}`)}
+            onDelete={() => void remove(w)}
+          />
+        ))}
+        {withNew && (
+          <button type="button" className="studio-card studio-card-new" onClick={openNew}>
+            <span className="plus">+</span>
+            New widget
+          </button>
+        )}
+      </div>
+    )
+  }
+
   return (
     <main className="wrap studio">
       <header className="studio-head">
@@ -184,6 +240,27 @@ export default function Dashboards() {
         >
           Shared<span className="count">{shared.length}</span>
         </button>
+
+        <div className="studio-view-toggle" role="group" aria-label="View mode">
+          <button
+            type="button"
+            className={`studio-view-btn ${view === 'cards' ? 'active' : ''}`}
+            aria-pressed={view === 'cards'}
+            title="Card view"
+            onClick={() => setView('cards')}
+          >
+            ▦
+          </button>
+          <button
+            type="button"
+            className={`studio-view-btn ${view === 'list' ? 'active' : ''}`}
+            aria-pressed={view === 'list'}
+            title="List view"
+            onClick={() => setView('list')}
+          >
+            ☰
+          </button>
+        </div>
       </div>
 
       {error && <div className="studio-error">{error}</div>}
@@ -191,39 +268,13 @@ export default function Dashboards() {
       {loading ? (
         <div className="studio-empty">Loading widgets…</div>
       ) : tab === 'mine' ? (
-        <div className="studio-grid">
-          {mine.map((w) => (
-            <WidgetCard
-              key={w.id}
-              w={w}
-              canDelete
-              busyId={busyId}
-              onOpen={() => navigate(`/app/${orgId}/widgets/${w.id}`)}
-              onDelete={() => void remove(w)}
-            />
-          ))}
-          <button type="button" className="studio-card studio-card-new" onClick={openNew}>
-            <span className="plus">+</span>
-            New widget
-          </button>
-        </div>
+        <WidgetCollection items={mine} canDelete withNew />
       ) : shared.length === 0 ? (
         <div className="studio-empty">
           No shared widgets yet. When teammates create widgets they appear here.
         </div>
       ) : (
-        <div className="studio-grid">
-          {shared.map((w) => (
-            <WidgetCard
-              key={w.id}
-              w={w}
-              canDelete={false}
-              busyId={busyId}
-              onOpen={() => navigate(`/app/${orgId}/widgets/${w.id}`)}
-              onDelete={() => void remove(w)}
-            />
-          ))}
-        </div>
+        <WidgetCollection items={shared} canDelete={false} />
       )}
 
       {showNew && (
@@ -325,17 +376,25 @@ function WidgetCard({
   )
 }
 
-function WidgetThumb({ html, type }: { html: string | null; type: string }) {
+function WidgetThumb({
+  html,
+  type,
+  height = 160,
+}: {
+  html: string | null
+  type: string
+  height?: number
+}) {
   const theme = useAppTheme()
   if (!html) {
     return (
-      <div className="studio-thumb studio-thumb-empty">
+      <div className="studio-thumb studio-thumb-empty" style={{ height }}>
         <span>{TYPE_ICONS[type] ?? '📊'} No preview yet</span>
       </div>
     )
   }
   return (
-    <div className="studio-thumb" style={{ height: 160 }}>
+    <div className="studio-thumb" style={{ height }}>
       <iframe
         className="studio-thumb-frame"
         title="widget preview"
@@ -344,6 +403,44 @@ function WidgetThumb({ html, type }: { html: string | null; type: string }) {
         loading="lazy"
         style={{ width: '100%', height: '100%', transform: 'none', border: 'none' }}
       />
+    </div>
+  )
+}
+
+function WidgetRow({
+  w, canDelete, busyId, onOpen, onDelete,
+}: {
+  w: Widget
+  canDelete: boolean
+  busyId: string | null
+  onOpen: () => void
+  onDelete: () => void
+}) {
+  return (
+    <div className="studio-row">
+      <div className="studio-row-link" style={{ cursor: 'pointer' }} onClick={onOpen}>
+        <div className="studio-row-thumb">
+          <WidgetThumb html={w.html} type={w.type} height={74} />
+        </div>
+        <div className="studio-row-main">
+          <h3>{w.name}</h3>
+        </div>
+        <div className="studio-row-meta">
+          <span className="studio-pill studio-pill-org">{TYPE_ICONS[w.type] ?? '📊'} {w.type}</span>
+          <span>Updated {fmtDate(w.updatedAt)}</span>
+        </div>
+      </div>
+      {canDelete && (
+        <button
+          type="button"
+          className="studio-row-del"
+          disabled={busyId === w.id}
+          title="Delete widget"
+          onClick={(e) => { e.stopPropagation(); onDelete() }}
+        >
+          ✕
+        </button>
+      )}
     </div>
   )
 }

@@ -99,6 +99,146 @@
   color: var(--mut2);
 }
 
+/* ---------- cards / list view toggle ---------- */
+.studio-view-toggle {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+  margin-left: auto;
+  align-self: center;
+  padding: 2px;
+  margin-bottom: 6px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.02);
+}
+.studio-view-btn {
+  appearance: none;
+  background: transparent;
+  border: none;
+  border-radius: 7px;
+  color: var(--mut2);
+  font-size: 14px;
+  line-height: 1;
+  padding: 5px 9px;
+  cursor: pointer;
+  transition: color 0.12s, background 0.12s;
+}
+.studio-view-btn:hover {
+  color: var(--ink);
+}
+.studio-view-btn.active {
+  color: var(--ink);
+  background: var(--card);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+
+/* ---------- list view ---------- */
+.studio-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.studio-row {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  border-radius: 12px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.studio-row:hover {
+  border-color: rgba(120, 180, 220, 0.32);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.22);
+}
+.studio-row-link {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex: 1;
+  min-width: 0;
+  padding: 10px 12px;
+  color: inherit;
+}
+.studio-row-thumb {
+  flex: none;
+  width: 132px;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.studio-row-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.studio-row-main h3 {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.studio-row-meta {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--mut);
+}
+.studio-row-del {
+  flex: none;
+  align-self: stretch;
+  width: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-left: 1px solid var(--line);
+  color: var(--mut2);
+  font-size: 12px;
+  cursor: pointer;
+  border-radius: 0 12px 12px 0;
+  transition: color 0.12s, background 0.12s;
+}
+.studio-row-del:hover {
+  color: #e07a8a;
+  background: rgba(224, 122, 138, 0.08);
+}
+.studio-row-del:disabled { opacity: 0.4; cursor: default; }
+.studio-row.studio-row-new {
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 16px;
+  cursor: pointer;
+  border-style: dashed;
+  background: transparent;
+  color: var(--mut2);
+  font-weight: 600;
+}
+.studio-row.studio-row-new:hover {
+  border-color: rgba(111, 227, 240, 0.5);
+  color: var(--cyan);
+  background: rgba(111, 227, 240, 0.04);
+  box-shadow: none;
+}
+.studio-row-new .plus {
+  font-size: 18px;
+  font-weight: 300;
+  line-height: 1;
+}
+
+@media (max-width: 640px) {
+  .studio-row-thumb { display: none; }
+  .studio-row-meta { flex-direction: column; align-items: flex-end; gap: 4px; }
+}
+
 /* ---------- card grid ---------- */
 .studio-grid {
   display: grid;

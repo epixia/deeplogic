@@ -32,6 +32,8 @@ import '../components/studio/studio.css'
 
 type Tab = 'mine' | 'shared' | 'context'
 const TABS: readonly Tab[] = ['mine', 'shared', 'context']
+type ViewMode = 'cards' | 'list'
+const VIEWS: readonly ViewMode[] = ['cards', 'list']
 type StartMode = 'blank' | 'upload' | 'model'
 
 function visibilityPill(v: StudioVisibility) {
@@ -58,6 +60,7 @@ export default function Studio() {
   const navigate = useNavigate()
 
   const [tab, setTab] = useStickyTab<Tab>(`studio.tab.${orgId}`, 'mine', TABS)
+  const [view, setView] = useStickyTab<ViewMode>(`studio.view.${orgId}`, 'cards', VIEWS)
   const [scope, setScope] = useDashboardScope(orgId)
   const [projects, setProjects] = useState<StudioProjectListItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -238,6 +241,97 @@ export default function Studio() {
     )
   }
 
+  function ProjectRow({
+    p,
+    canDelete,
+  }: {
+    p: StudioProjectListItem
+    canDelete: boolean
+  }) {
+    return (
+      <div className="studio-row">
+        <Link to={`/app/${orgId}/studio/${p.id}`} className="studio-row-link">
+          <div className="studio-row-thumb">
+            <ReportThumb html={p.html} />
+          </div>
+          <div className="studio-row-main">
+            <h3>{p.name}</h3>
+            <div className="studio-card-owner">
+              <span className="studio-owner-av">
+                {(p.isOwner ? 'You' : p.ownerEmail || '?').charAt(0).toUpperCase()}
+              </span>
+              <span className="studio-owner-name">
+                {p.isOwner ? 'Owned by you' : `Owned by ${p.ownerEmail || 'a teammate'}`}
+              </span>
+            </div>
+          </div>
+          <div className="studio-row-meta">
+            {visibilityPill(p.visibility)}
+            <span>Updated {fmtDate(p.updatedAt)}</span>
+          </div>
+        </Link>
+        {canDelete && (
+          <button
+            type="button"
+            className="studio-row-del"
+            disabled={busyId === p.id}
+            title="Delete report"
+            onClick={() => void remove(p)}
+          >
+            ✕
+          </button>
+        )}
+      </div>
+    )
+  }
+
+  function ReportCollection({
+    items,
+    canDelete,
+    withNew,
+  }: {
+    items: StudioProjectListItem[]
+    canDelete: boolean
+    withNew?: boolean
+  }) {
+    if (view === 'list') {
+      return (
+        <div className="studio-list">
+          {items.map((p) => (
+            <ProjectRow key={p.id} p={p} canDelete={canDelete} />
+          ))}
+          {withNew && (
+            <button
+              type="button"
+              className="studio-row studio-row-new"
+              onClick={openNew}
+            >
+              <span className="plus">+</span>
+              New report
+            </button>
+          )}
+        </div>
+      )
+    }
+    return (
+      <div className="studio-grid">
+        {items.map((p) => (
+          <ProjectCard key={p.id} p={p} canDelete={canDelete} />
+        ))}
+        {withNew && (
+          <button
+            type="button"
+            className="studio-card studio-card-new"
+            onClick={openNew}
+          >
+            <span className="plus">+</span>
+            New report
+          </button>
+        )}
+      </div>
+    )
+  }
+
   return (
     <main className="wrap studio">
       <header className="studio-head">
@@ -285,6 +379,29 @@ export default function Studio() {
         >
           Library
         </button>
+
+        {tab !== 'context' && (
+          <div className="studio-view-toggle" role="group" aria-label="View mode">
+            <button
+              type="button"
+              className={`studio-view-btn ${view === 'cards' ? 'active' : ''}`}
+              aria-pressed={view === 'cards'}
+              title="Card view"
+              onClick={() => setView('cards')}
+            >
+              ▦
+            </button>
+            <button
+              type="button"
+              className={`studio-view-btn ${view === 'list' ? 'active' : ''}`}
+              aria-pressed={view === 'list'}
+              title="List view"
+              onClick={() => setView('list')}
+            >
+              ☰
+            </button>
+          </div>
+        )}
       </div>
 
       {error && <div className="studio-error">{error}</div>}
@@ -295,19 +412,7 @@ export default function Studio() {
         loading ? (
           <div className="studio-empty">Loading your reports…</div>
         ) : (
-          <div className="studio-grid">
-            {mine.map((p) => (
-              <ProjectCard key={p.id} p={p} canDelete />
-            ))}
-            <button
-              type="button"
-              className="studio-card studio-card-new"
-              onClick={openNew}
-            >
-              <span className="plus">+</span>
-              New report
-            </button>
-          </div>
+          <ReportCollection items={mine} canDelete withNew />
         )
       ) : loading ? (
         <div className="studio-empty">Loading shared reports…</div>
@@ -317,11 +422,7 @@ export default function Studio() {
           they appear here.
         </div>
       ) : (
-        <div className="studio-grid">
-          {shared.map((p) => (
-            <ProjectCard key={p.id} p={p} canDelete={false} />
-          ))}
-        </div>
+        <ReportCollection items={shared} canDelete={false} />
       )}
 
       {showNew && (

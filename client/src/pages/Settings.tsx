@@ -21,6 +21,7 @@ import {
 import AiSettingsCard from '../components/studio/AiSettingsCard'
 import OrgoIntegrationCard from '../components/settings/OrgoIntegrationCard'
 import IntegrationsCatalog from '../components/settings/IntegrationsCatalog'
+import PlatformApisCatalog from '../components/settings/PlatformApisCatalog'
 import { SKINS, readSkin, saveSkin } from '../styles/skins'
 import { getPlatformStatus, type PlatformStatus } from '../lib/api'
 import './settings.css'
@@ -34,7 +35,7 @@ const PLAN_LABELS: Record<string, string> = {
   enterprise: 'Enterprise',
 }
 
-type Tab = 'members' | 'ai' | 'integrations' | 'billing' | 'appearance' | 'profile' | 'status'
+type Tab = 'members' | 'ai' | 'integrations' | 'apis' | 'billing' | 'appearance' | 'profile' | 'status'
 
 export default function Settings() {
   const { orgId = '' } = useParams<{ orgId: string }>()
@@ -44,6 +45,7 @@ export default function Settings() {
     rawTab === 'members' ? 'members' :
     rawTab === 'ai' ? 'ai' :
     rawTab === 'integrations' ? 'integrations' :
+    rawTab === 'apis' ? 'apis' :
     rawTab === 'billing' ? 'billing' :
     rawTab === 'appearance' ? 'appearance' :
     rawTab === 'status' ? 'status' :
@@ -66,6 +68,7 @@ export default function Settings() {
     { id: 'members',    label: 'Team' },
     { id: 'ai',         label: 'AI Providers' },
     { id: 'integrations', label: 'Integrations' },
+    { id: 'apis',       label: 'APIs' },
     { id: 'billing',    label: 'Billing' },
     { id: 'status',     label: 'Status' },
   ]
@@ -73,13 +76,7 @@ export default function Settings() {
   return (
     <main className="wrap dl-settings">
       <header className="dl-set__head">
-        <h1>{org?.name ?? 'Organization'}</h1>
-        {org && (
-          <div className="dl-set__sub">
-            <span className="dl-set__slug">/{org.slug}</span>
-            <span className={`dl-set__rolebadge role-${org.role} dl-set__role-pill`}>{org.role}</span>
-          </div>
-        )}
+        <h1><span className="grad-text">Settings</span></h1>
       </header>
 
       <div className="dl-set__tabs">
@@ -120,6 +117,12 @@ export default function Settings() {
         <div className="dl-set__tab-body">
           <OrgoIntegrationCard orgId={orgId} getToken={() => getAccessToken().then((t) => t ?? '')} />
           <IntegrationsCatalog orgId={orgId} getToken={() => getAccessToken().then((t) => t ?? '')} />
+        </div>
+      )}
+
+      {activeTab === 'apis' && (
+        <div className="dl-set__tab-body">
+          <PlatformApisCatalog orgId={orgId} getToken={() => getAccessToken().then((t) => t ?? '')} />
         </div>
       )}
 

@@ -89,6 +89,7 @@
 /* ---- competitors ---- */
 .cp-comp-form { margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid var(--line); }
 .cp-comp-card { display: flex; flex-direction: column; gap: 7px; }
+.cp-comp-card.is-selected { border-color: var(--cyan); box-shadow: 0 0 0 1px rgba(111, 227, 240, .3); }
 .cp-comp-card-head { display: flex; align-items: flex-start; gap: 8px; }
 .cp-comp-name { font-size: 15px; font-weight: 700; flex: 1; min-width: 0; }
 .cp-comp-card-actions { display: flex; gap: 2px; flex: none; }
@@ -98,6 +99,47 @@
 }
 .cp-comp-iconbtn:hover { color: var(--ink); background: rgba(255, 255, 255, .06); }
 .cp-comp-summary { color: var(--mut); }
+
+/* selection checkbox */
+.cp-check { display: flex; align-items: center; gap: 7px; flex: none; cursor: pointer; }
+.cp-check input { width: 15px; height: 15px; accent-color: var(--cyan); cursor: pointer; margin: 0; }
+.cp-check--all { font-size: 12.5px; color: var(--mut); font-weight: 600; }
+
+/* select-all toolbar above the grid */
+.cp-list-toolbar {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  margin: 2px 0 10px;
+}
+.cp-list-hint { font-size: 12px; color: var(--mut2); }
+
+/* SEO metrics row (from DataForSEO) */
+.cp-seo { display: flex; flex-wrap: wrap; gap: 6px; }
+.cp-seo-metric {
+  font-size: 11.5px; color: var(--mut);
+  background: rgba(111, 227, 240, .08); border: 1px solid rgba(111, 227, 240, .25);
+  border-radius: 999px; padding: 2px 9px;
+}
+.cp-seo-metric b { color: var(--ink); font-weight: 700; }
+
+/* view toggle (cards / list) */
+.cp-view-toggle {
+  display: inline-flex; gap: 2px; padding: 2px; align-self: center;
+  border: 1px solid var(--line); border-radius: 9px; background: rgba(255, 255, 255, .02);
+}
+.cp-view-btn {
+  appearance: none; background: transparent; border: none; border-radius: 7px;
+  color: var(--mut2); font-size: 13px; line-height: 1; padding: 4px 8px; cursor: pointer;
+  transition: color .12s, background .12s;
+}
+.cp-view-btn:hover { color: var(--ink); }
+.cp-view-btn.active { color: var(--ink); background: var(--bg2); }
+
+/* list view — single column, compact rows */
+.cp-sections--list { grid-template-columns: 1fr; gap: 8px; }
+.cp-sections--list .cp-comp-card { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
+.cp-sections--list .cp-comp-card-head { flex: 1; min-width: 220px; align-items: center; }
+.cp-sections--list .cp-web { flex: none; }
+.cp-sections--list .cp-seo { flex: none; }
 
 /* ---- generated competitor suggestions ---- */
 .cp-suggest {

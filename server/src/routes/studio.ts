@@ -30,6 +30,8 @@ import { captionImage, fetchSiteText, normalizeUrl } from '../studio/aiTeam.js';
 import { analyzeUrl, parseLenses } from '../studio/urlAnalysis.js';
 import { suggestIdeas, parseTarget, type VaultInventoryItem } from '../studio/suggestIdeas.js';
 import { suggestCompetitors } from '../studio/suggestCompetitors.js';
+import { loadPlatformApiCreds } from './integrations.js';
+import { dataforseoDomainOverview, toDomain } from '../integrations/dataforseo.js';
 import { runAssistant, runAgentTask, type ChatMsg, type WebResult } from '../studio/assistant.js';
 import { generateTitle } from '../studio/titler.js';
 import { webSearch, wikipediaSummary } from '../webSearch.js';
@@ -2065,6 +2067,70 @@ studioRouter.get(
     } catch (err) {
       console.error('GET competitor-trends failed', err);
       res.status(500).json({ error: 'Failed to load trends.' });
+    }
+  }
+);
+
+// POST competitors/analyze { ids } — pull DataForSEO SEO metrics (organic
+// keywords & estimated traffic) for each selected competitor's domain and merge
+// them into the competitor's Data Vault note (meta.seo). Returns a per-
+// competitor result list. Requires DataForSEO configured in Settings → APIs.
+studioRouter.post(
+  '/orgs/:orgId/studio/competitors/analyze',
+  requireMember(),
+  async (req: Request, res: Response) => {
+    const orgId = req.params.orgId;
+    const ids = Array.isArray(req.body?.ids)
+      ? (req.body.ids as unknown[]).filter((x): x is string => typeof x === 'string').slice(0, 25)
+      : [];
+    if (ids.length === 0) { res.status(400).json({ error: 'Select at least one competitor.' }); return; }
+
+    const creds = await loadPlatformApiCreds(orgId, 'dataforseo');
+    if (!creds?.login || !creds?.password) {
+      res.status(400).json({ error: 'Connect DataForSEO first in Settings → APIs.' });
+      return;
+    }
+    const dfsCreds = { login: creds.login, password: creds.password };
+
+    try {
+      const { data: rows } = await req.db!
+        .from('context_items')
+        .select('id, name, content, meta')
+        .eq('org_id', orgId)
+        .in('id', ids);
+      const items = (rows ?? []) as { id: string; name: string; content: string | null; meta: Record<string, unknown> | null }[];
+
+      const results = await Promise.all(items.map(async (it) => {
+        const meta = (it.meta ?? {}) as Record<string, unknown>;
+        const name = (typeof meta.name === 'string' && meta.name) || it.name.replace(/^Competitor:\s*/, '');
+        const website = typeof meta.website === 'string' ? meta.website : '';
+        const domain = toDomain(website || name);
+        if (!domain || !domain.includes('.')) {
+          return { id: it.id, name, ok: false, error: 'No valid website to analyze.' };
+        }
+        try {
+          const ov = await dataforseoDomainOverview(dfsCreds, domain);
+          const seo = {
+            provider: 'dataforseo',
+            domain,
+            organicKeywords: ov.organicKeywords,
+            organicTraffic: ov.organicTraffic,
+            organicTrafficCost: ov.organicTrafficCost,
+            pos1: ov.pos1,
+            pos2_3: ov.pos2_3,
+            fetchedAt: new Date().toISOString(),
+          };
+          await req.db!.from('context_items').update({ meta: { ...meta, seo } }).eq('id', it.id);
+          return { id: it.id, name, ok: true, seo };
+        } catch (e) {
+          return { id: it.id, name, ok: false, error: e instanceof Error ? e.message : 'Analyze failed.' };
+        }
+      }));
+
+      res.json({ results });
+    } catch (err) {
+      console.error('POST competitors/analyze failed', err);
+      res.status(500).json({ error: 'Failed to analyze competitors.' });
     }
   }
 );

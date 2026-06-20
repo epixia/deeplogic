@@ -8,23 +8,37 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { useStickyTab } from '../../lib/useStickyTab'
 import {
   listContext,
   createContext,
   updateContext,
   deleteContext,
   analyzeUrl,
+  analyzeCompetitors,
   suggestCompetitors,
   createDashboard,
   createWidget,
   getCompetitorTrends,
   type ContextItem,
   type CompetitorSuggestion,
+  type CompetitorSeo,
   type CompetitorTrends,
   type WidgetType,
 } from '../../lib/api'
 import TrendChart from './TrendChart'
 import './company-profile.css'
+
+type CompView = 'cards' | 'list'
+const COMP_VIEWS: readonly CompView[] = ['cards', 'list']
+
+// Compact number formatting for SEO metrics (12345 → 12.3K).
+function fmtNum(n: number | null | undefined): string {
+  if (n == null || Number.isNaN(n)) return '—'
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
+  return `${Math.round(n)}`
+}
 
 export const COMPETITOR_PREFIX = 'Competitor: '
 
@@ -34,6 +48,7 @@ interface Entry {
   website: string
   summary: string
   notes: string
+  seo?: CompetitorSeo
 }
 
 const EMPTY: Entry = { id: null, name: '', website: '', summary: '', notes: '' }
@@ -41,12 +56,14 @@ const EMPTY: Entry = { id: null, name: '', website: '', summary: '', notes: '' }
 function entryFromItem(it: ContextItem): Entry {
   const m = (it.meta ?? {}) as Record<string, unknown>
   const s = (k: string) => (typeof m[k] === 'string' ? (m[k] as string) : '')
+  const seo = m.seo && typeof m.seo === 'object' ? (m.seo as CompetitorSeo) : undefined
   return {
     id: it.id,
     name: s('name') || it.name.replace(COMPETITOR_PREFIX, ''),
     website: s('website'),
     summary: s('summary'),
     notes: s('notes'),
+    seo,
   }
 }
 
@@ -81,7 +98,51 @@ export default function Competitors({
   const [dashBusy, setDashBusy] = useState<string | null>(null)
   const [trends, setTrends] = useState<CompetitorTrends | null>(null)
   const [trendsBusy, setTrendsBusy] = useState(false)
+  const [view, setView] = useStickyTab<CompView>(`vault.competitors.view.${orgId}`, 'cards', COMP_VIEWS)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [analyzing, setAnalyzing] = useState(false)
   const navigate = useNavigate()
+
+  const selectableIds = entries.map((e) => e.id).filter((id): id is string => !!id)
+  const selectedCount = selectableIds.filter((id) => selected.has(id)).length
+  const allSelected = selectableIds.length > 0 && selectedCount === selectableIds.length
+
+  function toggleSel(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+  function toggleAll() {
+    setSelected(allSelected ? new Set() : new Set(selectableIds))
+  }
+
+  // Pull DataForSEO SEO metrics for every selected competitor, then refresh.
+  async function analyzeSelected() {
+    const ids = selectableIds.filter((id) => selected.has(id))
+    if (ids.length === 0 || analyzing) return
+    setAnalyzing(true)
+    setError(null)
+    setNote(null)
+    try {
+      const t = await getToken()
+      const { results } = await analyzeCompetitors(t, orgId, ids)
+      const ok = results.filter((r) => r.ok)
+      const failed = results.filter((r) => !r.ok)
+      if (ok.length) setNote(`Analyzed ${ok.length} competitor${ok.length > 1 ? 's' : ''} with DataForSEO.`)
+      if (failed.length) {
+        setError(`${failed.length} failed — ${failed.map((f) => `${f.name}: ${f.error ?? 'error'}`).join('; ')}`)
+      }
+      await load()
+      onChange?.()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Analyze failed.')
+    } finally {
+      setAnalyzing(false)
+    }
+  }
 
   const load = useCallback(async () => {
     try {
@@ -287,6 +348,16 @@ export default function Competitors({
                 {generating ? 'Generating…' : '⚡ Generate'}
               </button>
               {entries.length > 0 && (
+                <button
+                  className="btn btn-secondary btn-xs"
+                  onClick={() => void analyzeSelected()}
+                  disabled={analyzing || selectedCount === 0}
+                  title={selectedCount === 0 ? 'Select competitors to analyze' : 'Fetch SEO data from DataForSEO'}
+                >
+                  {analyzing ? 'Analyzing…' : `🔍 Analyze${selectedCount ? ` (${selectedCount})` : ''}`}
+                </button>
+              )}
+              {entries.length > 0 && (
                 <button className="btn btn-ghost btn-xs" onClick={() => void loadTrends()} disabled={trendsBusy}>
                   {trendsBusy ? 'Loading…' : '📈 Compare interest'}
                 </button>
@@ -294,6 +365,28 @@ export default function Competitors({
               <button className="btn btn-ghost btn-xs" onClick={() => { setDraft({ ...EMPTY }); setError(null) }}>
                 ➕ Add manually
               </button>
+              {entries.length > 0 && (
+                <div className="cp-view-toggle" role="group" aria-label="View mode">
+                  <button
+                    type="button"
+                    className={`cp-view-btn${view === 'cards' ? ' active' : ''}`}
+                    aria-pressed={view === 'cards'}
+                    title="Card view"
+                    onClick={() => setView('cards')}
+                  >
+                    ▦
+                  </button>
+                  <button
+                    type="button"
+                    className={`cp-view-btn${view === 'list' ? ' active' : ''}`}
+                    aria-pressed={view === 'list'}
+                    title="List view"
+                    onClick={() => setView('list')}
+                  >
+                    ☰
+                  </button>
+                </div>
+              )}
             </>
           )}
         </div>
@@ -386,30 +479,51 @@ export default function Competitors({
           No competitors yet — click <strong>➕ Add competitor</strong>, drop in their website, and Auto-fill.
         </div>
       ) : (
-        <div className="cp-sections">
-          {entries.map((e) => (
-            <div className="cp-section cp-comp-card" key={e.id}>
-              <div className="cp-comp-card-head">
-                <div className="cp-comp-name">{e.name}</div>
-                <div className="cp-comp-card-actions">
-                  <button className="cp-comp-iconbtn" title="Create a dashboard for this competitor" disabled={dashBusy === e.id} onClick={() => void createDashboardFor(e)}>
-                    {dashBusy === e.id ? '…' : '📊'}
-                  </button>
-                  <button className="cp-comp-iconbtn" title="Edit" onClick={() => { setDraft(e); setError(null) }}>✎</button>
-                  <button className="cp-comp-iconbtn" title="Remove" disabled={removing === e.id} onClick={() => e.id && void remove(e.id, e.name)}>
-                    {removing === e.id ? '…' : '✕'}
-                  </button>
+        <>
+          <div className="cp-list-toolbar">
+            <label className="cp-check cp-check--all">
+              <input type="checkbox" checked={allSelected} onChange={toggleAll} />
+              <span>{selectedCount ? `${selectedCount} selected` : 'Select all'}</span>
+            </label>
+            <span className="cp-list-hint">Select competitors, then 🔍 Analyze to pull SEO data from DataForSEO.</span>
+          </div>
+          <div className={`cp-sections${view === 'list' ? ' cp-sections--list' : ''}`}>
+            {entries.map((e) => (
+              <div className={`cp-section cp-comp-card${e.id && selected.has(e.id) ? ' is-selected' : ''}`} key={e.id}>
+                <div className="cp-comp-card-head">
+                  {e.id && (
+                    <label className="cp-check" title="Select for analysis">
+                      <input type="checkbox" checked={selected.has(e.id)} onChange={() => toggleSel(e.id!)} />
+                    </label>
+                  )}
+                  <div className="cp-comp-name">{e.name}</div>
+                  <div className="cp-comp-card-actions">
+                    <button className="cp-comp-iconbtn" title="Create a dashboard for this competitor" disabled={dashBusy === e.id} onClick={() => void createDashboardFor(e)}>
+                      {dashBusy === e.id ? '…' : '📊'}
+                    </button>
+                    <button className="cp-comp-iconbtn" title="Edit" onClick={() => { setDraft(e); setError(null) }}>✎</button>
+                    <button className="cp-comp-iconbtn" title="Remove" disabled={removing === e.id} onClick={() => e.id && void remove(e.id, e.name)}>
+                      {removing === e.id ? '…' : '✕'}
+                    </button>
+                  </div>
                 </div>
+                {e.website && (
+                  <Link className="cp-web" to={`/app/${orgId}/site?url=${encodeURIComponent(e.website)}&name=${encodeURIComponent(e.name)}`}>
+                    {e.website.replace(/^https?:\/\//, '')} → insights
+                  </Link>
+                )}
+                {e.seo && (
+                  <div className="cp-seo" title={`SEO via DataForSEO · ${new Date(e.seo.fetchedAt).toLocaleString()}`}>
+                    <span className="cp-seo-metric"><b>{fmtNum(e.seo.organicKeywords)}</b> keywords</span>
+                    <span className="cp-seo-metric"><b>{fmtNum(e.seo.organicTraffic)}</b> est. traffic/mo</span>
+                    {e.seo.pos1 != null && <span className="cp-seo-metric"><b>{fmtNum(e.seo.pos1)}</b> #1</span>}
+                  </div>
+                )}
+                {view === 'cards' && e.summary && <div className="cp-section-val cp-comp-summary">{e.summary}</div>}
               </div>
-              {e.website && (
-                <Link className="cp-web" to={`/app/${orgId}/site?url=${encodeURIComponent(e.website)}&name=${encodeURIComponent(e.name)}`}>
-                  {e.website.replace(/^https?:\/\//, '')} → insights
-                </Link>
-              )}
-              {e.summary && <div className="cp-section-val cp-comp-summary">{e.summary}</div>}
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        </>
       )}
     </section>
   )

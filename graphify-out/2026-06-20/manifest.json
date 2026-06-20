@@ -180,8 +180,8 @@
     "semantic_hash": ""
   },
   "client/src/lib/api.ts": {
-    "mtime": 1781977725.0325587,
-    "ast_hash": "f08b4119850b3c315e2019adb67a82d5",
+    "mtime": 1781976265.2251272,
+    "ast_hash": "0fcd77ce3b515f910872b113446da79a",
     "semantic_hash": ""
   },
   "client/src/lib/supabase.ts": {
@@ -435,8 +435,8 @@
     "semantic_hash": ""
   },
   "server/src/routes/studio.ts": {
-    "mtime": 1781977712.0520792,
-    "ast_hash": "fb7b0b2ca6db4ed1be803a59746f7ecb",
+    "mtime": 1781874483.9090426,
+    "ast_hash": "598ce0db43e011679ea930f629a1cd4b",
     "semantic_hash": ""
   },
   "server/src/sse.ts": {
@@ -915,8 +915,8 @@
     "semantic_hash": ""
   },
   "client/src/components/vault/Competitors.tsx": {
-    "mtime": 1781977833.0159893,
-    "ast_hash": "9765cf7f2ccf073edfa109dcee0dd2ed",
+    "mtime": 1781840023.1993167,
+    "ast_hash": "65d645ee91cbccc3307fff1f48442c16",
     "semantic_hash": ""
   },
   "server/src/studio/suggestCompetitors.ts": {
@@ -1365,8 +1365,8 @@
     "semantic_hash": ""
   },
   "server/src/integrations/dataforseo.ts": {
-    "mtime": 1781977662.2745152,
-    "ast_hash": "cf62a6bb7938c482c8465958e827db3b",
+    "mtime": 1781976225.4315884,
+    "ast_hash": "6a3d6ed1261c1cc5bc431c1f4fa2c92b",
     "semantic_hash": ""
   },
   "supabase/migrations/20260620000001_platform_apis.sql": {
