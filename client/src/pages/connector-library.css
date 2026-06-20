@@ -1,0 +1,76 @@
+/* Connector Library page */
+.cl { padding: 32px 0 80px; }
+.cl-head { margin-bottom: 18px; }
+.cl-head h1 { font-size: 28px; font-weight: 800; letter-spacing: -.02em; }
+.cl-lead { margin-top: 8px; font-size: 14px; color: var(--mut); max-width: 70ch; line-height: 1.5; }
+
+.cl-toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
+.cl-search {
+  flex: 1; min-width: 240px; height: 38px; padding: 0 12px;
+  border: 1px solid var(--line); border-radius: 10px; background: var(--card2);
+  color: var(--ink); font: inherit; font-size: 14px; outline: none;
+}
+.cl-search:focus { border-color: var(--cyan); box-shadow: 0 0 0 2px rgba(111, 227, 240, .15); }
+.cl-filters { display: flex; flex-wrap: wrap; gap: 6px; }
+.cl-filter {
+  appearance: none; background: transparent; border: 1px solid var(--line); border-radius: 999px;
+  color: var(--mut); font-size: 12.5px; font-weight: 600; padding: 6px 12px; cursor: pointer;
+  transition: color .12s, border-color .12s, background .12s;
+}
+.cl-filter:hover { color: var(--ink); }
+.cl-filter.active { color: #04121b; background: var(--grad); border-color: transparent; }
+
+.cl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+.cl-card {
+  border: 1px solid var(--line); border-radius: 14px; background: transparent;
+  padding: 16px; display: flex; flex-direction: column; gap: 10px;
+}
+.cl-card.is-soon { opacity: .72; }
+.cl-card-top { display: flex; align-items: center; gap: 10px; }
+.cl-icon { font-size: 22px; line-height: 1; }
+.cl-name { font-size: 15px; font-weight: 700; color: var(--ink); flex: 1; min-width: 0; }
+.cl-soon {
+  font-size: 10.5px; font-weight: 700; color: var(--mut2);
+  border: 1px solid var(--line); border-radius: 999px; padding: 1px 8px;
+}
+
+.cl-badges { display: flex; gap: 6px; flex-wrap: wrap; }
+.cl-badge { font-size: 10.5px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; border-radius: 6px; padding: 2px 8px; border: 1px solid var(--line); }
+.cl-badge-cat { color: var(--cyan); border-color: rgba(111, 227, 240, .35); }
+.cl-badge-auth { color: var(--mut); }
+
+.cl-desc { font-size: 13px; color: var(--mut); line-height: 1.45; }
+
+.cl-sec { display: flex; flex-direction: column; gap: 5px; }
+.cl-sec-label { font-size: 10.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--mut2); }
+.cl-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.cl-chip {
+  font-size: 11.5px; padding: 2px 8px; border-radius: 999px; white-space: nowrap;
+  background: rgba(255, 255, 255, .03); border: 1px solid var(--line); color: var(--mut);
+}
+.cl-chip-block { color: var(--cyan); background: rgba(111, 227, 240, .08); border-color: rgba(111, 227, 240, .25); }
+
+.cl-card-foot { margin-top: auto; padding-top: 4px; display: flex; align-items: center; gap: 8px; }
+.cl-docs { margin-left: auto; text-decoration: none; }
+.cl-empty { grid-column: 1 / -1; padding: 40px; text-align: center; color: var(--mut); border: 1px dashed var(--line); border-radius: 14px; }
+
+/* Webhook modal */
+.cl-modal-backdrop {
+  position: fixed; inset: 0; z-index: 100; background: rgba(3, 6, 12, .66); backdrop-filter: blur(3px);
+  display: flex; align-items: flex-start; justify-content: center; padding: 80px 20px 40px; overflow-y: auto;
+}
+.cl-modal { width: 100%; max-width: 560px; border-radius: 18px; background: var(--card); border: 1px solid var(--line); padding: 24px; box-shadow: 0 24px 70px rgba(0, 0, 0, .5); }
+.cl-modal h2 { font-size: 19px; font-weight: 800; letter-spacing: -.02em; margin-bottom: 4px; }
+.cl-modal-sub { font-size: 13px; color: var(--mut); line-height: 1.5; margin-bottom: 16px; }
+.cl-modal-loading, .cl-modal-err { font-size: 13px; color: var(--mut); padding: 8px 0; }
+.cl-modal-err { color: var(--bad); }
+.cl-field-label { display: block; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--mut); margin-bottom: 6px; }
+.cl-webhook-url { display: flex; align-items: center; gap: 8px; }
+.cl-webhook-url code {
+  flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px;
+  background: var(--card2); border: 1px solid var(--line); border-radius: 9px; padding: 9px 11px; color: var(--ink);
+}
+.cl-modal-note { font-size: 12px; color: var(--mut); line-height: 1.45; margin-top: 10px; }
+.cl-modal-note code { font-family: ui-monospace, monospace; font-size: 11.5px; }
+.cl-modal-actions { display: flex; justify-content: flex-end; margin-top: 18px; }

@@ -271,6 +271,30 @@ function contextBlocks(ctx: {
   if (ctx.companyProfile && ctx.companyProfile.trim()) {
     parts.push('This is the company that owns this workspace — use it whenever "we", "us", "our", or "my competitors" is meant:', ctx.companyProfile.trim().slice(0, 4000));
   }
+
+  // Surface the company's own products & tracked competitors as first-class
+  // context (they're stored as name-prefixed vault notes). Without this the
+  // model only sees them as generic inventory lines and answers vaguely.
+  const detail = (snippet?: string) =>
+    (snippet ?? '').replace(/^#[^\n]*\n?/, '').replace(/\s+/g, ' ').trim().slice(0, 200);
+  const products = ctx.inventory.filter((it) => it.name.startsWith('Product: '));
+  if (products.length) {
+    parts.push(
+      `The company's OWN PRODUCTS / services (${products.length}) — use these as the authoritative answer to "what are our products":`,
+      products.slice(0, 60).map((p) => {
+        const d = detail(p.snippet);
+        return `- ${p.name.replace(/^Product:\s*/, '')}${d ? ` — ${d}` : ''}`;
+      }).join('\n'),
+    );
+  }
+  const competitors = ctx.inventory.filter((it) => it.name.startsWith('Competitor: '));
+  if (competitors.length) {
+    parts.push(
+      `Tracked COMPETITORS (${competitors.length}):`,
+      competitors.slice(0, 40).map((c) => `- ${c.name.replace(/^Competitor:\s*/, '')}`).join('\n'),
+    );
+  }
+
   if (ctx.goals && ctx.goals.length) {
     const g = ctx.goals.slice(0, 30).map((x) => {
       const bits = [`- ${x.title}${x.status && x.status !== 'active' ? ` (${x.status})` : ''}`];
@@ -353,6 +377,7 @@ async function runWithTools(
   executeTool: ToolExecutor,
   onStep?: StepCb,
   tools: readonly unknown[] = ASSISTANT_TOOLS,
+  signal?: AbortSignal,
 ): Promise<{ text: string; actions: string[] }> {
   const mod = await import('@anthropic-ai/sdk');
   const client = new mod.default({ apiKey: ai.apiKey });
@@ -362,13 +387,14 @@ async function runWithTools(
   const actions: string[] = [];
 
   for (let i = 0; i < MAX_TOOL_ITERATIONS; i++) {
+    if (signal?.aborted) throw new Error('Stopped by user.');
     const res: any = await client.messages.create({
       model,
       max_tokens: 2500,
       system,
       tools: tools as any,
       messages,
-    });
+    }, { signal });
 
     const toolUses = (res.content ?? []).filter((b: any) => b.type === 'tool_use');
     if (res.stop_reason !== 'tool_use' || toolUses.length === 0) {
@@ -416,6 +442,7 @@ async function runWithToolsOpenAI(
   executeTool: ToolExecutor,
   onStep?: StepCb,
   toolDefs: readonly { name: string; description: string; input_schema: unknown }[] = ASSISTANT_TOOLS,
+  signal?: AbortSignal,
 ): Promise<{ text: string; actions: string[] }> {
   const model = ai.model || DEFAULT_MODEL[ai.provider];
   const tools = toolDefs.map((t) => ({
@@ -427,10 +454,12 @@ async function runWithToolsOpenAI(
   const actions: string[] = [];
 
   for (let i = 0; i < MAX_TOOL_ITERATIONS; i++) {
+    if (signal?.aborted) throw new Error('Stopped by user.');
     const res = await fetch(`${baseUrl}/chat/completions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${ai.apiKey}`, 'X-Title': 'DeepLogic Assistant' },
       body: JSON.stringify({ model, max_tokens: 2500, tools, messages }),
+      signal,
     });
     if (!res.ok) {
       const detail = await res.text().catch(() => '');
@@ -532,11 +561,17 @@ export async function runAssistant(opts: {
 // Autonomous agent run — an internal agent executes its own task with tools.
 // ---------------------------------------------------------------------------
 
-// Tools an autonomous agent may use: research + read/write the Data Vault. It
-// deliberately CANNOT spawn other agents/widgets (no create_agent, run_agent,
-// deploy_agent, create_widget) — that stays an orchestrator/assistant decision.
-const AGENT_TOOL_NAMES = new Set(['web_research', 'fetch_url', 'wikipedia_lookup', 'add_to_vault']);
-const AGENT_TOOLS = ASSISTANT_TOOLS.filter((t) => AGENT_TOOL_NAMES.has(t.name));
+// Tools an autonomous agent is ALLOWED to use (the editor exposes these as the
+// agent's "Tools"). It deliberately excludes spawning other agents / external
+// VMs (create_agent, run_agent, deploy_agent) — that stays an orchestrator
+// decision — but DOES allow building a Block (create_widget) and adding a
+// connector when the user opts in.
+export const AGENT_ELIGIBLE_TOOLS = [
+  'web_research', 'fetch_url', 'wikipedia_lookup', 'add_to_vault', 'add_connector', 'create_widget',
+] as const;
+// The default set used when an agent has no explicit tool selection (NULL) —
+// preserves the historical behavior for existing agents.
+export const AGENT_DEFAULT_TOOLS: string[] = ['web_research', 'fetch_url', 'wikipedia_lookup', 'add_to_vault'];
 
 export async function runAgentTask(opts: {
   ai: AiConfig;
@@ -549,13 +584,24 @@ export async function runAgentTask(opts: {
   memory?: string[];
   goals?: GoalContext[];
   onStep?: StepCb;
+  /** Tool names this agent may call. Empty/undefined → default safe set. */
+  toolNames?: string[] | null;
+  /** Abort signal — fires when the caller (e.g. a stopped run) cancels. */
+  signal?: AbortSignal;
 }): Promise<{ text: string; actions: string[] }> {
   const { ai, agentName, agentSystemPrompt, executeTool, inventory, orgName, companyProfile, memory, goals, onStep } = opts;
 
+  // Resolve the agent's tool subset: requested names ∩ eligible, else default.
+  const eligible = new Set<string>(AGENT_ELIGIBLE_TOOLS);
+  const requested = (opts.toolNames ?? []).filter((n) => eligible.has(n));
+  const chosen = new Set(requested.length ? requested : AGENT_DEFAULT_TOOLS);
+  const tools = ASSISTANT_TOOLS.filter((t) => chosen.has(t.name));
+  const toolList = ASSISTANT_TOOLS.filter((t) => chosen.has(t.name)).map((t) => t.name).join(', ');
+
   const system = [
     `You are "${agentName}", an autonomous AI agent running inside ${orgName ? `the "${orgName}" workspace` : 'a business-intelligence workspace'}. This is your triggered run — there is no human to chat with.`,
-    'Carry out the OPERATING INSTRUCTIONS below right now, end to end. You have TOOLS: search the web, read web pages, look up Wikipedia, and read/write the workspace Data Vault. USE THEM to gather whatever you need — you DO have access to data and the live web, so never reply that you cannot access data, real-time information, or the workspace; fetch it instead.',
-    'Do NOT ask questions or wait for input — act autonomously on the workspace context and what you can research. When you finish, produce a concise, well-structured markdown report of your findings (with source links). If you uncover durable, reusable facts, save them to the Data Vault with add_to_vault.',
+    `Carry out the OPERATING INSTRUCTIONS below right now, end to end. You have these TOOLS available: ${toolList || 'none'}. USE THEM to gather whatever you need — you DO have access to data and the live web, so never reply that you cannot access data, real-time information, or the workspace; fetch it instead.`,
+    'Do NOT ask questions or wait for input — act autonomously on the workspace context and what you can research. When you finish, produce a concise, well-structured markdown report of your findings (with source links). If you uncover durable, reusable facts and have the add_to_vault tool, save them to the Data Vault.',
     '--- YOUR OPERATING INSTRUCTIONS ---',
     agentSystemPrompt?.trim() || 'Analyse the workspace data and report anything useful.',
     '--- END OPERATING INSTRUCTIONS ---',
@@ -565,8 +611,8 @@ export async function runAgentTask(opts: {
   const history: ChatMsg[] = [{ role: 'user', content: 'Begin your run now. Use your tools as needed, then produce your final report.' }];
 
   if (ai.provider === 'anthropic') {
-    return runWithTools(ai, system, history, executeTool, onStep, AGENT_TOOLS);
+    return runWithTools(ai, system, history, executeTool, onStep, tools, opts.signal);
   }
   const base = ai.provider === 'openai' ? 'https://api.openai.com/v1' : 'https://openrouter.ai/api/v1';
-  return runWithToolsOpenAI(base, ai, system, history, executeTool, onStep, AGENT_TOOLS);
+  return runWithToolsOpenAI(base, ai, system, history, executeTool, onStep, tools, opts.signal);
 }

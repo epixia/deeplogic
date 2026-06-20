@@ -272,6 +272,14 @@ nav.dl-nav {
   gap: 10px;
 }
 
+/* Draggable header nav buttons (reorder) */
+.nav-drag { cursor: grab; }
+.nav-drag:active { cursor: grabbing; }
+.nav-drag--over {
+  box-shadow: inset 2px 0 0 0 var(--cyan);
+  background: color-mix(in srgb, var(--cyan) 10%, transparent);
+}
+
 /* ---------- user menu ---------- */
 .dl-user-btn {
   display: flex;

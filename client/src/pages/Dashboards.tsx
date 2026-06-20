@@ -66,7 +66,7 @@ export default function Dashboards() {
       if (!token) throw new Error('Session expired')
       setWidgets(await listOrgWidgets(token, orgId))
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load widgets.')
+      setError(e instanceof Error ? e.message : 'Failed to load Blocks.')
     } finally {
       setLoading(false)
     }
@@ -132,7 +132,7 @@ export default function Dashboards() {
       })
       navigate(`/app/${orgId}/widgets/${w.id}`)
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to create widget')
+      alert(err instanceof Error ? err.message : 'Failed to create Block')
       setCreating(false)
     }
   }
@@ -176,7 +176,7 @@ export default function Dashboards() {
           {withNew && (
             <button type="button" className="studio-row studio-row-new" onClick={openNew}>
               <span className="plus">+</span>
-              New widget
+              New Block
             </button>
           )}
         </div>
@@ -197,7 +197,7 @@ export default function Dashboards() {
         {withNew && (
           <button type="button" className="studio-card studio-card-new" onClick={openNew}>
             <span className="plus">+</span>
-            New widget
+            New Block
           </button>
         )}
       </div>
@@ -208,9 +208,11 @@ export default function Dashboards() {
     <main className="wrap studio">
       <header className="studio-head">
         <div>
-          <h1><span className="grad-text">Widgets</span></h1>
+          <h1><span className="grad-text">Blocks</span></h1>
           <p className="studio-lead">
-            Chat to vibe-code self-contained HTML widgets with live preview. Add them to your dashboards.
+            Blocks are modular intelligence components that monitor KPIs, track competitors, summarize
+            news, display live feeds, and trigger agent actions. Chat to vibe-code self-contained Blocks
+            and add them to your dashboards.
           </p>
         </div>
         <div className="studio-head-actions">
@@ -218,12 +220,12 @@ export default function Dashboards() {
             ⚡ Generate
           </button>
           <button type="button" className="btn btn-ghost" onClick={openNew}>
-            + New widget
+            + New Block
           </button>
         </div>
       </header>
 
-      <DashboardScopeBar orgId={orgId} scope={scope} onChange={setScope} noun="widgets" />
+      <DashboardScopeBar orgId={orgId} scope={scope} onChange={setScope} noun="Blocks" />
 
       <div className="studio-tabs">
         <button
@@ -231,7 +233,7 @@ export default function Dashboards() {
           className={`studio-tab ${tab === 'mine' ? 'active' : ''}`}
           onClick={() => setTab('mine')}
         >
-          My widgets<span className="count">{mine.length}</span>
+          My Blocks<span className="count">{mine.length}</span>
         </button>
         <button
           type="button"
@@ -266,12 +268,12 @@ export default function Dashboards() {
       {error && <div className="studio-error">{error}</div>}
 
       {loading ? (
-        <div className="studio-empty">Loading widgets…</div>
+        <div className="studio-empty">Loading Blocks…</div>
       ) : tab === 'mine' ? (
         <WidgetCollection items={mine} canDelete withNew />
       ) : shared.length === 0 ? (
         <div className="studio-empty">
-          No shared widgets yet. When teammates create widgets they appear here.
+          No shared Blocks yet. When teammates create Blocks they appear here.
         </div>
       ) : (
         <WidgetCollection items={shared} canDelete={false} />
@@ -280,7 +282,7 @@ export default function Dashboards() {
       {showNew && (
         <div className="studio-modal-backdrop" onClick={() => !creating && setShowNew(false)}>
           <form className="studio-modal" onClick={(e) => e.stopPropagation()} onSubmit={submitNew}>
-            <h2>New widget</h2>
+            <h2>New Block</h2>
             <p className="studio-modal-sub">Name it and pick a type — you'll vibe-code it in the editor.</p>
 
             <label className="studio-field">
@@ -354,7 +356,7 @@ function WidgetCard({
           type="button"
           className="sc-delete-btn"
           disabled={busyId === w.id}
-          title="Delete widget"
+          title="Delete Block"
           onClick={(e) => { e.stopPropagation(); onDelete() }}
         >
           ✕
@@ -397,7 +399,7 @@ function WidgetThumb({
     <div className="studio-thumb" style={{ height }}>
       <iframe
         className="studio-thumb-frame"
-        title="widget preview"
+        title="Block preview"
         srcDoc={widgetFrameSrcDoc(html, theme)}
         sandbox="allow-scripts allow-popups"
         loading="lazy"
@@ -435,7 +437,7 @@ function WidgetRow({
           type="button"
           className="studio-row-del"
           disabled={busyId === w.id}
-          title="Delete widget"
+          title="Delete Block"
           onClick={(e) => { e.stopPropagation(); onDelete() }}
         >
           ✕

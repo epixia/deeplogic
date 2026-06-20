@@ -1,3 +1,44 @@
+/* Stop state for the run button while an agent is running */
+.agent-run-btn.agent-stop-btn {
+  color: #e07a8a;
+  border-color: rgba(224, 122, 138, 0.4);
+  background: rgba(224, 122, 138, 0.1);
+}
+.agent-run-btn.agent-stop-btn:hover {
+  background: rgba(224, 122, 138, 0.18);
+  border-color: rgba(224, 122, 138, 0.6);
+}
+
+/* Agent tools selector (in the create/edit modal) */
+.agents-tools {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px;
+  margin-top: 4px;
+}
+.agents-tool {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  text-align: left;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: transparent;
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s;
+}
+.agents-tool:hover { border-color: color-mix(in srgb, var(--cyan) 40%, var(--line)); }
+.agents-tool.is-on {
+  border-color: var(--cyan);
+  background: rgba(111, 227, 240, 0.06);
+}
+.agents-tool-ic { font-size: 17px; line-height: 1.2; flex-shrink: 0; }
+.agents-tool-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.agents-tool-name { font-size: 13px; font-weight: 700; color: var(--ink); }
+.agents-tool-desc { font-size: 11.5px; color: var(--mut); line-height: 1.4; }
+.agents-tool-check { flex-shrink: 0; color: var(--cyan); font-weight: 800; width: 12px; }
+
 .agents-empty {
   display: flex;
   flex-direction: column;

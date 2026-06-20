@@ -25,6 +25,7 @@ import { memoryRouter } from './routes/memory.js';
 import { alertsRouter } from './routes/alerts.js';
 import { goalsRouter } from './routes/goals.js';
 import { searchRouter } from './routes/search.js';
+import { webhookIngestRouter } from './routes/webhooks.js';
 
 // Platform AI (onboarding/anonymous) uses a server env key, kept separate from
 // per-client workspace keys (org_ai_settings) — see serverFallbackAi().
@@ -56,6 +57,7 @@ app.use('/api', demoRouter);
 app.use('/api', inviteRouter);   // GET /invite/:token + POST /invite/:token/accept
 app.use('/api', agentCallbackRouter);  // POST /agent-callback/:id — VM→central, token-authed
 app.use('/api', onboardingPublicRouter);  // POST /onboarding/analyze — anonymous, pre-account
+app.use('/api', webhookIngestRouter);  // POST /webhooks/:orgId/ingest — external→DataVault, token-authed
 
 // Everything else under /api requires authentication.
 app.use('/api', requireAuth);

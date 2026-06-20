@@ -3,12 +3,40 @@
 .cp-card {
   border: 1px solid rgba(111, 227, 240, .28);
   border-radius: 16px;
-  background:
-    linear-gradient(180deg, rgba(111, 227, 240, .06), rgba(85, 96, 232, .03)),
-    var(--card);
+  background: transparent;
   padding: 18px 20px;
   margin-bottom: 26px;
 }
+
+/* Full-width page wrapper for the CRM-style competitor/product lists. */
+.wrap.cp-fullwidth { max-width: none; }
+
+/* product/category chip + table description cell */
+.cp-cat-pill {
+  display: inline-flex; align-items: center; align-self: flex-start;
+  font-size: 11px; font-weight: 700; letter-spacing: .03em;
+  color: var(--cyan); border: 1px solid rgba(111, 227, 240, .35);
+  border-radius: 999px; padding: 2px 9px;
+}
+.cp-td-desc { color: var(--mut); max-width: 460px; }
+
+/* product thumbnails + price */
+.pr-thumb { border-radius: 8px; overflow: hidden; background: var(--bg2); border: 1px solid var(--line); flex: none; }
+.pr-thumb--sm { width: 44px; height: 44px; object-fit: cover; display: inline-flex; align-items: center; justify-content: center; font-size: 18px; }
+.pr-thumb--empty { color: var(--mut2); }
+.pr-thumb--card { width: 100%; height: 140px; border-radius: 10px; margin-bottom: 8px; }
+.pr-thumb--card img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.cp-th-thumb, .cp-td-thumb { width: 52px; }
+.pr-price { font-size: 13px; font-weight: 800; color: var(--ink); white-space: nowrap; }
+.pr-meta-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+/* live "generating" status line */
+.cp-genstep { display: flex; align-items: center; gap: 10px; }
+.cp-genstep-pulse {
+  width: 9px; height: 9px; border-radius: 50%; flex: none;
+  background: var(--cyan); animation: cp-pulse 1s ease-in-out infinite;
+}
+@keyframes cp-pulse { 0%, 100% { opacity: .3; transform: scale(.8); } 50% { opacity: 1; transform: scale(1.1); } }
 
 .cp-head {
   display: flex;
@@ -166,7 +194,7 @@
 .cp-th { cursor: pointer; user-select: none; }
 .cp-th:hover { color: var(--ink); }
 .cp-th--active { color: var(--cyan); }
-.cp-th--num { text-align: right; }
+.cp-th--num { text-align: left; }
 .cp-sort-arrow { font-size: 9px; }
 .cp-th-check, .cp-td-check { width: 34px; text-align: center; }
 .cp-th-actions { width: 1%; }
@@ -181,7 +209,7 @@
 .cp-td-web { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cp-td-web a { color: var(--cyan); text-decoration: none; }
 .cp-td-web a:hover { text-decoration: underline; }
-.cp-num { text-align: right; white-space: nowrap; color: var(--ink); font-variant-numeric: tabular-nums; }
+.cp-num { text-align: left; white-space: nowrap; color: var(--ink); font-variant-numeric: tabular-nums; }
 .cp-muted { color: var(--mut2); }
 .cp-td-check input, .cp-check input { accent-color: var(--cyan); cursor: pointer; }
 .cp-td-actions { white-space: nowrap; text-align: right; }

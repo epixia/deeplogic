@@ -1559,6 +1559,7 @@ export interface Agent {
   model: string
   systemPrompt: string
   schedule: string | null
+  tools: string[] | null // tool names this agent may call; null = default safe set
   lastRunAt: string | null
   status: 'idle' | 'running'
   lastRunStatus: 'ok' | 'error' | null
@@ -1654,7 +1655,7 @@ export function listAgents(token: string, orgId: string): Promise<Agent[]> {
 export function createAgent(
   token: string,
   orgId: string,
-  body: { name: string; description?: string; model?: string; systemPrompt?: string; schedule?: string | null },
+  body: { name: string; description?: string; model?: string; systemPrompt?: string; schedule?: string | null; tools?: string[] | null },
 ): Promise<Agent> {
   return jsonFetch(token, `/orgs/${enc(orgId)}/agents`, {
     method: 'POST',
@@ -1666,7 +1667,7 @@ export function updateAgent(
   token: string,
   orgId: string,
   agentId: string,
-  body: Partial<{ name: string; description: string; model: string; systemPrompt: string; schedule: string | null }>,
+  body: Partial<{ name: string; description: string; model: string; systemPrompt: string; schedule: string | null; tools: string[] | null }>,
 ): Promise<Agent> {
   return jsonFetch(token, `/orgs/${enc(orgId)}/agents/${enc(agentId)}`, {
     method: 'PATCH',
@@ -1676,6 +1677,11 @@ export function updateAgent(
 
 export function deleteAgent(token: string, orgId: string, agentId: string): Promise<void> {
   return jsonFetch(token, `/orgs/${enc(orgId)}/agents/${enc(agentId)}`, { method: 'DELETE' })
+}
+
+// POST /api/orgs/:orgId/agents/:id/stop — cancel a running agent.
+export function stopAgent(token: string, orgId: string, agentId: string): Promise<{ ok: boolean }> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/agents/${enc(agentId)}/stop`, { method: 'POST' })
 }
 
 /* ---------------- external agents (Hermes / OpenClaw, VM-deployed) ---------------- */
@@ -2039,6 +2045,80 @@ export interface CompetitorsResult {
   note?: string
 }
 
+/* ---------------- suggest products ---------------- */
+
+export interface ProductSuggestion {
+  name: string
+  category: string
+  description: string
+  price?: string
+  imageUrl?: string
+  url?: string
+}
+export interface ProductsResult {
+  products: ProductSuggestion[]
+  usedAI: boolean
+  aiError?: string
+  note?: string
+}
+
+// POST /api/orgs/:orgId/studio/suggest-products — propose the company's products
+export function suggestProducts(
+  token: string,
+  orgId: string,
+  existing: string[] = [],
+): Promise<ProductsResult> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/studio/suggest-products`, {
+    method: 'POST',
+    body: JSON.stringify({ existing }),
+  })
+}
+
+// POST host-image — re-host an external image URL in our storage. Returns our
+// hosted URL, or '' if it couldn't be fetched (caller may keep the original).
+export function hostImage(token: string, orgId: string, url: string): Promise<{ url: string }> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/studio/host-image`, {
+    method: 'POST',
+    body: JSON.stringify({ url }),
+  })
+}
+
+export type ProductStreamEvent =
+  | { type: 'step'; icon: string; text: string }
+  | { type: 'done'; result: ProductsResult }
+  | { type: 'error'; error: string }
+
+// POST suggest-products/stream — live progress (SSE) then a final result.
+export async function* suggestProductsStream(
+  token: string,
+  orgId: string,
+  existing: string[] = [],
+  signal?: AbortSignal,
+): AsyncGenerator<ProductStreamEvent> {
+  const res = await fetch(`${BASE}/orgs/${enc(orgId)}/studio/suggest-products/stream`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ existing }),
+    signal,
+  })
+  if (!res.ok || !res.body) { yield { type: 'error', error: `Server error: ${res.status}` }; return }
+  const reader = res.body.getReader()
+  const dec = new TextDecoder()
+  let buf = ''
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buf += dec.decode(value, { stream: true })
+    const parts = buf.split('\n\n')
+    buf = parts.pop() ?? ''
+    for (const part of parts) {
+      const line = part.split('\n').find((l) => l.startsWith('data: '))
+      if (!line) continue
+      try { yield JSON.parse(line.slice(6)) as ProductStreamEvent } catch { /* skip */ }
+    }
+  }
+}
+
 // POST /api/orgs/:orgId/studio/suggest-competitors — propose competitors from the company profile
 export function suggestCompetitors(
   token: string,
@@ -2120,6 +2200,70 @@ export function fetchDomainIntel(token: string, orgId: string, url: string): Pro
     method: 'POST',
     body: JSON.stringify({ url }),
   })
+}
+
+/* ---------------- competitor / domain products ---------------- */
+
+export interface DomainProductsResponse {
+  domain: string
+  products: ProductSuggestion[] | null
+  fetchedAt: string | null
+}
+
+// GET cached products scraped for a domain (DB only — no external call, no cost).
+export function getDomainProducts(token: string, orgId: string, url: string): Promise<DomainProductsResponse> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/studio/domain-products?url=${encodeURIComponent(url)}`)
+}
+
+export type DomainProductStreamEvent =
+  | { type: 'step'; icon: string; text: string }
+  | { type: 'done'; products: ProductSuggestion[]; fetchedAt: string }
+  | { type: 'error'; error: string }
+
+// POST domain-products/stream — scrape a domain's products with live progress.
+export async function* fetchDomainProductsStream(
+  token: string,
+  orgId: string,
+  url: string,
+  name?: string,
+  signal?: AbortSignal,
+): AsyncGenerator<DomainProductStreamEvent> {
+  const res = await fetch(`${BASE}/orgs/${enc(orgId)}/studio/domain-products/stream`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ url, name }),
+    signal,
+  })
+  if (!res.ok || !res.body) { yield { type: 'error', error: `Server error: ${res.status}` }; return }
+  const reader = res.body.getReader()
+  const dec = new TextDecoder()
+  let buf = ''
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buf += dec.decode(value, { stream: true })
+    const parts = buf.split('\n\n')
+    buf = parts.pop() ?? ''
+    for (const part of parts) {
+      const line = part.split('\n').find((l) => l.startsWith('data: '))
+      if (!line) continue
+      try { yield JSON.parse(line.slice(6)) as DomainProductStreamEvent } catch { /* skip */ }
+    }
+  }
+}
+
+/* ---------------- webhook connector ---------------- */
+
+// Issue/fetch the org's inbound webhook token and build the full ingest URL that
+// external apps / Zapier / Make post to. The token authorizes writes.
+export async function getWebhookConnector(
+  token: string,
+  orgId: string,
+): Promise<{ url: string; token: string }> {
+  const r = await jsonFetch<{ token: string }>(token, `/orgs/${enc(orgId)}/webhook`)
+  const origin = typeof window !== 'undefined' ? window.location.origin : ''
+  const url = `${origin}/api/webhooks/${enc(orgId)}/ingest?token=${r.token}`
+  return { url, token: r.token }
 }
 
 // POST /api/orgs/:orgId/assistant/title — concise title for a markdown note

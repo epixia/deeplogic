@@ -12,8 +12,22 @@ import { fetchSiteText, normalizeUrl, suggestTeam, type ProposedAgent } from '..
 import { provisionExternalAgent } from '../agents/provision.js';
 import { loadOrgoCreds } from './integrations.js';
 import { orgoStop, orgoDestroy } from '../integrations/orgo.js';
+import { AGENT_ELIGIBLE_TOOLS } from '../studio/assistant.js';
 
 export const agentsRouter = Router();
+
+// In-process registry of running internal-agent runs (agentId → AbortController),
+// so an explicit Stop request can cancel a run started by a streaming request.
+const RUN_CONTROLLERS = new Map<string, AbortController>();
+
+// Keep only valid, eligible tool names; null when nothing valid was supplied
+// (the run path treats null as "use the default safe set").
+function sanitizeTools(input: unknown): string[] | null {
+  if (!Array.isArray(input)) return null;
+  const eligible = new Set<string>(AGENT_ELIGIBLE_TOOLS);
+  const clean = [...new Set(input.filter((x): x is string => typeof x === 'string' && eligible.has(x)))];
+  return clean.length ? clean : null;
+}
 
 const ALLOWED_MODELS = new Set([
   'claude-sonnet-4-6', 'claude-opus-4-8', 'claude-haiku-4-5-20251001', 'gpt-4o', 'gpt-4o-mini',
@@ -34,6 +48,7 @@ interface AgentRow {
   last_run_at: string | null;
   status: string | null;
   last_run_status: string | null;
+  tools: string[] | null;
   created_at: string;
   updated_at: string;
 }
@@ -47,6 +62,7 @@ function mapAgent(row: AgentRow, userId: string) {
     model: row.model,
     systemPrompt: row.system_prompt,
     schedule: row.schedule ?? null,
+    tools: Array.isArray(row.tools) ? row.tools : null,
     lastRunAt: row.last_run_at ?? null,
     status: (row.status as 'idle' | 'running') ?? 'idle',
     lastRunStatus: (row.last_run_status as 'ok' | 'error' | null) ?? null,
@@ -87,11 +103,11 @@ agentsRouter.get('/orgs/:orgId/agents', requireMember(), async (req, res) => {
 agentsRouter.post('/orgs/:orgId/agents/:id/run', requireMember(), async (req, res) => {
   const { orgId, id } = req.params;
   const { data: agent, error } = await req.db!
-    .from('agents').select('id, name, model, system_prompt').eq('id', id).eq('org_id', orgId).maybeSingle();
+    .from('agents').select('id, name, model, system_prompt, tools').eq('id', id).eq('org_id', orgId).maybeSingle();
   if (error) return res.status(500).json({ error: error.message });
   if (!agent) return res.status(404).json({ error: 'Agent not found' });
 
-  const a = agent as { id: string; name: string; model: string; system_prompt: string };
+  const a = agent as { id: string; name: string; model: string; system_prompt: string; tools: string[] | null };
   const trigger = (req.body?.trigger === 'schedule' ? 'schedule' : 'manual') as 'manual' | 'schedule';
   try {
     const { output, runId } = await executeInternalAgentRun(req, orgId, a, { trigger });
@@ -112,21 +128,44 @@ agentsRouter.post('/orgs/:orgId/agents/:id/run/stream', requireMember(), async (
   const send = (obj: unknown) => res.write(`data: ${JSON.stringify(obj)}\n\n`);
 
   const { data: agent, error } = await req.db!
-    .from('agents').select('id, name, model, system_prompt').eq('id', id).eq('org_id', orgId).maybeSingle();
+    .from('agents').select('id, name, model, system_prompt, tools').eq('id', id).eq('org_id', orgId).maybeSingle();
   if (error || !agent) { send({ type: 'error', error: 'Agent not found' }); return res.end(); }
-  const a = agent as { id: string; name: string; model: string; system_prompt: string };
+  const a = agent as { id: string; name: string; model: string; system_prompt: string; tools: string[] | null };
+
+  // Stop support: register an AbortController so an explicit POST .../stop (or a
+  // client disconnect) can cancel the in-flight model run promptly & stop billing.
+  const ctrl = new AbortController();
+  let clientGone = false;
+  RUN_CONTROLLERS.set(id, ctrl);
+  req.on('close', () => { clientGone = true; ctrl.abort(); });
 
   send({ type: 'step', icon: '▶️', text: `Starting "${a.name}"` });
   try {
     const { output, runId } = await executeInternalAgentRun(req, orgId, a, {
       trigger: 'manual',
+      signal: ctrl.signal,
       onStep: (s) => send({ type: 'step', icon: s.icon, text: s.text }),
     });
     send({ type: 'done', output: output.slice(0, 8000), runId });
   } catch (e) {
-    send({ type: 'error', error: e instanceof Error ? e.message : 'Agent run failed.' });
+    if (!clientGone) send({ type: 'error', error: e instanceof Error ? e.message : 'Agent run failed.' });
+  } finally {
+    if (RUN_CONTROLLERS.get(id) === ctrl) RUN_CONTROLLERS.delete(id);
   }
   return res.end();
+});
+
+// POST /api/orgs/:orgId/agents/:id/stop — cancel a running agent. Aborts the
+// in-process run (if this instance holds it) and forces the agent back to idle.
+agentsRouter.post('/orgs/:orgId/agents/:id/stop', requireMember(), async (req, res) => {
+  const { orgId, id } = req.params;
+  RUN_CONTROLLERS.get(id)?.abort();
+  RUN_CONTROLLERS.delete(id);
+  // Force status idle even if the run lives on another instance, so the UI unsticks.
+  await req.db!.from('agents')
+    .update({ status: 'idle', last_run_status: 'error', last_run_at: new Date().toISOString() })
+    .eq('id', id).eq('org_id', orgId);
+  return res.json({ ok: true });
 });
 
 // GET /api/orgs/:orgId/agent-runs — recent runs across all agents (activity log)
@@ -156,12 +195,13 @@ agentsRouter.get('/orgs/:orgId/agent-runs/:runId', requireMember(), async (req, 
 // POST /api/orgs/:orgId/agents
 agentsRouter.post('/orgs/:orgId/agents', requireMember(), async (req, res) => {
   const { orgId } = req.params;
-  const { name, description = '', model = 'claude-sonnet-4-6', systemPrompt = '', schedule = null } = req.body as {
+  const { name, description = '', model = 'claude-sonnet-4-6', systemPrompt = '', schedule = null, tools } = req.body as {
     name: string;
     description?: string;
     model?: string;
     systemPrompt?: string;
     schedule?: string | null;
+    tools?: unknown;
   };
   if (!name?.trim()) return res.status(400).json({ error: 'name is required' });
 
@@ -175,6 +215,7 @@ agentsRouter.post('/orgs/:orgId/agents', requireMember(), async (req, res) => {
       model,
       system_prompt: systemPrompt,
       schedule: schedule || null,
+      tools: sanitizeTools(tools),
     })
     .select('*')
     .single();
@@ -252,12 +293,13 @@ agentsRouter.post('/orgs/:orgId/agents/bulk', requireMember(), async (req, res) 
 // PATCH /api/orgs/:orgId/agents/:id
 agentsRouter.patch('/orgs/:orgId/agents/:id', requireMember(), async (req, res) => {
   const { orgId, id } = req.params;
-  const { name, description, model, systemPrompt, schedule } = req.body as Partial<{
+  const { name, description, model, systemPrompt, schedule, tools } = req.body as Partial<{
     name: string;
     description: string;
     model: string;
     systemPrompt: string;
     schedule: string | null;
+    tools: unknown;
   }>;
 
   const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
@@ -266,6 +308,7 @@ agentsRouter.patch('/orgs/:orgId/agents/:id', requireMember(), async (req, res) 
   if (model !== undefined) patch.model = model;
   if (systemPrompt !== undefined) patch.system_prompt = systemPrompt;
   if (schedule !== undefined) patch.schedule = schedule || null;
+  if (tools !== undefined) patch.tools = sanitizeTools(tools);
 
   const { data, error } = await req.db!
     .from('agents')

@@ -30,6 +30,9 @@ import { captionImage, fetchSiteText, normalizeUrl } from '../studio/aiTeam.js';
 import { analyzeUrl, parseLenses } from '../studio/urlAnalysis.js';
 import { suggestIdeas, parseTarget, type VaultInventoryItem } from '../studio/suggestIdeas.js';
 import { suggestCompetitors } from '../studio/suggestCompetitors.js';
+import { suggestProducts, type ProductSuggestion, type ProductsResult } from '../studio/suggestProducts.js';
+import { scrapeProducts, scrapeUrls, fetchPageImage, type ScrapedProduct } from '../studio/productScrape.js';
+import { hostImage } from '../studio/imageHost.js';
 import { loadPlatformApiCreds } from './integrations.js';
 import { dataforseoDomainIntel, toDomain, type DomainIntel } from '../integrations/dataforseo.js';
 import { runAssistant, runAgentTask, type ChatMsg, type WebResult } from '../studio/assistant.js';
@@ -2221,6 +2224,29 @@ studioRouter.post(
   }
 );
 
+// GET webhook — issue (or fetch) the org's inbound Webhook Connector token. The
+// non-secret view for the Connector Library; the public ingest route validates
+// payloads against this token.
+studioRouter.get(
+  '/orgs/:orgId/webhook',
+  requireMember(),
+  async (req: Request, res: Response) => {
+    const orgId = req.params.orgId;
+    try {
+      const { data } = await req.db!.from('org_webhooks').select('token').eq('org_id', orgId).maybeSingle();
+      let token = (data as { token?: string } | null)?.token ?? null;
+      if (!token) {
+        const ins = await req.db!.from('org_webhooks').insert({ org_id: orgId }).select('token').maybeSingle();
+        token = (ins.data as { token?: string } | null)?.token ?? null;
+      }
+      res.json({ token });
+    } catch (err) {
+      console.error('GET webhook token failed', err);
+      res.status(500).json({ error: 'Failed to load webhook token.' });
+    }
+  }
+);
+
 // One-shot execution of an agent: run its system prompt now and return the
 // output. Uses the agent's model when it matches the org provider, else the
 // provider default.
@@ -2308,13 +2334,14 @@ async function harvestAgentFinding(
 // the POST /agents/:id/run endpoint.
 export async function executeInternalAgentRun(
   req: Request, orgId: string,
-  agent: { id: string; name: string; model: string; system_prompt: string },
+  agent: { id: string; name: string; model: string; system_prompt: string; tools?: string[] | null },
   opts: {
     trigger: 'manual' | 'chat' | 'schedule' | 'goal';
     triggerContext?: Record<string, unknown>;
     groupId?: string | null;
     groupLabel?: string | null;
     onStep?: (s: { icon: string; text: string }) => void;
+    signal?: AbortSignal;
   },
 ): Promise<{ output: string; runId: string | null }> {
   const ai = (await loadAiConfig(orgId).catch(() => null)) ?? serverFallbackAi();
@@ -2353,7 +2380,7 @@ export async function executeInternalAgentRun(
   try {
     const { text } = await runAgentTask({
       ai, agentName: agent.name, agentSystemPrompt: agent.system_prompt, executeTool,
-      inventory, companyProfile, memory, goals,
+      inventory, companyProfile, memory, goals, toolNames: agent.tools ?? null, signal: opts.signal,
       onStep: (s) => {
         // 🧠 = the agent's own reasoning; everything else is a tool action.
         void appendEvent(req.db!, orgId, runId, s.icon === '🧠' ? 'reasoning' : 'tool_call', s.text, s.icon);
@@ -2467,8 +2494,8 @@ function assistantToolExecutor(req: Request, orgId: string, onAgentStep?: (s: { 
       const want = String(input.name ?? '').trim();
       if (!want) return { error: 'Provide the name of the agent to run.' };
       const { data: rows } = await req.db!
-        .from('agents').select('id, name, model, system_prompt').eq('org_id', orgId).limit(100);
-      const list = (rows ?? []) as { id: string; name: string; model: string; system_prompt: string }[];
+        .from('agents').select('id, name, model, system_prompt, tools').eq('org_id', orgId).limit(100);
+      const list = (rows ?? []) as { id: string; name: string; model: string; system_prompt: string; tools: string[] | null }[];
       // Exact (case-insensitive) match first, then a contains-match fallback.
       const lc = want.toLowerCase();
       const agent = list.find((a) => a.name.toLowerCase() === lc)
@@ -2479,7 +2506,7 @@ function assistantToolExecutor(req: Request, orgId: string, onAgentStep?: (s: { 
       try {
         const { output } = await executeInternalAgentRun(
           req, orgId,
-          { id: agent.id, name: agent.name, model: agent.model, system_prompt: agent.system_prompt },
+          { id: agent.id, name: agent.name, model: agent.model, system_prompt: agent.system_prompt, tools: agent.tools },
           { trigger: 'chat', onStep: onAgentStep },
         );
         return { ok: true, name: agent.name, output: output.slice(0, 6000) };
@@ -3058,6 +3085,207 @@ studioRouter.post(
       console.error('POST studio suggest-competitors failed', err);
       res.status(500).json({ error: 'Failed to suggest competitors.' });
     }
+  }
+);
+
+// Reusable product discovery for ANY website: crawl the site + web-search for
+// product pages, AI-extract specific SKUs, and enrich missing thumbnails. Used
+// for both the company's own products and a competitor's (on its detail page).
+async function gatherSiteProducts(
+  req: Request, orgId: string,
+  opts: { website: string; companyName?: string; companyProfile?: string; existing?: string[]; onStep?: (s: { icon: string; text: string }) => void },
+): Promise<ProductsResult> {
+  const { website, companyName = '', companyProfile = '', existing = [], onStep } = opts;
+  const step = (icon: string, text: string) => onStep?.({ icon, text });
+  const ai = await loadAiConfig(orgId).catch(() => null);
+  const domain = website ? toDomain(website) : '';
+
+  const structured: ScrapedProduct[] = [];
+  const evidence: string[] = [];
+
+  if (website) {
+    step('🌐', `Crawling ${domain}…`);
+    const own = await scrapeProducts(website).catch(() => ({ products: [], text: '' }));
+    structured.push(...own.products);
+    if (own.text) evidence.push(own.text);
+    if (own.products.length) step('📦', `Found ${own.products.length} product${own.products.length === 1 ? '' : 's'} on the site`);
+  }
+
+  step('🔍', 'Searching the web for product pages…');
+  try {
+    const queries = [`${companyName || domain} products`, `${domain} shop products`].filter((q) => q.trim());
+    const hitUrls: string[] = [];
+    const snippetLines: string[] = [];
+    const seenHit = new Set<string>();
+    for (const q of queries) {
+      const results = await webSearch(q, 6).catch(() => [] as WebResult[]);
+      for (const r of results) {
+        if (seenHit.has(r.url)) continue;
+        seenHit.add(r.url);
+        hitUrls.push(r.url);
+        snippetLines.push(`- ${r.title} — ${r.snippet} (${r.url})`);
+      }
+    }
+    if (snippetLines.length) evidence.push(`=== WEB SEARCH RESULTS (product pages & mentions) ===\n${snippetLines.join('\n')}`);
+    if (hitUrls.length) step('🌐', `Reading ${Math.min(4, hitUrls.length)} product page${hitUrls.length === 1 ? '' : 's'} from search…`);
+    const searchScrape = await scrapeUrls(hitUrls.slice(0, 4), 4).catch(() => ({ products: [], text: '' }));
+    structured.push(...searchScrape.products);
+    if (searchScrape.text) evidence.push(searchScrape.text);
+  } catch { /* search is best-effort */ }
+
+  step('🧠', 'Extracting specific products from what I found…');
+  const aiResult = await suggestProducts({ ai, companyProfile, siteText: evidence.join('\n\n').slice(0, 16000), existing });
+
+  const lowerExisting = new Set(existing.map((e) => e.toLowerCase()));
+  const byName = new Map<string, ProductSuggestion>();
+  for (const p of structured) {
+    const k = p.name.toLowerCase();
+    if (lowerExisting.has(k) || byName.has(k)) continue;
+    byName.set(k, { name: p.name, category: p.category ?? '', description: p.description ?? '', price: p.price, imageUrl: p.imageUrl, url: p.url });
+  }
+  for (const p of aiResult.products) {
+    const k = p.name.toLowerCase();
+    if (lowerExisting.has(k) || byName.has(k)) continue;
+    byName.set(k, p);
+  }
+  const products = [...byName.values()].slice(0, 24);
+
+  const missing = products.filter((p) => !p.imageUrl);
+  if (missing.length && (companyName || domain)) {
+    step('🖼', 'Finding product images…');
+    await Promise.all(missing.slice(0, 12).map(async (p) => {
+      try {
+        const results = await webSearch(`${p.name} ${companyName || domain}`.trim(), 3).catch(() => [] as WebResult[]);
+        for (const r of results.slice(0, 2)) {
+          const img = await fetchPageImage(r.url);
+          if (img) { p.imageUrl = img; break; }
+        }
+      } catch { /* best-effort */ }
+    }));
+  }
+
+  return { products, usedAI: aiResult.usedAI, aiError: aiResult.aiError, note: products.length === 0 ? aiResult.note : undefined };
+}
+
+// Company product discovery — resolves the company website from the profile,
+// then runs the shared gatherSiteProducts (excluding already-tracked products).
+async function discoverProducts(
+  req: Request, orgId: string, existing: string[],
+  onStep?: (s: { icon: string; text: string }) => void,
+): Promise<ProductsResult> {
+  const step = (icon: string, text: string) => onStep?.({ icon, text });
+  step('🔎', 'Reading your company profile…');
+  const items = await loadContextItems(req.db!, orgId, req.user!.id);
+  const profileItem = items.find((it) => (it.meta as Record<string, unknown> | undefined)?.companyProfile === true);
+  const companyProfile = typeof profileItem?.content === 'string' ? profileItem.content : '';
+  const meta = (profileItem?.meta ?? {}) as Record<string, unknown>;
+  const website = (typeof meta.website === 'string' && meta.website)
+    || (companyProfile.match(/https?:\/\/[^\s)]+/i)?.[0] ?? '');
+  const companyName = (typeof meta.name === 'string' && meta.name) || '';
+  if (!website) step('⚠️', 'No company website set — add it in your Company profile for deeper results.');
+  return gatherSiteProducts(req, orgId, { website, companyName, companyProfile, existing, onStep });
+}
+
+// POST suggest-products — propose the company's own products (one-shot).
+studioRouter.post(
+  '/orgs/:orgId/studio/suggest-products',
+  requireMember(),
+  async (req: Request, res: Response) => {
+    const existing = Array.isArray((req.body || {}).existing) ? (req.body.existing as string[]) : [];
+    try {
+      res.json(await discoverProducts(req, req.params.orgId, existing));
+    } catch (err) {
+      console.error('POST studio suggest-products failed', err);
+      res.status(500).json({ error: 'Failed to suggest products.' });
+    }
+  }
+);
+
+// POST host-image { url } — download an external image and re-host it in our
+// storage; returns { url } (our hosted URL, or '' if it couldn't be fetched).
+studioRouter.post(
+  '/orgs/:orgId/studio/host-image',
+  requireMember(),
+  async (req: Request, res: Response) => {
+    const url = String(req.body?.url ?? '').trim();
+    if (!url) { res.status(400).json({ error: 'url is required' }); return; }
+    const hosted = await hostImage(req.params.orgId, url);
+    res.json({ url: hosted ?? '' });
+  }
+);
+
+// POST suggest-products/stream — same, but streams live progress (SSE), then a
+// final { type:'done', result } event with the products.
+studioRouter.post(
+  '/orgs/:orgId/studio/suggest-products/stream',
+  requireMember(),
+  async (req: Request, res: Response) => {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders?.();
+    const send = (obj: unknown) => res.write(`data: ${JSON.stringify(obj)}\n\n`);
+    const existing = Array.isArray((req.body || {}).existing) ? (req.body.existing as string[]) : [];
+    try {
+      const result = await discoverProducts(req, req.params.orgId, existing, (s) => send({ type: 'step', icon: s.icon, text: s.text }));
+      send({ type: 'done', result });
+    } catch (err) {
+      send({ type: 'error', error: err instanceof Error ? err.message : 'Failed to suggest products.' });
+    }
+    res.end();
+  }
+);
+
+// GET domain-products?url= — CACHED products scraped from a domain (DB only, no
+// external call). Used by the competitor detail page. Empty when not yet fetched.
+studioRouter.get(
+  '/orgs/:orgId/studio/domain-products',
+  requireMember(),
+  async (req: Request, res: Response) => {
+    const orgId = req.params.orgId;
+    const domain = toDomain((req.query.url ?? '').toString());
+    if (!domain) { res.status(400).json({ error: 'Provide a url.' }); return; }
+    try {
+      const { data } = await req.db!
+        .from('org_domain_products').select('products, fetched_at').eq('org_id', orgId).eq('domain', domain).maybeSingle();
+      const row = data as { products: ProductSuggestion[]; fetched_at: string } | null;
+      res.json({ domain, products: row?.products ?? null, fetchedAt: row?.fetched_at ?? null });
+    } catch (err) {
+      console.error('GET domain-products failed', err);
+      res.status(500).json({ error: 'Failed to load products.' });
+    }
+  }
+);
+
+// POST domain-products/stream { url, name? } — scrape a competitor's site for its
+// products (live progress via SSE), cache the result, and return it.
+studioRouter.post(
+  '/orgs/:orgId/studio/domain-products/stream',
+  requireMember(),
+  async (req: Request, res: Response) => {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders?.();
+    const send = (obj: unknown) => res.write(`data: ${JSON.stringify(obj)}\n\n`);
+    const orgId = req.params.orgId;
+    const website = String(req.body?.url ?? '').trim();
+    const name = String(req.body?.name ?? '').trim();
+    const domain = website ? toDomain(website) : '';
+    if (!domain || !domain.includes('.')) { send({ type: 'error', error: 'Provide a valid website url.' }); res.end(); return; }
+    try {
+      const result = await gatherSiteProducts(req, orgId, {
+        website, companyName: name,
+        onStep: (s) => send({ type: 'step', icon: s.icon, text: s.text }),
+      });
+      const fetchedAt = new Date().toISOString();
+      await req.db!.from('org_domain_products')
+        .upsert({ org_id: orgId, domain, products: result.products, fetched_at: fetchedAt }, { onConflict: 'org_id,domain' });
+      send({ type: 'done', products: result.products, fetchedAt });
+    } catch (err) {
+      send({ type: 'error', error: err instanceof Error ? err.message : 'Failed to load products.' });
+    }
+    res.end();
   }
 );
 

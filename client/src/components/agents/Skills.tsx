@@ -22,7 +22,7 @@ const SKILLS: Skill[] = [
   { icon: '🔭', name: 'Competitor discovery', category: 'Research', blurb: 'Identify and profile a company’s most relevant real competitors.' },
   { icon: '🕸', name: 'Memory recall', category: 'Knowledge', blurb: 'Recall currently-valid facts from the workspace knowledge graph to ground answers.' },
   { icon: '💾', name: 'Save to Data Vault', category: 'Knowledge', blurb: 'Write research and notes into the vault as structured, reusable context.' },
-  { icon: '📊', name: 'Build a widget', category: 'Build', blurb: 'Create a dashboard widget — KPI, chart, table or news feed — from a prompt.' },
+  { icon: '📊', name: 'Build a Block', category: 'Build', blurb: 'Create a dashboard Block — KPI, chart, table or news feed — from a prompt.' },
   { icon: '🤖', name: 'Create an agent', category: 'Build', blurb: 'Spin up a scheduled AI agent with a tailored system prompt.' },
   { icon: '🚀', name: 'Deploy a VM agent', category: 'Autonomy', blurb: 'Provision a real Orgo virtual computer and run an autonomous mission (Hermes / OpenClaw).' },
 ]

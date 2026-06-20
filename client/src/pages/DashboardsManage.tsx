@@ -74,11 +74,15 @@ export default function DashboardsManage() {
   useEffect(() => { setLoading(true); void load() }, [load])
 
   // Groups to render = those holding dashboards ∪ user-created empty groups.
+  // Competitor dashboards live on the dedicated Competitors page, so their group
+  // is excluded from dashboard management.
+  const isCompetitorGroup = (g: string) => g.toLowerCase() === 'competitors' || g.toLowerCase() === 'competitor'
   const grouped = useMemo(() => {
     const map = new Map<string, DashboardListItem[]>()
-    for (const g of extraGroups) if (!map.has(g)) map.set(g, [])
+    for (const g of extraGroups) if (!isCompetitorGroup(g) && !map.has(g)) map.set(g, [])
     for (const b of boards) {
       const key = groupOf(b)
+      if (isCompetitorGroup(key)) continue
       if (!map.has(key)) map.set(key, [])
       map.get(key)!.push(b)
     }
@@ -140,7 +144,7 @@ export default function DashboardsManage() {
   }
 
   async function remove(b: DashboardListItem) {
-    if (!confirm(`Delete dashboard "${b.name}"${b.widgetCount ? ` and its ${b.widgetCount} widget${b.widgetCount === 1 ? '' : 's'}` : ''}? This cannot be undone.`)) return
+    if (!confirm(`Delete dashboard "${b.name}"${b.widgetCount ? ` and its ${b.widgetCount} Block${b.widgetCount === 1 ? '' : 's'}` : ''}? This cannot be undone.`)) return
     setBusyId(b.id)
     setError(null)
     try {
@@ -161,7 +165,7 @@ export default function DashboardsManage() {
         <div>
           <h1><span className="grad-text">Dashboards</span></h1>
           <p className="studio-lead">
-            Organise dashboards into groups — <strong>drag a dashboard onto a group</strong> to move it. Open one to add widgets.
+            Organise dashboards into groups — <strong>drag a dashboard onto a group</strong> to move it. Open one to add Blocks.
           </p>
         </div>
         <div className="studio-head-actions">
@@ -219,7 +223,7 @@ export default function DashboardsManage() {
                       <Link className="dm-row-main" draggable={false} to={`/app/${orgId}/dashboards/${b.id}`}>
                         <span className="dm-row-name">{b.name}</span>
                         <span className="dm-row-meta">
-                          {b.widgetCount} widget{b.widgetCount === 1 ? '' : 's'} · updated {fmtDate(b.updatedAt)}
+                          {b.widgetCount} Block{b.widgetCount === 1 ? '' : 's'} · updated {fmtDate(b.updatedAt)}
                         </span>
                       </Link>
                       <div className="dm-row-actions">

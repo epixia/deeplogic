@@ -2,6 +2,22 @@
 
 .si { padding: 32px 0 80px; }
 
+/* Competitor products grid */
+.si-prod-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; margin-top: 14px; }
+.si-prod-card { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; }
+.si-prod-img { width: 100%; height: 130px; object-fit: cover; display: block; background: var(--bg2); }
+.si-prod-img--empty { display: flex; align-items: center; justify-content: center; font-size: 30px; color: var(--mut2); }
+.si-prod-body { padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+.si-prod-name { font-size: 14px; font-weight: 700; line-height: 1.3; }
+.si-prod-name a { color: var(--ink); text-decoration: none; }
+.si-prod-name a:hover { color: var(--cyan); text-decoration: underline; }
+.si-prod-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.si-prod-cat { font-size: 11px; font-weight: 700; color: var(--cyan); border: 1px solid rgba(111,227,240,.35); border-radius: 999px; padding: 1px 8px; }
+.si-prod-price { font-size: 13px; font-weight: 800; color: var(--ink); }
+.si-prod-desc { font-size: 12px; color: var(--mut); line-height: 1.45; }
+.si-prod-pulse { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--cyan); margin-right: 6px; animation: si-pulse 1s ease-in-out infinite; }
+@keyframes si-pulse { 0%, 100% { opacity: .3; transform: scale(.8); } 50% { opacity: 1; transform: scale(1.1); } }
+
 .si-saved {
   display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
   font-size: 13px; color: var(--mut);

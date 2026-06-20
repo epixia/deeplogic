@@ -153,10 +153,16 @@ export interface DomainIntel {
 export async function dataforseoHistoricalOverview(
   creds: DataForSeoCreds,
   domain: string,
-  opts: { locationCode?: number; languageCode?: string } = {},
+  opts: { locationCode?: number; languageCode?: string; months?: number } = {},
 ): Promise<TrafficPoint[]> {
+  // Request an explicit window so we always get at least a year of history
+  // (default ~14 months) rather than DataForSEO's shorter default range.
+  const months = opts.months ?? 14;
+  const from = new Date();
+  from.setUTCMonth(from.getUTCMonth() - months);
+  const dateFrom = from.toISOString().slice(0, 10);
   const result = await labsCall(creds, '/v3/dataforseo_labs/google/historical_rank_overview/live', [
-    { target: toDomain(domain), location_code: opts.locationCode ?? 2840, language_code: opts.languageCode ?? 'en' },
+    { target: toDomain(domain), location_code: opts.locationCode ?? 2840, language_code: opts.languageCode ?? 'en', date_from: dateFrom },
   ]);
   const items = (result?.items as { year?: number; month?: number; metrics?: { organic?: { etv?: number; count?: number } } }[] | undefined) ?? [];
   return items

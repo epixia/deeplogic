@@ -33,6 +33,12 @@ type CompView = 'cards' | 'list'
 const COMP_VIEWS: readonly CompView[] = ['cards', 'list']
 type SortKey = 'name' | 'website' | 'traffic' | 'keywords' | 'value' | 'pos1' | 'updated'
 
+// Display a website as a bare domain — drop protocol, www, and trailing slash
+// to save horizontal space in the list.
+function cleanDomain(url: string): string {
+  return url.replace(/^https?:\/\//i, '').replace(/^www\./i, '').replace(/\/+$/, '')
+}
+
 // Compact number formatting for SEO metrics (12345 → 12.3K).
 function fmtNum(n: number | null | undefined): string {
   if (n == null || Number.isNaN(n)) return '—'
@@ -589,7 +595,7 @@ export default function Competitors({
                       <td className="cp-td-web">
                         {e.website ? (
                           <a href={e.website.startsWith('http') ? e.website : `https://${e.website}`} target="_blank" rel="noreferrer">
-                            {e.website.replace(/^https?:\/\//, '').replace(/\/$/, '')}
+                            {cleanDomain(e.website)}
                           </a>
                         ) : (
                           <span className="cp-muted">—</span>
@@ -637,7 +643,7 @@ export default function Competitors({
                   </div>
                   {e.website && (
                     <Link className="cp-web" to={`/app/${orgId}/site?url=${encodeURIComponent(e.website)}&name=${encodeURIComponent(e.name)}`}>
-                      {e.website.replace(/^https?:\/\//, '')} → insights
+                      {cleanDomain(e.website)} → insights
                     </Link>
                   )}
                   {e.seo && (

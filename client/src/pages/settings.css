@@ -230,7 +230,7 @@
   gap: 2px;
   margin-bottom: 28px;
   border-bottom: 1px solid var(--line);
-  overflow-x: auto;
+  flex-wrap: wrap;
 }
 
 .dl-set__tab {
@@ -479,6 +479,34 @@
   flex-wrap: wrap;
   padding-top: 4px;
 }
+
+/* ---- Header navigation show/hide (Appearance) ---- */
+.dl-navprefs {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 8px;
+}
+.dl-navpref {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: transparent;
+  padding: 10px 12px;
+  cursor: pointer;
+  color: var(--mut2);
+  transition: border-color 0.12s, color 0.12s, background 0.12s;
+}
+.dl-navpref:hover { border-color: color-mix(in srgb, var(--cyan) 35%, var(--line)); }
+.dl-navpref.is-on { color: var(--ink); border-color: rgba(111, 227, 240, 0.4); background: rgba(111, 227, 240, 0.05); }
+.dl-navpref-label { font-size: 13.5px; font-weight: 600; }
+.dl-navpref-state {
+  font-size: 10.5px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+  padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--mut2);
+}
+.dl-navpref.is-on .dl-navpref-state { color: #4caf7d; border-color: rgba(76, 175, 125, 0.35); background: rgba(76, 175, 125, 0.1); }
 
 /* ---- PlanGate ---- */
 .plan-gate {

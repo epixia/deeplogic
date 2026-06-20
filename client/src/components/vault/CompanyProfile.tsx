@@ -131,7 +131,7 @@ export default function CompanyProfile({
         setItemId(item.id)
       }
       setEditing(false)
-      setNote('Saved — this now grounds every report, widget & agent.')
+      setNote('Saved — this now grounds every report, Block & agent.')
       setTimeout(() => setNote(null), 3500)
       onSaved?.()
     } catch (e) {
@@ -186,7 +186,7 @@ export default function CompanyProfile({
     <section className="cp-card">
       <div className="cp-head">
         <h2>🏢 My Company</h2>
-        <span className="cp-sub">Always-on context for every report, widget, agent &amp; the assistant.</span>
+        <span className="cp-sub">Always-on context for every report, Block, agent &amp; the assistant.</span>
         <div className="cp-head-actions">
           {!editing && (
             <button className="btn btn-ghost btn-xs" onClick={() => setEditing(true)}>✎ Edit</button>

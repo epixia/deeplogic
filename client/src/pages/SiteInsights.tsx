@@ -11,11 +11,19 @@ import {
   persistSiteInsights,
   getDomainIntel,
   fetchDomainIntel,
+  getDomainProducts,
+  fetchDomainProductsStream,
   type SiteInsights as SI,
   type DomainIntel,
+  type ProductSuggestion,
 } from '../lib/api'
 import IntelTrafficChart from '../components/vault/IntelTrafficChart'
 import './site-insights.css'
+
+// Hide a thumbnail that fails to load (broken / hotlink-blocked).
+function hideImg(ev: { currentTarget: HTMLImageElement }) {
+  ev.currentTarget.style.display = 'none'
+}
 
 // Compact number formatting for SEO metrics (12345 → 12.3K).
 function fmtNum(n: number | null | undefined): string {
@@ -25,11 +33,23 @@ function fmtNum(n: number | null | undefined): string {
   return `${Math.round(n)}`
 }
 
-export default function SiteInsights() {
+export default function SiteInsights({
+  urlOverride,
+  nameOverride,
+  backTo = '/competitors',
+  backLabel = 'Competitors',
+  autoSave = true,
+}: {
+  urlOverride?: string
+  nameOverride?: string
+  backTo?: string // suffix after /app/:orgId; '' hides the back link
+  backLabel?: string
+  autoSave?: boolean // auto-persist insights to a dashboard (competitor flow only)
+} = {}) {
   const { orgId = '' } = useParams<{ orgId: string }>()
   const [params] = useSearchParams()
-  const url = params.get('url') ?? ''
-  const compName = params.get('name') ?? ''
+  const url = urlOverride ?? params.get('url') ?? ''
+  const compName = nameOverride ?? params.get('name') ?? ''
   const { getAccessToken } = useAuth()
 
   const [data, setData] = useState<SI | null>(null)
@@ -89,6 +109,45 @@ export default function SiteInsights() {
     return () => { cancelled = true }
   }, [getAccessToken, orgId, url])
 
+  // Products this site sells — scraped from the competitor's site, cached per
+  // domain (same pipeline as our own product discovery).
+  const [products, setProducts] = useState<ProductSuggestion[] | null>(null)
+  const [productsFetchedAt, setProductsFetchedAt] = useState<string | null>(null)
+  const [productsFetching, setProductsFetching] = useState(false)
+  const [productsStep, setProductsStep] = useState<string | null>(null)
+  const [productsError, setProductsError] = useState<string | null>(null)
+
+  // Read cached products on load (no external call).
+  useEffect(() => {
+    if (!url) return
+    let cancelled = false
+    void (async () => {
+      try {
+        const t = await getAccessToken()
+        if (!t) return
+        const r = await getDomainProducts(t, orgId, url)
+        if (!cancelled) { setProducts(r.products); setProductsFetchedAt(r.fetchedAt) }
+      } catch { /* cache miss is fine */ }
+    })()
+    return () => { cancelled = true }
+  }, [getAccessToken, orgId, url])
+
+  const fetchProducts = useCallback(async () => {
+    if (productsFetching || !url) return
+    setProductsFetching(true); setProductsError(null); setProductsStep(null)
+    try {
+      const t = await getAccessToken()
+      if (!t) throw new Error('Session expired')
+      for await (const ev of fetchDomainProductsStream(t, orgId, url, compName)) {
+        if (ev.type === 'step') setProductsStep(`${ev.icon} ${ev.text}`)
+        else if (ev.type === 'done') { setProducts(ev.products); setProductsFetchedAt(ev.fetchedAt) }
+        else if (ev.type === 'error') setProductsError(ev.error)
+      }
+    } catch (e) {
+      setProductsError(e instanceof Error ? e.message : 'Failed to load products.')
+    } finally { setProductsFetching(false); setProductsStep(null) }
+  }, [getAccessToken, orgId, url, compName, productsFetching])
+
   // Fetch fresh intel from DataForSEO and cache it (the only path with cost).
   const fetchIntel = useCallback(async () => {
     if (intelFetching || !url) return
@@ -106,18 +165,18 @@ export default function SiteInsights() {
   // On the FIRST gather of a url (cache miss), store the insights and add a card
   // to the competitor's dashboard. Cached revisits skip this — nothing to re-do.
   useEffect(() => {
-    if (!data || !url || savedFor.current === url) return
+    if (!autoSave || !data || !url || savedFor.current === url) return
     savedFor.current = url
     if (data.cached) return // already persisted when first gathered
     void save(true)
-  }, [data, url, save])
+  }, [autoSave, data, url, save])
 
   const domain = data?.domain ?? (() => { try { return new URL(url).hostname.replace(/^www\./, '') } catch { return url } })()
   const favicon = `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=64`
 
   return (
     <main className="wrap si">
-      <Link to={`/app/${orgId}/vault`} className="si-back">← Data Vault</Link>
+      {backTo && <Link to={`/app/${orgId}${backTo}`} className="si-back">← {backLabel}</Link>}
 
       <header className="si-head">
         <img className="si-favicon" src={favicon} alt="" width={40} height={40} />
@@ -132,7 +191,7 @@ export default function SiteInsights() {
       {error && <div className="studio-error">{error}</div>}
       {!url && <div className="si-empty">No website specified.</div>}
 
-      {url && (
+      {url && autoSave && (
         <div className="si-saved">
           {saving ? (
             <span>💾 Saving to Data Vault &amp; dashboard…</span>
@@ -177,7 +236,7 @@ export default function SiteInsights() {
             {/* Estimated organic traffic — from DataForSEO when fetched */}
             <section className="si-card si-metric">
               <span className="si-metric-label">Est. organic traffic / mo</span>
-              {intel?.overview.organicTraffic != null ? (
+              {intel?.overview?.organicTraffic != null ? (
                 <>
                   <span className="si-metric-value si-est">{fmtNum(intel.overview.organicTraffic)}</span>
                   <span className="si-metric-sub">DataForSEO · organic search estimate</span>
@@ -190,7 +249,7 @@ export default function SiteInsights() {
             {/* Organic keywords — from DataForSEO when fetched */}
             <section className="si-card si-metric">
               <span className="si-metric-label">Organic keywords ranked</span>
-              {intel?.overview.organicKeywords != null ? (
+              {intel?.overview?.organicKeywords != null ? (
                 <>
                   <span className="si-metric-value">{fmtNum(intel.overview.organicKeywords)}</span>
                   <span className="si-metric-sub">
@@ -239,20 +298,21 @@ export default function SiteInsights() {
               </div>
             )}
 
-            {intel && intel.history.length > 1 && (
+            {intel && (intel.history?.length ?? 0) > 1 && (
               <div className="si-intel-block">
                 <h3>Estimated organic traffic over time</h3>
                 <IntelTrafficChart points={intel.history} />
               </div>
             )}
 
-            {intel && intel.distribution.some((d) => d.count > 0) && (() => {
-              const distMax = Math.max(1, ...intel.distribution.map((d) => d.count))
+            {intel && (intel.distribution ?? []).some((d) => d.count > 0) && (() => {
+              const dist = intel.distribution ?? []
+              const distMax = Math.max(1, ...dist.map((d) => d.count))
               return (
                 <div className="si-intel-block">
                   <h3>Keyword position distribution</h3>
                   <div className="si-dist">
-                    {intel.distribution.map((d) => (
+                    {dist.map((d) => (
                       <div className="si-dist-row" key={d.bucket}>
                         <span className="si-dist-label">{d.bucket}</span>
                         <span className="si-dist-bar"><span className="si-dist-fill" style={{ width: `${(d.count / distMax) * 100}%` }} /></span>
@@ -264,7 +324,7 @@ export default function SiteInsights() {
               )
             })()}
 
-            {intel && intel.topKeywords.length > 0 && (
+            {intel && (intel.topKeywords?.length ?? 0) > 0 && (
               <div className="si-intel-block">
                 <h3>Top organic keywords</h3>
                 <div className="si-matrix-scroll">
@@ -273,7 +333,7 @@ export default function SiteInsights() {
                       <tr><th>Keyword</th><th>Pos.</th><th>Volume</th><th>Est. traffic</th></tr>
                     </thead>
                     <tbody>
-                      {intel.topKeywords.slice(0, 20).map((k, i) => (
+                      {(intel.topKeywords ?? []).slice(0, 20).map((k, i) => (
                         <tr key={i}>
                           <td>{k.keyword}</td>
                           <td>{k.position ?? '—'}</td>
@@ -286,16 +346,58 @@ export default function SiteInsights() {
                 </div>
               </div>
             )}
-            {intel && intel.competitors.length > 0 && (
+            {intel && (intel.competitors?.length ?? 0) > 0 && (
               <div className="si-intel-block">
                 <h3>Competing domains</h3>
                 <div className="si-chips">
-                  {intel.competitors.slice(0, 12).map((c, i) => (
+                  {(intel.competitors ?? []).slice(0, 12).map((c, i) => (
                     <span className="si-chip" key={i} title={`${fmtNum(c.organicKeywords)} keywords · ${fmtNum(c.organicTraffic)} est. traffic`}>
                       {c.domain}
                     </span>
                   ))}
                 </div>
+              </div>
+            )}
+          </section>
+
+          {/* Products this competitor sells — scraped from their site */}
+          <section className="si-card">
+            <div className="si-intel-head">
+              <h2>Products <span className="si-intel-src">· from their site</span></h2>
+              <div className="si-intel-actions">
+                {productsFetchedAt && <span className="si-intel-stamp">Updated {new Date(productsFetchedAt).toLocaleDateString()}</span>}
+                <button className="btn btn-primary btn-xs" onClick={() => void fetchProducts()} disabled={productsFetching}>
+                  {productsFetching ? 'Finding…' : products && products.length ? '↻ Re-fetch' : '🔎 Find products'}
+                </button>
+              </div>
+            </div>
+            {productsError && <div className="studio-error">{productsError}</div>}
+            {productsFetching && productsStep && (
+              <p className="si-note"><span className="si-prod-pulse" aria-hidden /> {productsStep}</p>
+            )}
+            {!productsFetching && products && products.length === 0 && (
+              <p className="si-note">No products found on this site. They may gate their catalogue or render it client-side.</p>
+            )}
+            {!productsFetching && !products && (
+              <p className="si-note">Click <strong>Find products</strong> to scrape this competitor’s site for the products they sell. Results are cached.</p>
+            )}
+            {products && products.length > 0 && (
+              <div className="si-prod-grid">
+                {products.map((p, i) => (
+                  <div className="si-prod-card" key={i}>
+                    {p.imageUrl
+                      ? <img className="si-prod-img" src={p.imageUrl} alt="" loading="lazy" referrerPolicy="no-referrer" onError={hideImg} />
+                      : <div className="si-prod-img si-prod-img--empty">📦</div>}
+                    <div className="si-prod-body">
+                      <div className="si-prod-name">{p.url ? <a href={p.url} target="_blank" rel="noreferrer">{p.name}</a> : p.name}</div>
+                      <div className="si-prod-meta">
+                        {p.category && <span className="si-prod-cat">{p.category}</span>}
+                        {p.price && <span className="si-prod-price">{p.price}</span>}
+                      </div>
+                      {p.description && <div className="si-prod-desc">{p.description}</div>}
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </section>

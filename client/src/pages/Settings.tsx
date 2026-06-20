@@ -23,6 +23,7 @@ import OrgoIntegrationCard from '../components/settings/OrgoIntegrationCard'
 import IntegrationsCatalog from '../components/settings/IntegrationsCatalog'
 import PlatformApisCatalog from '../components/settings/PlatformApisCatalog'
 import { SKINS, readSkin, saveSkin } from '../styles/skins'
+import { NAV_ITEMS, readHiddenNav, saveHiddenNav } from '../lib/navPrefs'
 import { getPlatformStatus, type PlatformStatus } from '../lib/api'
 import './settings.css'
 
@@ -401,21 +402,59 @@ function StatusTab({
 
 function AppearanceTab() {
   const [skin, setSkinState] = useState<string>(readSkin)
+  const [hiddenNav, setHiddenNav] = useState<Set<string>>(readHiddenNav)
 
   function choose(id: string) {
     setSkinState(id)
     saveSkin(id) // dispatches event → ThemeManager re-applies instantly
   }
 
+  function toggleNav(key: string) {
+    setHiddenNav((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      saveHiddenNav(next) // dispatches event → Nav updates instantly
+      return next
+    })
+  }
+
   return (
     <div className="dl-set__tab-body">
+      <section className="rounded-card dl-set__card">
+        <div className="dl-set__cardhead">
+          <h2>Header navigation</h2>
+        </div>
+        <p className="dl-set__hint">
+          Choose which pages appear in the top navigation. Hidden pages still work if you open their
+          link directly — they're just removed from the header. Saved on this device.
+        </p>
+        <div className="dl-navprefs">
+          {NAV_ITEMS.map((it) => {
+            const visible = !hiddenNav.has(it.key)
+            return (
+              <button
+                key={it.key}
+                type="button"
+                className={`dl-navpref${visible ? ' is-on' : ''}`}
+                onClick={() => toggleNav(it.key)}
+                aria-pressed={visible}
+              >
+                <span className="dl-navpref-label">{it.label}</span>
+                <span className="dl-navpref-state">{visible ? 'Shown' : 'Hidden'}</span>
+              </button>
+            )
+          })}
+        </div>
+      </section>
+
       <section className="rounded-card dl-set__card">
         <div className="dl-set__cardhead">
           <h2>Theme style</h2>
         </div>
         <p className="dl-set__hint">
           Pick a palette for the whole platform — it restyles both light and dark mode
-          (toggle modes with 🌙 / ☀️ in the top bar). Generated widgets &amp; reports follow
+          (toggle modes with 🌙 / ☀️ in the top bar). Generated Blocks &amp; reports follow
           your choice too. Saved on this device.
         </p>
 

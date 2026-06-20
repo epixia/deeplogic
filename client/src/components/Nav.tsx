@@ -8,6 +8,7 @@ import Logo from './Logo'
 import ThemeToggle from './ThemeToggle'
 import { useAuth } from '../auth/AuthContext'
 import { getBillingSubscription, getOpenRouterBalance, type OpenRouterBalance } from '../lib/api'
+import { NAV_PREFS_EVENT, readHiddenNav, readNavOrder, saveNavOrder, orderedVisibleNav } from '../lib/navPrefs'
 
 // ---------------------------------------------------------------------------
 // TrialBadge — shows days remaining in the org's trial. Fetches billing once
@@ -227,6 +228,37 @@ export default function Nav() {
   const navigate = useNavigate()
 
   const activeOrgId = orgId ?? orgs[0]?.id
+
+  // Header pages: which show/hide (Settings → Appearance) and their order
+  // (drag-to-reorder in the header). Both per-device, kept in sync via event.
+  const [hiddenNav, setHiddenNav] = useState<Set<string>>(readHiddenNav)
+  const [navOrder, setNavOrder] = useState<string[]>(readNavOrder)
+  useEffect(() => {
+    const sync = () => { setHiddenNav(readHiddenNav()); setNavOrder(readNavOrder()) }
+    window.addEventListener(NAV_PREFS_EVENT, sync)
+    window.addEventListener('storage', sync)
+    return () => {
+      window.removeEventListener(NAV_PREFS_EVENT, sync)
+      window.removeEventListener('storage', sync)
+    }
+  }, [])
+
+  const dragKey = useRef<string | null>(null)
+  const [dragOverKey, setDragOverKey] = useState<string | null>(null)
+  function reorderNav(targetKey: string) {
+    const from = dragKey.current
+    dragKey.current = null
+    setDragOverKey(null)
+    if (!from || from === targetKey) return
+    const next = [...navOrder]
+    const fi = next.indexOf(from)
+    const ti = next.indexOf(targetKey)
+    if (fi < 0 || ti < 0) return
+    next.splice(fi, 1)
+    next.splice(ti, 0, from)
+    setNavOrder(next)
+    saveNavOrder(next)
+  }
   const brandTo = session
     ? activeOrgId
       ? `/app/${activeOrgId}/dashboards`
@@ -249,56 +281,22 @@ export default function Nav() {
         <div className="nav-actions">
           {session ? (
             <>
-              {activeOrgId && (
-                <Link className="btn btn-ghost" to={`/app/${activeOrgId}/dashboards/manage`}>
-                  Dashboards
+              {activeOrgId && orderedVisibleNav(navOrder, hiddenNav).map((it) => (
+                <Link
+                  key={it.key}
+                  className={`btn btn-ghost nav-drag${dragOverKey === it.key ? ' nav-drag--over' : ''}`}
+                  to={`/app/${activeOrgId}${it.path}`}
+                  draggable
+                  onDragStart={(e) => { dragKey.current = it.key; e.dataTransfer.effectAllowed = 'move' }}
+                  onDragOver={(e) => { e.preventDefault(); if (dragOverKey !== it.key) setDragOverKey(it.key) }}
+                  onDragLeave={() => setDragOverKey((k) => (k === it.key ? null : k))}
+                  onDrop={(e) => { e.preventDefault(); reorderNav(it.key) }}
+                  onDragEnd={() => { dragKey.current = null; setDragOverKey(null) }}
+                  title={`${it.label} — drag to reorder`}
+                >
+                  {it.label}
                 </Link>
-              )}
-              {activeOrgId && (
-                <Link className="btn btn-ghost" to={`/app/${activeOrgId}/studio`}>
-                  Reports
-                </Link>
-              )}
-              {activeOrgId && (
-                <Link className="btn btn-ghost" to={`/app/${activeOrgId}/widgets`}>
-                  Widgets
-                </Link>
-              )}
-              {activeOrgId && (
-                <Link className="btn btn-ghost" to={`/app/${activeOrgId}/alerts`}>
-                  Alerts
-                </Link>
-              )}
-              {activeOrgId && (
-                <Link className="btn btn-ghost" to={`/app/${activeOrgId}/agents`}>
-                  Agents
-                </Link>
-              )}
-              {activeOrgId && (
-                <Link className="btn btn-ghost" to={`/app/${activeOrgId}/goals`}>
-                  Goals
-                </Link>
-              )}
-              {activeOrgId && (
-                <Link className="btn btn-ghost" to={`/app/${activeOrgId}/activity`}>
-                  Activity
-                </Link>
-              )}
-              {activeOrgId && (
-                <Link className="btn btn-ghost" to={`/app/${activeOrgId}/vault`}>
-                  Data Vault
-                </Link>
-              )}
-              {activeOrgId && (
-                <Link className="btn btn-ghost" to={`/app/${activeOrgId}/competitors`}>
-                  Competitors
-                </Link>
-              )}
-              {activeOrgId && (
-                <Link className="btn btn-ghost" to={`/app/${activeOrgId}/memory`}>
-                  Memory
-                </Link>
-              )}
+              ))}
               {activeOrgId && (
                 <OpenRouterBadge orgId={activeOrgId} getAccessToken={getAccessToken} />
               )}

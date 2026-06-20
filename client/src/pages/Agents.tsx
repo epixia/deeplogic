@@ -6,6 +6,7 @@ import {
   createAgent,
   updateAgent,
   deleteAgent,
+  stopAgent,
   suggestAgentTeam,
   createAgentsBulk,
   runAgentStream,
@@ -13,6 +14,7 @@ import {
   type ProposedAgent,
 } from '../lib/api'
 import { startActivity, updateActivity, endActivity } from '../lib/agentActivity'
+import { AGENT_TOOLS, AGENT_DEFAULT_TOOLS } from '../lib/agentTools'
 import ExternalAgents from '../components/agents/ExternalAgents'
 import Orchestrator from '../components/agents/Orchestrator'
 import Skills from '../components/agents/Skills'
@@ -51,6 +53,7 @@ type EditDraft = {
   systemPrompt: string
   schedule: string
   customCron: string
+  tools: string[]
 }
 
 const BLANK: EditDraft = {
@@ -60,6 +63,7 @@ const BLANK: EditDraft = {
   systemPrompt: '',
   schedule: '',
   customCron: '',
+  tools: [...AGENT_DEFAULT_TOOLS],
 }
 
 export default function Agents() {
@@ -78,6 +82,8 @@ export default function Agents() {
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
   const nameRef = useRef<HTMLInputElement>(null)
+  // Abort controllers for in-flight agent runs, so we can stop them.
+  const runCtrls = useRef<Record<string, AbortController>>({})
 
   // AI team generator
   const [showGenerate, setShowGenerate] = useState(false)
@@ -136,6 +142,7 @@ export default function Agents() {
       systemPrompt: a.systemPrompt,
       schedule: sched,
       customCron: sched === 'custom' ? (a.schedule ?? '') : '',
+      tools: a.tools ?? [...AGENT_DEFAULT_TOOLS],
     })
     setFormError(null)
     setShowModal(true)
@@ -157,6 +164,7 @@ export default function Agents() {
         model: draft.model,
         systemPrompt: draft.systemPrompt,
         schedule: cronValue || null,
+        tools: draft.tools,
       }
       if (editing) {
         const updated = await updateAgent(t, orgId, editing.id, body)
@@ -194,11 +202,13 @@ export default function Agents() {
     setAgents((prev) => prev.map((x) => (x.id === a.id ? { ...x, status: 'running' } : x)))
     const actId = `agent-${a.id}`
     startActivity(actId, a.name, { icon: '▶️', text: 'Starting…' })
+    const ctrl = new AbortController()
+    runCtrls.current[a.id] = ctrl
     try {
       const t = await getAccessToken()
       if (!t) throw new Error('Session expired')
       let done = false
-      for await (const ev of runAgentStream(t, orgId, a.id)) {
+      for await (const ev of runAgentStream(t, orgId, a.id, ctrl.signal)) {
         if (ev.type === 'step') {
           updateActivity(actId, { icon: ev.icon, text: ev.text })
         } else if (ev.type === 'done') {
@@ -217,14 +227,41 @@ export default function Agents() {
         endActivity(actId, 'Finished')
       }
     } catch (err) {
-      setAgents((prev) => prev.map((x) => (x.id === a.id ? { ...x, status: 'idle', lastRunStatus: 'error' } : x)))
-      setError(err instanceof Error ? err.message : 'Agent run failed.')
-      endActivity(actId, 'Failed', '✗')
+      // A user-initiated stop aborts the stream — treat it as stopped, not error.
+      if (ctrl.signal.aborted) {
+        setAgents((prev) => prev.map((x) => (x.id === a.id ? { ...x, status: 'idle' } : x)))
+        endActivity(actId, 'Stopped', '■')
+      } else {
+        setAgents((prev) => prev.map((x) => (x.id === a.id ? { ...x, status: 'idle', lastRunStatus: 'error' } : x)))
+        setError(err instanceof Error ? err.message : 'Agent run failed.')
+        endActivity(actId, 'Failed', '✗')
+      }
+    } finally {
+      delete runCtrls.current[a.id]
     }
+  }
+
+  // Stop a running agent. Abort the local stream AND tell the server to cancel
+  // the run (which forces status idle), so it can't reappear as running on poll.
+  async function stop(a: Agent) {
+    runCtrls.current[a.id]?.abort()
+    endActivity(`agent-${a.id}`, 'Stopped', '■')
+    setAgents((prev) => prev.map((x) => (x.id === a.id ? { ...x, status: 'idle' } : x)))
+    try {
+      const t = await getAccessToken()
+      if (t) await stopAgent(t, orgId, a.id)
+    } catch { /* best-effort — local state already idle */ }
   }
 
   function set(patch: Partial<EditDraft>) {
     setDraft((d) => ({ ...d, ...patch }))
+  }
+
+  function toggleTool(name: string) {
+    setDraft((d) => ({
+      ...d,
+      tools: d.tools.includes(name) ? d.tools.filter((t) => t !== name) : [...d.tools, name],
+    }))
   }
 
   return (
@@ -234,7 +271,7 @@ export default function Agents() {
           <h1><span className="grad-text">Agents</span></h1>
           <p className="studio-lead">
             Create named AI agents with their own system prompt, model, and optional schedule.
-            Attach an agent to any widget or report to control how it generates content.
+            Attach an agent to any Block or report to control how it generates content.
           </p>
         </div>
         <div className="agents-head-actions">
@@ -264,6 +301,7 @@ export default function Agents() {
               onEdit={() => openEdit(a)}
               onDelete={() => void remove(a)}
               onRun={() => void run(a)}
+              onStop={() => void stop(a)}
             />
           ))}
           <button type="button" className="studio-card studio-card-new" onClick={openCreate}>
@@ -326,6 +364,35 @@ export default function Agents() {
                 rows={6}
               />
             </label>
+
+            <div className="studio-field">
+              <span>Tools <span className="agents-optional">(what this agent can do)</span></span>
+              <div className="agents-tools">
+                {AGENT_TOOLS.map((t) => {
+                  const on = draft.tools.includes(t.name)
+                  return (
+                    <button
+                      type="button"
+                      key={t.name}
+                      className={`agents-tool${on ? ' is-on' : ''}`}
+                      onClick={() => toggleTool(t.name)}
+                      title={t.description}
+                      aria-pressed={on}
+                    >
+                      <span className="agents-tool-ic">{t.icon}</span>
+                      <span className="agents-tool-text">
+                        <span className="agents-tool-name">{t.label}</span>
+                        <span className="agents-tool-desc">{t.description}</span>
+                      </span>
+                      <span className="agents-tool-check">{on ? '✓' : ''}</span>
+                    </button>
+                  )
+                })}
+              </div>
+              <span className="agents-cron-hint">
+                The agent can only call the tools you enable here. Memory recall &amp; workspace context are always available.
+              </span>
+            </div>
 
             <label className="studio-field">
               <span>Schedule <span className="agents-optional">(optional)</span></span>
@@ -580,25 +647,25 @@ function GenerateTeamModal({
   )
 }
 
-function AgentCard({ agent, busy, orgId, onEdit, onDelete, onRun }: {
+function AgentCard({ agent, busy, orgId, onEdit, onDelete, onRun, onStop }: {
   agent: Agent
   busy: boolean
   orgId: string
   onEdit: () => void
   onDelete: () => void
   onRun: () => void
+  onStop: () => void
 }) {
   const running = agent.status === 'running'
   return (
     <div className={`studio-card agent-card${running ? ' agent-card--running' : ''}`} style={{ position: 'relative' }}>
       <button
         type="button"
-        className="agent-run-btn has-del"
-        disabled={running}
-        title={running ? 'Agent is running' : 'Run agent now'}
-        onClick={(e) => { e.stopPropagation(); onRun() }}
+        className={`agent-run-btn has-del${running ? ' agent-stop-btn' : ''}`}
+        title={running ? 'Stop agent' : 'Run agent now'}
+        onClick={(e) => { e.stopPropagation(); running ? onStop() : onRun() }}
       >
-        {running ? '⏳' : '▶'}
+        {running ? '■' : '▶'}
       </button>
       <button
         type="button"

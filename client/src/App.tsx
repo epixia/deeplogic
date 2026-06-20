@@ -31,6 +31,9 @@ import Studio from './pages/Studio'
 import StudioEditor from './pages/StudioEditor'
 import Vault from './pages/Vault'
 import CompetitorsPage from './pages/CompetitorsPage'
+import CompanyPage from './pages/CompanyPage'
+import ProductsPage from './pages/ProductsPage'
+import ConnectorLibrary from './pages/ConnectorLibrary'
 import Memory from './pages/Memory'
 import SiteInsights from './pages/SiteInsights'
 import Dashboards from './pages/Dashboards'
@@ -129,6 +132,9 @@ export default function App() {
             <Route path="/app/:orgId/settings" element={<Settings />} />
             <Route path="/app/:orgId/vault" element={<Vault />} />
             <Route path="/app/:orgId/competitors" element={<CompetitorsPage />} />
+            <Route path="/app/:orgId/company" element={<CompanyPage />} />
+            <Route path="/app/:orgId/products" element={<ProductsPage />} />
+            <Route path="/app/:orgId/connectors" element={<ConnectorLibrary />} />
             <Route path="/app/:orgId/memory" element={<Memory />} />
             <Route path="/app/:orgId/site" element={<SiteInsights />} />
             <Route path="/app/:orgId/studio" element={<Studio />} />

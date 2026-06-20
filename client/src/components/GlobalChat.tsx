@@ -8,6 +8,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { assistantChatStream, createContext, generateMdTitle, type AssistantMessage, type AssistantStep, type SuggestedAction } from '../lib/api'
 import { startActivity, updateActivity, endActivity } from '../lib/agentActivity'
+import { useSpeechInput } from '../lib/useSpeechInput'
 import './global-chat.css'
 
 // Derive a filename from a markdown reply (first heading or first line).
@@ -151,6 +152,20 @@ export default function GlobalChat() {
   }
   const endRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+
+  // Voice input: dictate into the chat box. While listening, the live transcript
+  // is appended to whatever was already typed (captured when the mic starts).
+  const speechBaseRef = useRef('')
+  const speech = useSpeechInput((text) =>
+    setDraft((speechBaseRef.current ? `${speechBaseRef.current} ` : '') + text),
+  )
+  function micToggle() {
+    if (!speech.listening) {
+      speechBaseRef.current = draft.trim()
+      inputRef.current?.focus()
+    }
+    speech.toggle()
+  }
 
   useEffect(() => {
     if (open) endRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -424,6 +439,18 @@ export default function GlobalChat() {
               onKeyDown={onKeyDown}
               disabled={sending}
             />
+            {speech.supported && (
+              <button
+                type="button"
+                className={`gchat-mic${speech.listening ? ' is-listening' : ''}`}
+                onClick={micToggle}
+                disabled={sending}
+                title={speech.listening ? 'Stop dictation' : 'Speak'}
+                aria-pressed={speech.listening}
+              >
+                {speech.listening ? '⏺' : '🎤'}
+              </button>
+            )}
             <button
               type="button"
               className={`gchat-send${draft.trim() && !sending ? ' is-on' : ''}`}

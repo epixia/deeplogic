@@ -76,14 +76,14 @@ export default function WidgetBuilder({ initial, libraryItems, onSave, onClose, 
     <div className="wb-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
       <div className="wb-dialog">
         <div className="wb-header">
-          <span className="wb-title">{initial ? 'Edit Widget' : 'New Widget'}</span>
+          <span className="wb-title">{initial ? 'Edit Block' : 'New Block'}</span>
           <button className="wb-close" onClick={onClose}>✕</button>
         </div>
 
         <div className="wb-body">
           {/* Name */}
           <div className="wb-field">
-            <label className="wb-label">Widget name</label>
+            <label className="wb-label">Block name</label>
             <input
               className="wb-input"
               value={name}
@@ -95,7 +95,7 @@ export default function WidgetBuilder({ initial, libraryItems, onSave, onClose, 
 
           {/* Type */}
           <div className="wb-field">
-            <label className="wb-label">Widget type</label>
+            <label className="wb-label">Block type</label>
             <div className="wb-type-grid">
               {TYPES.map((t) => (
                 <button
@@ -218,7 +218,7 @@ export default function WidgetBuilder({ initial, libraryItems, onSave, onClose, 
             onClick={handleSave}
             disabled={!name.trim() || saving}
           >
-            {saving ? 'Saving…' : (initial ? 'Save changes' : 'Create widget')}
+            {saving ? 'Saving…' : (initial ? 'Save changes' : 'Create Block')}
           </button>
         </div>
       </div>

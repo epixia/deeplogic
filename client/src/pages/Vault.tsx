@@ -923,7 +923,7 @@ export default function Vault() {
         <div className="vault-kpis">
           {kpis.length === 0 ? (
             <div className="vault-empty">
-              No KPIs detected yet — add a <strong>Power BI</strong> report (its measures &amp; metrics are detected automatically), or connect a database. Detected KPIs become grounding for reports, widgets &amp; agents.
+              No KPIs detected yet — add a <strong>Power BI</strong> report (its measures &amp; metrics are detected automatically), or connect a database. Detected KPIs become grounding for reports, Blocks &amp; agents.
             </div>
           ) : (
             <>

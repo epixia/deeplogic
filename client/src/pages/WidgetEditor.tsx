@@ -115,12 +115,12 @@ export default function WidgetEditor() {
           if (w.html) {
             setMessages([
               { role: 'user', content: w.prompt, ts: w.updatedAt },
-              { role: 'assistant', content: '✓ Widget generated', ts: w.updatedAt },
+              { role: 'assistant', content: '✓ Block generated', ts: w.updatedAt },
             ])
           }
         }
       } catch (e) {
-        if (active) setLoadError(e instanceof Error ? e.message : 'Failed to load widget')
+        if (active) setLoadError(e instanceof Error ? e.message : 'Failed to load Block')
       } finally {
         if (active) setLoading(false)
       }
@@ -317,7 +317,7 @@ export default function WidgetEditor() {
       sources.length
         ? `📂 Reading ${sources.length} source${sources.length > 1 ? 's' : ''}${srcNames.length ? ` — ${srcNames.slice(0, 3).join(', ')}${srcNames.length > 3 ? '…' : ''}` : ''}`
         : '📂 Gathering your data & context…',
-      `🧠 Designing your ${widget?.type ?? 'widget'} from the data…`,
+      `🧠 Designing your ${widget?.type ?? 'Block'} from the data…`,
       '✍️ Writing the layout, charts & styles…',
       '🎨 Rendering the live preview…',
     ]
@@ -333,7 +333,7 @@ export default function WidgetEditor() {
       setWidget(updated)
       const usedSrc = sources.length
       const note = updated.html
-        ? `✓ Built your ${updated.type} widget${usedSrc ? ` using ${usedSrc} source${usedSrc > 1 ? 's' : ''}` : ''}. Tell me what to change.`
+        ? `✓ Built your ${updated.type} Block${usedSrc ? ` using ${usedSrc} source${usedSrc > 1 ? 's' : ''}` : ''}. Tell me what to change.`
         : '✓ Done — but no preview came back. Try rephrasing your request.'
       setMessages((prev) => [...prev, { role: 'assistant', content: note, ts: new Date().toISOString() }])
     } catch (e) {
@@ -357,7 +357,7 @@ export default function WidgetEditor() {
   if (loading) {
     return (
       <main className="wrap studio">
-        <div className="placeholder-panel"><div className="dl-spinner" /><h2>Loading widget…</h2></div>
+        <div className="placeholder-panel"><div className="dl-spinner" /><h2>Loading Block…</h2></div>
       </main>
     )
   }
@@ -366,8 +366,8 @@ export default function WidgetEditor() {
     return (
       <main className="wrap studio">
         <div className="studio-empty">
-          <p>{loadError ?? 'Widget not found.'}</p>
-          <Link to={`/app/${orgId}/widgets`} className="btn btn-ghost btn-xs">← Widgets</Link>
+          <p>{loadError ?? 'Block not found.'}</p>
+          <Link to={`/app/${orgId}/widgets`} className="btn btn-ghost btn-xs">← Blocks</Link>
         </div>
       </main>
     )
@@ -380,14 +380,14 @@ export default function WidgetEditor() {
       {/* Top bar */}
       <div className="editor-bar">
         <div className="editor-bar-left">
-          <Link to={`/app/${orgId}/widgets`} className="editor-back">← Widgets</Link>
+          <Link to={`/app/${orgId}/widgets`} className="editor-back">← Blocks</Link>
           <input
             className="editor-name"
             value={name}
             onChange={(e) => setName(e.target.value)}
             onBlur={onNameBlur}
             onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
-            aria-label="Widget name"
+            aria-label="Block name"
           />
           <span style={{
             fontSize: 12, padding: '2px 8px', borderRadius: 10,
@@ -407,7 +407,7 @@ export default function WidgetEditor() {
             {messages.length === 0 ? (
               <div className="editor-empty">
                 <div className="editor-empty-icon">{TYPE_ICONS[widget.type] ?? '📊'}</div>
-                <h3>Describe your {widget.type} widget</h3>
+                <h3>Describe your {widget.type} Block</h3>
                 <div className="editor-starters">
                   {starters.map((s) => (
                     <button
@@ -442,7 +442,7 @@ export default function WidgetEditor() {
                     <div className="chat-ai-avatar">✦</div>
                     <div className="chat-working">
                       <span className="chat-working-dots"><span /><span /><span /></span>
-                      {genPhase ?? 'Generating widget…'}
+                      {genPhase ?? 'Generating Block…'}
                     </div>
                   </div>
                 )}
@@ -487,7 +487,7 @@ export default function WidgetEditor() {
                 type="button"
                 className="wg-add-connector-btn"
                 onClick={() => setShowIdeas(true)}
-                title="Suggest widget ideas from your Data Vault"
+                title="Suggest Block ideas from your Data Vault"
               >
                 ✨ Ideas
               </button>
@@ -589,7 +589,7 @@ export default function WidgetEditor() {
                   ref={textareaRef}
                   className="wg-input"
                   rows={1}
-                  placeholder={`Describe your ${widget.type} widget…`}
+                  placeholder={`Describe your ${widget.type} Block…`}
                   value={draft}
                   onChange={(e) => setDraft(e.target.value)}
                   onKeyDown={onKeyDown}
@@ -620,7 +620,7 @@ export default function WidgetEditor() {
                   className={`wg-send-btn${draft.trim() && !generating && !searching ? ' active' : ''}`}
                   onClick={() => void onSend()}
                   disabled={generating || searching || !draft.trim()}
-                  title={generating ? 'Generating…' : 'Generate widget'}
+                  title={generating ? 'Generating…' : 'Generate Block'}
                 >
                   {generating || searching ? <span className="chat-send-spinner" /> : '↑'}
                 </button>
@@ -642,13 +642,13 @@ export default function WidgetEditor() {
               className="wg-iframe"
               srcDoc={widgetFrameSrcDoc(html, theme)}
               sandbox="allow-scripts allow-popups"
-              title="Widget preview"
+              title="Block preview"
               style={{ width: '100%', height: '100%', border: 'none', background: 'transparent' }}
             />
           ) : (
             <div className="preview-empty">
               <div style={{ fontSize: 48, opacity: 0.2 }}>{TYPE_ICONS[widget.type] ?? '📊'}</div>
-              <div style={{ color: '#4d6378', marginTop: 12 }}>Your widget will appear here</div>
+              <div style={{ color: '#4d6378', marginTop: 12 }}>Your Block will appear here</div>
             </div>
           )}
         </div>

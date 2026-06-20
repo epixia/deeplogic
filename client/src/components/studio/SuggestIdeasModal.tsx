@@ -71,13 +71,13 @@ export default function SuggestIdeasModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const noun = target === 'widget' ? 'widget' : 'report'
+  const noun = target === 'widget' ? 'Block' : 'report'
 
   return (
     <div className="idea-backdrop" onClick={onClose}>
       <div className="idea-modal" onClick={(e) => e.stopPropagation()}>
         <div className="idea-head">
-          <h2>✨ {noun === 'widget' ? 'Widget' : 'Report'} ideas</h2>
+          <h2>✨ {noun === 'Block' ? 'Block' : 'Report'} ideas</h2>
           <button className="idea-close" onClick={onClose} aria-label="Close">✕</button>
         </div>
         <div className="idea-sub">

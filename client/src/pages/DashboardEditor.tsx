@@ -248,7 +248,7 @@ export default function DashboardEditor() {
 
   async function handleDelete(w: Widget) {
     if (!orgId || !dashboardId) return
-    if (!confirm(`Remove widget "${w.name}"?`)) return
+    if (!confirm(`Remove Block "${w.name}"?`)) return
     try {
       await deleteWidget(token, orgId, dashboardId, w.id)
       setBoard((prev) => prev ? {
@@ -290,7 +290,7 @@ export default function DashboardEditor() {
       setBoard((prev) => prev ? { ...prev, widgets: [...prev.widgets, created] } : prev)
       setPickerWidgets((prev) => prev.filter((x) => x.id !== w.id))
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to add widget')
+      alert(err instanceof Error ? err.message : 'Failed to add Block')
     } finally {
       setAdding(null)
     }
@@ -328,7 +328,7 @@ export default function DashboardEditor() {
           </div>
           <div className="dbe-header-actions">
             <button type="button" className="btn btn-primary" onClick={openPicker}>
-              + Add widget
+              + Add Block
             </button>
           </div>
         </div>
@@ -420,7 +420,7 @@ export default function DashboardEditor() {
           {board.widgets.length === 0 && (
             <button type="button" className="wg-cell wg-cell-new wg-cell-new--full" onClick={openPicker}>
               <span className="wg-cell-new-plus">+</span>
-              Add your first widget
+              Add your first Block
             </button>
           )}
         </div>
@@ -440,11 +440,11 @@ export default function DashboardEditor() {
         <div className="dpicker-backdrop" onClick={() => !adding && setShowPicker(false)}>
           <div className="dpicker-modal" onClick={(e) => e.stopPropagation()}>
             <div className="dpicker-header">
-              <h2 className="dpicker-title">Add widget to dashboard</h2>
+              <h2 className="dpicker-title">Add Block to dashboard</h2>
               <button type="button" className="dpicker-close" onClick={() => setShowPicker(false)}>✕</button>
             </div>
             {pickLoading ? (
-              <div className="dpicker-empty">Loading widgets…</div>
+              <div className="dpicker-empty">Loading Blocks…</div>
             ) : (
               <div className="dpicker-grid">
                 {/* Create-new card always first */}
@@ -457,7 +457,7 @@ export default function DashboardEditor() {
                     <span className="dpicker-new-plus">+</span>
                   </div>
                   <div className="dpicker-info">
-                    <div className="dpicker-name">Build new widget</div>
+                    <div className="dpicker-name">Build new Block</div>
                     <div className="dpicker-type">Configure &amp; generate</div>
                   </div>
                 </button>
@@ -484,7 +484,7 @@ export default function DashboardEditor() {
 
                 {pickerWidgets.length === 0 && (
                   <p className="dpicker-hint">
-                    No other widgets yet — build a new one above, or create widgets on the Widgets page.
+                    No other Blocks yet — build a new one above, or create Blocks on the Blocks page.
                   </p>
                 )}
               </div>
@@ -502,7 +502,7 @@ function WidgetFrame({ html, theme }: { html: string; theme: string }) {
       className="wg-iframe"
       srcDoc={widgetFrameSrcDoc(html, theme)}
       sandbox="allow-scripts allow-popups"
-      title="Widget preview"
+      title="Block preview"
     />
   )
 }

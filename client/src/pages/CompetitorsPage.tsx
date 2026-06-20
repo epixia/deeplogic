@@ -17,7 +17,7 @@ export default function CompetitorsPage() {
   }
 
   return (
-    <main className="wrap">
+    <main className="wrap cp-fullwidth">
       <Competitors orgId={orgId} getToken={getToken} />
     </main>
   )
