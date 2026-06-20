@@ -1,11 +1,9 @@
 // Settings — workspace settings with General, Members, AI Providers, and Billing tabs.
 
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import {
-  createOrg,
-  updateOrg,
   inviteMember,
   listMembers,
   removeMember,
@@ -22,6 +20,7 @@ import {
 } from '../lib/api'
 import AiSettingsCard from '../components/studio/AiSettingsCard'
 import OrgoIntegrationCard from '../components/settings/OrgoIntegrationCard'
+import IntegrationsCatalog from '../components/settings/IntegrationsCatalog'
 import { SKINS, readSkin, saveSkin } from '../styles/skins'
 import { getPlatformStatus, type PlatformStatus } from '../lib/api'
 import './settings.css'
@@ -35,7 +34,7 @@ const PLAN_LABELS: Record<string, string> = {
   enterprise: 'Enterprise',
 }
 
-type Tab = 'general' | 'members' | 'ai' | 'integrations' | 'billing' | 'appearance' | 'profile' | 'status'
+type Tab = 'members' | 'ai' | 'integrations' | 'billing' | 'appearance' | 'profile' | 'status'
 
 export default function Settings() {
   const { orgId = '' } = useParams<{ orgId: string }>()
@@ -47,24 +46,22 @@ export default function Settings() {
     rawTab === 'integrations' ? 'integrations' :
     rawTab === 'billing' ? 'billing' :
     rawTab === 'appearance' ? 'appearance' :
-    rawTab === 'profile' ? 'profile' :
     rawTab === 'status' ? 'status' :
-    'general'
+    'profile'
 
-  const { orgs, user, getAccessToken, refreshOrgs } = useAuth()
+  const { orgs, user, getAccessToken } = useAuth()
   const org = useMemo(() => orgs.find((o) => o.id === orgId), [orgs, orgId])
   const myRole: OrgRole | undefined = org?.role
   const canManage = myRole === 'owner' || myRole === 'admin'
   const isOwner = myRole === 'owner'
 
   function setTab(tab: Tab) {
-    if (tab === 'general') setSearchParams({}, { replace: true })
+    if (tab === 'profile') setSearchParams({}, { replace: true })
     else setSearchParams({ tab }, { replace: true })
   }
 
   const TABS: { id: Tab; label: string }[] = [
     { id: 'profile',    label: 'Profile' },
-    { id: 'general',    label: 'General' },
     { id: 'appearance', label: 'Appearance' },
     { id: 'members',    label: 'Team' },
     { id: 'ai',         label: 'AI Providers' },
@@ -97,18 +94,6 @@ export default function Settings() {
         ))}
       </div>
 
-      {activeTab === 'general' && (
-        <GeneralTab
-          orgId={orgId}
-          orgName={org?.name ?? ''}
-          orgSlug={org?.slug ?? ''}
-          canManage={canManage}
-          getAccessToken={getAccessToken}
-          refreshOrgs={refreshOrgs}
-          allOrgs={orgs}
-        />
-      )}
-
       {activeTab === 'members' && (
         <MembersTab
           orgId={orgId}
@@ -134,6 +119,7 @@ export default function Settings() {
       {activeTab === 'integrations' && (
         <div className="dl-set__tab-body">
           <OrgoIntegrationCard orgId={orgId} getToken={() => getAccessToken().then((t) => t ?? '')} />
+          <IntegrationsCatalog orgId={orgId} getToken={() => getAccessToken().then((t) => t ?? '')} />
         </div>
       )}
 
@@ -145,179 +131,6 @@ export default function Settings() {
         />
       )}
     </main>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// General tab
-// ---------------------------------------------------------------------------
-
-interface GeneralTabProps {
-  orgId: string
-  orgName: string
-  orgSlug: string
-  canManage: boolean
-  getAccessToken: () => Promise<string | null>
-  refreshOrgs: () => Promise<void>
-  allOrgs: { id: string; name: string; slug: string; role: string }[]
-}
-
-function GeneralTab({ orgId, orgName, orgSlug, canManage, getAccessToken, refreshOrgs, allOrgs }: GeneralTabProps) {
-  const navigate = useNavigate()
-
-  // ---- Rename workspace ----
-  const [editing, setEditing] = useState(false)
-  const [nameVal, setNameVal] = useState(orgName)
-  const [nameBusy, setNameBusy] = useState(false)
-  const [nameError, setNameError] = useState<string | null>(null)
-
-  useEffect(() => { setNameVal(orgName) }, [orgName])
-
-  async function saveName(e: FormEvent) {
-    e.preventDefault()
-    const trimmed = nameVal.trim()
-    if (!trimmed || trimmed === orgName) { setEditing(false); return }
-    setNameBusy(true)
-    setNameError(null)
-    try {
-      const token = await getAccessToken()
-      if (!token) throw new Error('Session expired')
-      await updateOrg(token, orgId, { name: trimmed })
-      await refreshOrgs()
-      setEditing(false)
-    } catch (err) {
-      setNameError(err instanceof Error ? err.message : 'Failed to rename dashboard.')
-    } finally {
-      setNameBusy(false)
-    }
-  }
-
-  // ---- Create new workspace ----
-  const [creating, setCreating] = useState(false)
-  const [newName, setNewName] = useState('')
-  const [createBusy, setCreateBusy] = useState(false)
-  const [createError, setCreateError] = useState<string | null>(null)
-
-  async function createWorkspace(e: FormEvent) {
-    e.preventDefault()
-    const trimmed = newName.trim()
-    if (!trimmed) return
-    setCreateBusy(true)
-    setCreateError(null)
-    try {
-      const token = await getAccessToken()
-      if (!token) throw new Error('Session expired')
-      const org = await createOrg(token, trimmed)
-      await refreshOrgs()
-      setCreating(false)
-      setNewName('')
-      navigate(`/org/${org.id}/settings`)
-    } catch (err) {
-      setCreateError(err instanceof Error ? err.message : 'Failed to create dashboard.')
-    } finally {
-      setCreateBusy(false)
-    }
-  }
-
-  return (
-    <div className="dl-set__tab-body">
-      {/* Dashboard name */}
-      <section className="rounded-card dl-set__card">
-        <div className="dl-set__cardhead">
-          <h2>Dashboard name</h2>
-        </div>
-        {editing ? (
-          <form className="dl-set__rename-form" onSubmit={saveName}>
-            <input
-              className="dl-input dl-set__rename-input"
-              value={nameVal}
-              onChange={(e) => setNameVal(e.target.value)}
-              autoFocus
-              maxLength={80}
-              required
-            />
-            <div className="dl-set__rename-actions">
-              <button className="btn btn-primary" type="submit" disabled={nameBusy}>
-                {nameBusy ? 'Saving…' : 'Save'}
-              </button>
-              <button className="btn btn-ghost" type="button" onClick={() => { setEditing(false); setNameVal(orgName) }}>
-                Cancel
-              </button>
-            </div>
-            {nameError && <div className="dl-set__error" role="alert">{nameError}</div>}
-          </form>
-        ) : (
-          <div className="dl-set__workspace-row">
-            <span className="dl-set__workspace-name">{orgName}</span>
-            <span className="dl-set__workspace-slug">/{orgSlug}</span>
-            {canManage && (
-              <button className="btn btn-secondary dl-set__rename-btn" onClick={() => setEditing(true)}>
-                Rename
-              </button>
-            )}
-          </div>
-        )}
-      </section>
-
-      {/* All dashboards */}
-      <section className="rounded-card dl-set__card">
-        <div className="dl-set__cardhead">
-          <h2>Your dashboards</h2>
-          <span className="dl-set__count">{allOrgs.length}</span>
-          <button
-            className="btn btn-secondary dl-set__ws-new-btn"
-            onClick={() => setCreating((v) => !v)}
-          >
-            + New dashboard
-          </button>
-        </div>
-
-        {creating && (
-          <form className="dl-set__rename-form dl-set__ws-create" onSubmit={createWorkspace}>
-            <input
-              className="dl-input dl-set__rename-input"
-              placeholder="Dashboard name"
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              autoFocus
-              maxLength={80}
-              required
-            />
-            <div className="dl-set__rename-actions">
-              <button className="btn btn-primary" type="submit" disabled={createBusy}>
-                {createBusy ? 'Creating…' : 'Create'}
-              </button>
-              <button className="btn btn-ghost" type="button" onClick={() => { setCreating(false); setNewName('') }}>
-                Cancel
-              </button>
-            </div>
-            {createError && <div className="dl-set__error" role="alert">{createError}</div>}
-          </form>
-        )}
-
-        <div className="dl-set__ws-list">
-          {allOrgs.map((o) => (
-            <div
-              key={o.id}
-              className={`dl-set__ws-item${o.id === orgId ? ' active' : ''}`}
-              role="button"
-              tabIndex={0}
-              onClick={() => o.id !== orgId && navigate(`/org/${o.id}/settings`)}
-              onKeyDown={(e) => e.key === 'Enter' && o.id !== orgId && navigate(`/org/${o.id}/settings`)}
-            >
-              <div className="dl-set__ws-avatar">
-                {o.name.charAt(0).toUpperCase()}
-              </div>
-              <div className="dl-set__ws-info">
-                <span className="dl-set__ws-name">{o.name}</span>
-                <span className="dl-set__ws-role">{o.role}</span>
-              </div>
-              {o.id === orgId && <span className="dl-set__ws-current">current</span>}
-            </div>
-          ))}
-        </div>
-      </section>
-    </div>
   )
 }
 

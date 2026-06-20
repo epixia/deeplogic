@@ -10,6 +10,7 @@ import RequireAdmin from './auth/RequireAdmin'
 import Nav from './components/Nav'
 import GlobalChat from './components/GlobalChat'
 import AgentActivityToasts from './components/AgentActivityToasts'
+import AppShell from './components/AppShell'
 import ThemeManager from './components/ThemeManager'
 import Home from './pages/Home'
 import Demo from './pages/Demo'
@@ -118,25 +119,28 @@ export default function App() {
         <Route element={<RequireAuth />}>
           <Route path="/app" element={<AppIndex />} />
 
-          {/* org-scoped */}
-          <Route path="/app/:orgId/ingest" element={<Ingest />} />
-          <Route path="/app/:orgId/dashboard/:modelId" element={<Dashboard />} />
-          <Route path="/app/:orgId/mission/:modelId" element={<Mission />} />
-          <Route path="/app/:orgId/settings" element={<Settings />} />
-          <Route path="/app/:orgId/vault" element={<Vault />} />
-          <Route path="/app/:orgId/memory" element={<Memory />} />
-          <Route path="/app/:orgId/site" element={<SiteInsights />} />
-          <Route path="/app/:orgId/studio" element={<Studio />} />
-          <Route path="/app/:orgId/studio/:projectId" element={<StudioEditor />} />
-          <Route path="/app/:orgId/widgets" element={<Dashboards />} />
-          <Route path="/app/:orgId/widgets/:widgetId" element={<WidgetEditor />} />
-          <Route path="/app/:orgId/dashboards" element={<DashboardsList />} />
-          <Route path="/app/:orgId/dashboards/manage" element={<DashboardsManage />} />
-          <Route path="/app/:orgId/dashboards/:dashboardId" element={<DashboardEditor />} />
-          <Route path="/app/:orgId/agents" element={<Agents />} />
-          <Route path="/app/:orgId/goals" element={<Goals />} />
-          <Route path="/app/:orgId/activity" element={<Activity />} />
-          <Route path="/app/:orgId/alerts" element={<Alerts />} />
+          {/* org-scoped — wrapped in the app shell so the dashboard sidebar is
+              persistent on every page */}
+          <Route element={<AppShell />}>
+            <Route path="/app/:orgId/ingest" element={<Ingest />} />
+            <Route path="/app/:orgId/dashboard/:modelId" element={<Dashboard />} />
+            <Route path="/app/:orgId/mission/:modelId" element={<Mission />} />
+            <Route path="/app/:orgId/settings" element={<Settings />} />
+            <Route path="/app/:orgId/vault" element={<Vault />} />
+            <Route path="/app/:orgId/memory" element={<Memory />} />
+            <Route path="/app/:orgId/site" element={<SiteInsights />} />
+            <Route path="/app/:orgId/studio" element={<Studio />} />
+            <Route path="/app/:orgId/studio/:projectId" element={<StudioEditor />} />
+            <Route path="/app/:orgId/widgets" element={<Dashboards />} />
+            <Route path="/app/:orgId/widgets/:widgetId" element={<WidgetEditor />} />
+            <Route path="/app/:orgId/dashboards" element={<DashboardsList />} />
+            <Route path="/app/:orgId/dashboards/manage" element={<DashboardsManage />} />
+            <Route path="/app/:orgId/dashboards/:dashboardId" element={<DashboardEditor />} />
+            <Route path="/app/:orgId/agents" element={<Agents />} />
+            <Route path="/app/:orgId/goals" element={<Goals />} />
+            <Route path="/app/:orgId/activity" element={<Activity />} />
+            <Route path="/app/:orgId/alerts" element={<Alerts />} />
+          </Route>
         </Route>
 
         {/* super-admin (requires auth + admin email) */}

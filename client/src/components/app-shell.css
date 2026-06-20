@@ -1,0 +1,25 @@
+.app-shell {
+  display: flex;
+  align-items: flex-start;
+  width: 100%;
+}
+.app-shell-main {
+  flex: 1;
+  min-width: 0;
+}
+/* The dashboard sidebar sticks just under the (sticky, 68px) top nav. */
+.app-shell > .dbsb {
+  position: sticky;
+  top: 76px;
+  height: calc(100vh - 76px);
+  align-self: flex-start;
+  flex: 0 0 232px;
+}
+
+@media (max-width: 860px) {
+  .app-shell { flex-direction: column; }
+  .app-shell > .dbsb {
+    position: static; height: auto; width: 100%; flex-basis: auto;
+    border-right: 0; border-bottom: 1px solid var(--line);
+  }
+}

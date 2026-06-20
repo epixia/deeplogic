@@ -3,15 +3,23 @@
 // lifecycle with connection host, and can be stopped or removed.
 
 import { useCallback, useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import {
   listExternalAgents,
   deployExternalAgent,
   stopExternalAgent,
   deleteExternalAgent,
+  getIntegrations,
   type ExternalAgent,
   type ExternalAgentProvider,
 } from '../../lib/api'
 import './external-agents.css'
+
+// Memorable random codenames — used as the default instance name (editable).
+const NAME_ADJ = ['Swift', 'Bold', 'Quiet', 'Clever', 'Nimble', 'Rapid', 'Lunar', 'Iron', 'Amber', 'Cobalt', 'Vivid', 'Stellar', 'Brisk', 'Onyx']
+const NAME_NOUN = ['Falcon', 'Otter', 'Comet', 'Heron', 'Lynx', 'Vortex', 'Beacon', 'Cipher', 'Nomad', 'Quasar', 'Pioneer', 'Scout', 'Raven', 'Atlas']
+const pick = <T,>(a: T[]): T => a[Math.floor(Math.random() * a.length)]
+const randomAgentName = (): string => `${pick(NAME_ADJ)} ${pick(NAME_NOUN)}`
 
 const PROVIDERS: { id: ExternalAgentProvider; label: string; icon: string; blurb: string }[] = [
   { id: 'hermes', label: 'Hermes', icon: '☿', blurb: 'Autonomous outreach & messaging agent runtime, deployed in its own VM.' },
@@ -62,6 +70,19 @@ export default function ExternalAgents({
   const [form, setForm] = useState({ name: '', region: 'us-east', size: 'small', mission: '', reason: '' })
   const [deploying, setDeploying] = useState(false)
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
+  const [orgoReady, setOrgoReady] = useState<boolean | null>(null)
+
+  useEffect(() => {
+    let on = true
+    ;(async () => {
+      try {
+        const t = await getToken()
+        const v = await getIntegrations(t, orgId)
+        if (on) setOrgoReady(v.orgo.enabled && v.orgo.hasKey)
+      } catch { if (on) setOrgoReady(false) }
+    })()
+    return () => { on = false }
+  }, [getToken, orgId])
 
   const load = useCallback(async () => {
     try {
@@ -87,7 +108,7 @@ export default function ExternalAgents({
 
   async function deploy(e: React.FormEvent) {
     e.preventDefault()
-    if (!deployProvider || !form.name.trim() || deploying) return
+    if (!deployProvider || !form.name.trim() || !form.mission.trim() || deploying) return
     setDeploying(true)
     setError(null)
     try {
@@ -128,6 +149,24 @@ export default function ExternalAgents({
         <h2>External agents</h2>
         <span className="ea-sub">Deploy autonomous agent runtimes to their own VM.</span>
       </div>
+
+      <div className="ea-when">
+        <div className="ea-when-head">
+          <span className="ea-when-ic" aria-hidden>🧭</span>
+          <strong>When to use an external agent</strong>
+          <span className="ea-when-sub">Reach for Hermes / OpenClaw only when a task needs a real computer — otherwise the built‑in agents are faster &amp; cheaper.</span>
+        </div>
+        <ul className="ea-when-list">
+          <li><span aria-hidden>🖱</span><div><strong>Drive a real browser</strong> — click, type &amp; navigate JS‑heavy apps the built‑in agents (static fetch only) can't see.</div></li>
+          <li><span aria-hidden>🔐</span><div><strong>Log in &amp; hold a session</strong> — authenticate (passwords, OAuth, 2FA) and stay logged in across steps.</div></li>
+          <li><span aria-hidden>🚪</span><div><strong>Work behind a login wall</strong> — BI/CRM, retailer portals (OCS/SQDC), bank/AR, gated competitor areas.</div></li>
+          <li><span aria-hidden>✍️</span><div><strong>Submit, not just read</strong> — fill forms, post listings, send messages/DMs, apply to directories.</div></li>
+          <li><span aria-hidden>⏱</span><div><strong>Run long, autonomously</strong> — minutes‑to‑hours missions that report back, not a single quick request.</div></li>
+          <li><span aria-hidden>🖥</span><div><strong>Use a full desktop</strong> — upload/download files, operate desktop apps &amp; file dialogs.</div></li>
+          <li><span aria-hidden>🥷</span><div><strong>Behave human‑like</strong> — pacing &amp; session state that gets past JS gating a raw fetch trips.</div></li>
+        </ul>
+      </div>
+
       {error && <div className="studio-error">{error}</div>}
 
       {PROVIDERS.map((p) => {
@@ -143,7 +182,7 @@ export default function ExternalAgents({
               <button
                 type="button"
                 className="btn btn-primary btn-xs"
-                onClick={() => { setDeployProvider(p.id); setForm({ name: `${p.label} agent`, region: 'us-east', size: 'small', mission: '', reason: '' }); setError(null) }}
+                onClick={() => { setDeployProvider(p.id); setForm({ name: randomAgentName(), region: 'us-east', size: 'small', mission: '', reason: '' }); setError(null) }}
               >
                 🚀 Deploy to VM
               </button>
@@ -246,19 +285,34 @@ export default function ExternalAgents({
         <div className="studio-modal-backdrop" onClick={() => !deploying && setDeployProvider(null)}>
           <form className="studio-modal" onClick={(e) => e.stopPropagation()} onSubmit={deploy}>
             <h2>Deploy {PROVIDERS.find((p) => p.id === deployProvider)?.label} to a VM</h2>
-            <p className="studio-modal-sub">Provisions a dedicated VM and starts the agent runtime.</p>
+            <p className="studio-modal-sub">Provisions a dedicated cloud computer and runs your goal on it autonomously.</p>
+
+            {orgoReady === false && (
+              <div className="ea-orgo-note ea-orgo-note--warn">
+                ⚠ No Orgo.ai key connected — this will run <strong>simulated</strong>. Connect Orgo in{' '}
+                <Link to={`/app/${orgId}/settings?tab=integrations`}>Settings → Integrations</Link> for a real VM.
+              </div>
+            )}
+            {orgoReady && (
+              <div className="ea-orgo-note ea-orgo-note--ok">
+                🖥 Deploys to a real <strong>Orgo.ai</strong> VM. It works autonomously and reports results back to DeepLogic securely.
+              </div>
+            )}
 
             <label className="studio-field">
-              <span>Instance name</span>
-              <input className="studio-input" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} autoFocus />
-            </label>
-            <label className="studio-field">
-              <span>Mission — what should it accomplish?</span>
+              <span>Goal — what should this agent accomplish?</span>
               <textarea
-                className="studio-input" rows={3}
+                className="studio-input" rows={3} autoFocus
                 placeholder={deployProvider === 'hermes' ? 'e.g. Reach out to 50 dispensary buyers in Ontario and book demo calls.' : 'e.g. Scrape competitor pricing from these 8 sites weekly and summarise changes.'}
                 value={form.mission} onChange={(e) => setForm((f) => ({ ...f, mission: e.target.value }))}
               />
+            </label>
+            <label className="studio-field">
+              <span>Agent name</span>
+              <div className="ea-name-row">
+                <input className="studio-input" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} placeholder="Agent name" />
+                <button type="button" className="btn btn-ghost btn-xs ea-name-dice" title="Pick a new random name" onClick={() => setForm((f) => ({ ...f, name: randomAgentName() }))}>🎲</button>
+              </div>
             </label>
             <label className="studio-field">
               <span>Reason (optional) — why outsource this?</span>
@@ -279,7 +333,7 @@ export default function ExternalAgents({
 
             <div className="studio-modal-actions">
               <button type="button" className="btn btn-ghost" onClick={() => setDeployProvider(null)} disabled={deploying}>Cancel</button>
-              <button type="submit" className="btn btn-primary" disabled={deploying || !form.name.trim()}>
+              <button type="submit" className="btn btn-primary" disabled={deploying || !form.name.trim() || !form.mission.trim()}>
                 {deploying ? 'Deploying…' : '🚀 Deploy'}
               </button>
             </div>

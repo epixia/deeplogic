@@ -57,7 +57,7 @@ export const SKINS: Skin[] = [
       good: '#7fb98a', warn: '#d6b25e', bad: '#d98a8a',
     },
     light: {
-      bg: '#f6f7f9', bg2: '#ffffff', card: '#ffffff', card2: '#f1f3f5',
+      bg: '#e3e5ea', bg2: '#ffffff', card: '#ffffff', card2: '#f1f3f5',
       line: '#e3e6ea', cyan: '#3f5670', blue: '#4a6080',
       ink: '#1f2329', mut: '#5b6370', mut2: '#8b929c',
       grad: 'linear-gradient(0deg,#5b6f8c,#5b6f8c)',

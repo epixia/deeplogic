@@ -17,6 +17,8 @@
   transition: transform .12s, box-shadow .12s;
 }
 .gchat-fab:hover { transform: translateY(-2px) scale(1.04); box-shadow: 0 16px 40px -8px rgba(73, 160, 230, .7); }
+/* Light mode: white star for contrast on the blue gradient. */
+[data-theme='light'] .gchat-fab { color: #fff; }
 
 .gchat-panel {
   position: fixed;

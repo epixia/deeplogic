@@ -8,7 +8,9 @@ import type { Request, Response } from 'express';
 import { requireMember } from '../auth.js';
 import { serviceClient } from '../supabase.js';
 import { loadAiConfig, serverFallbackAi, executeInternalAgentRun } from './studio.js';
-import { type AiProvider } from '../studio/generator.js';
+import { type AiProvider, type AiConfig } from '../studio/generator.js';
+import { ingestEpisode } from '../memory/graph.js';
+import { resolveEmbeddingKey } from '../studio/embeddings.js';
 
 export const goalsRouter = Router();
 
@@ -23,6 +25,9 @@ function mapGoal(row: Record<string, unknown>) {
     plan: (row.plan ?? []) as string[],
     agents: (row.agents ?? []) as GoalAgent[],
     status: row.status,
+    lastFindingsSummary: row.last_findings_summary ?? null,
+    lastFindingsDocId: row.last_findings_doc_id ?? null,
+    lastFindingsAt: row.last_findings_at ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -223,6 +228,36 @@ goalsRouter.post('/orgs/:orgId/goals/suggest', requireMember(), async (req: Requ
   }
 });
 
+// Synthesize a goal's agent findings into one concise executive brief.
+async function synthesizeGoalFindings(
+  goalTitle: string, plan: string[],
+  results: { agent: string; ok: boolean; output?: string }[],
+  ai: AiConfig | null,
+): Promise<string> {
+  const sections = results.filter((r) => r.ok && r.output).map((r) => `### ${r.agent}\n${r.output}`).join('\n\n');
+  if (!sections.trim()) return '';
+  const fallback = `Combined findings for "${goalTitle}":\n\n${sections}`;
+  if (!ai) return fallback;
+  const system = "You synthesize multiple AI agents' findings into ONE concise executive brief for a business goal. Output markdown: a 2-4 sentence summary, then '**Key insights**' bullets, then '**Recommended next actions**' bullets. Merge overlapping points, be specific, no preamble.";
+  const planText = plan.length ? `\nPlan:\n${plan.map((s, i) => `${i + 1}. ${s}`).join('\n')}` : '';
+  const userMsg = `Goal: ${goalTitle}${planText}\n\nAgent findings:\n${sections.slice(0, 12000)}`;
+  try {
+    if (ai.provider === 'openai' || ai.provider === 'openrouter') {
+      const baseURL = ai.provider === 'openrouter' ? 'https://openrouter.ai/api/v1/chat/completions' : 'https://api.openai.com/v1/chat/completions';
+      const r = await fetch(baseURL, {
+        method: 'POST', headers: { Authorization: `Bearer ${ai.apiKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: ai.model ?? 'gpt-4o-mini', max_tokens: 900, messages: [{ role: 'system', content: system }, { role: 'user', content: userMsg }] }),
+      });
+      const j = await r.json() as { choices?: { message?: { content?: string } }[] };
+      return (j.choices?.[0]?.message?.content ?? '').trim() || fallback;
+    }
+    const { default: Anthropic } = await import('@anthropic-ai/sdk');
+    const client = new Anthropic({ apiKey: ai.apiKey });
+    const msg = await client.messages.create({ model: ai.model ?? 'claude-sonnet-4-6', max_tokens: 900, system, messages: [{ role: 'user', content: userMsg }] });
+    return (msg.content.find((b) => b.type === 'text')?.text ?? '').trim() || fallback;
+  } catch (e) { console.error('[goal synth] failed', e); return fallback; }
+}
+
 // POST /orgs/:orgId/goals/:id/run/stream — orchestrate a goal: ensure each of
 // its agents exists (create from the plan if missing), run them, and stream the
 // live thoughts + results (SSE). Each run lands in the AI Activity Log.
@@ -283,7 +318,40 @@ goalsRouter.post('/orgs/:orgId/goals/:id/run/stream', requireMember(), async (re
       results.push({ agent: agent.name, ok: false, error: e instanceof Error ? e.message : 'run failed' });
     }
   }
-  send({ type: 'done', results });
+
+  // Roll the agents' findings up into one goal brief (Vault doc + memory + a
+  // summary on the goal so the Goals page can surface "Latest findings").
+  let findingsDocId: string | null = null;
+  let findingsSummary = '';
+  const okResults = results.filter((r) => r.ok && r.output);
+  if (okResults.length) {
+    try {
+      send({ type: 'step', icon: '🧠', text: 'Synthesizing goal findings' });
+      const ai = (await loadAiConfig(orgId).catch(() => null)) ?? serverFallbackAi();
+      const brief = await synthesizeGoalFindings(g.title, g.plan ?? [], okResults, ai);
+      const perAgent = okResults.map((r) => `### ${r.agent}\n\n${r.output}`).join('\n\n');
+      const docMd = `# Findings — Goal: ${g.title}\n\n_Updated ${new Date().toLocaleString()}_\n\n${brief}\n\n---\n\n## Per-agent findings\n\n${perAgent}`.slice(0, 60000);
+      const meta = { format: 'md', source: 'goal-findings', goalFindingsId: g.id, goalTitle: g.title };
+      const { data: ex } = await req.db!.from('context_items').select('id').eq('org_id', orgId).eq('meta->>goalFindingsId', g.id).maybeSingle();
+      if (ex) {
+        findingsDocId = (ex as { id: string }).id;
+        await req.db!.from('context_items').update({ name: `Findings — Goal: ${g.title}`, content: docMd, meta, enabled: true }).eq('id', findingsDocId);
+      } else {
+        const { data: ins } = await req.db!.from('context_items')
+          .insert({ org_id: orgId, owner_id: req.user!.id, scope: 'org', kind: 'doc', name: `Findings — Goal: ${g.title}`, content: docMd, meta, enabled: true })
+          .select('id').maybeSingle();
+        findingsDocId = (ins as { id: string } | null)?.id ?? null;
+      }
+      const ai2 = (await loadAiConfig(orgId).catch(() => null)) ?? serverFallbackAi();
+      try {
+        await ingestEpisode(req.db!, orgId, { sourceKind: 'goal', sourceRef: findingsDocId ?? g.id, title: `Goal findings: ${g.title}`, text: brief || perAgent }, ai2, resolveEmbeddingKey(ai2));
+      } catch (e) { console.error('[goal findings memory]', e); }
+      findingsSummary = (brief || '').replace(/[#*_>`]/g, '').replace(/\s+/g, ' ').trim().slice(0, 400);
+      await req.db!.from('goals').update({ last_findings_summary: findingsSummary || null, last_findings_doc_id: findingsDocId, last_findings_at: new Date().toISOString() }).eq('id', g.id).eq('org_id', orgId);
+    } catch (e) { console.error('[goal findings] failed', e); }
+  }
+
+  send({ type: 'done', results, findingsDocId, findingsSummary });
   return res.end();
 });
 

@@ -25,7 +25,7 @@
 /* ============ LIGHT MODE ============ */
 [data-theme='light'] {
   /* Corporate "Microsoft Fluent" light theme: neutral grays + communication blue. */
-  --bg: #faf9f8; /* neutralLighter */
+  --bg: #e3e5ea; /* light grey — white cards lift off it clearly */
   --bg2: #ffffff;
   --card: #ffffff;
   --card2: #f3f2f1; /* neutralLight */
@@ -77,7 +77,7 @@ button {
 .wrap {
   max-width: 1140px;
   margin: 0 auto;
-  padding: 0 24px;
+  padding: 0 24px 96px;
 }
 
 /* ---------- helpers ---------- */

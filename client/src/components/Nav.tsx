@@ -131,7 +131,7 @@ function OpenRouterBadge({
         textDecoration: 'none',
       }}
     >
-      <span style={{ opacity: 0.7, fontWeight: 700, letterSpacing: '0.04em' }}>OR</span>
+      <span aria-hidden style={{ fontSize: '13px', lineHeight: 1 }}>🪙</span>
       ${remaining.toFixed(2)}
     </a>
   )

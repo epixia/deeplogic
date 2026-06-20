@@ -102,6 +102,28 @@
 .ob-pbi-cat { color: var(--mut); font-size: 11px; text-transform: uppercase; margin-left: 6px; }
 .ob-pbi-actions { display: flex; gap: 10px; }
 
+/* warm personalized welcome once the company is detected */
+.ob-welcome {
+  max-width: 640px; margin: 6px auto 0; display: flex; gap: 14px; align-items: flex-start;
+  border: 1px solid color-mix(in srgb, var(--cyan) 32%, var(--line));
+  background: rgba(111, 227, 240, 0.06); border-radius: 14px; padding: 16px 18px;
+  animation: ob-welcome-in .4s ease-out;
+}
+@keyframes ob-welcome-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.ob-welcome-emoji { font-size: 26px; line-height: 1; flex-shrink: 0; }
+.ob-welcome-title { font-size: 17px; font-weight: 800; color: var(--ink); margin-bottom: 3px; }
+.ob-welcome-text { font-size: 13.5px; color: var(--mut); line-height: 1.55; }
+.ob-welcome-text strong { color: var(--ink); }
+
+/* "what we already understand" reflection after a Power BI scan */
+.ob-reflect {
+  margin-top: 16px; border: 1px solid color-mix(in srgb, var(--cyan) 30%, var(--line));
+  background: rgba(111, 227, 240, 0.06); border-radius: 12px; padding: 13px 15px;
+}
+.ob-reflect-title { font-size: 12.5px; font-weight: 800; color: var(--cyan); margin-bottom: 5px; }
+.ob-reflect-text { font-size: 13.5px; color: var(--ink); line-height: 1.55; }
+.ob-reflect-text strong { color: var(--cyan); }
+
 /* centered live-reasoning feed (the focus; no data shown here) */
 .ob-think { max-width: 640px; margin: 10px auto 0; }
 .ob-feed--center {
@@ -147,6 +169,7 @@
 .ob-reveal-lead { font-size: 14px; color: var(--mut); line-height: 1.55; max-width: 420px; }
 .ob-reveal-list { list-style: none; margin: 4px 0; padding: 0; display: flex; flex-direction: column; gap: 8px; text-align: left; }
 .ob-reveal-list li { font-size: 14px; color: var(--ink); font-weight: 600; }
+.ob-reveal-nudge { font-size: 12.5px; color: var(--mut); margin: 4px 0 0; opacity: .85; }
 .ob-reveal-cta { margin-top: 8px; padding: 12px 28px; font-size: 15px; }
 
 /* stepped wizard panels */

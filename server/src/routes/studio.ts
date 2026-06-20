@@ -2095,6 +2095,61 @@ export async function runAgentOnce(ai: AiConfig, agentModel: string, systemPromp
   return (msg.content.find((b) => b.type === 'text')?.text ?? '').trim() || '(the agent returned no output)';
 }
 
+// Harvest a finished agent run's output into durable, reusable knowledge:
+//  1) a living "Agent findings — <Agent>" markdown doc in the Data Vault (newest
+//     finding on top, with provenance), and
+//  2) the bi-temporal memory graph (entities + facts) so future runs recall it.
+// Best-effort: any failure here is logged, never thrown into the run.
+async function harvestAgentFinding(
+  req: Request, orgId: string,
+  agent: { id: string; name: string },
+  output: string, ai: AiConfig | null,
+  opts: { runId: string | null; goalId?: string; goalTitle?: string; onStep?: (s: { icon: string; text: string }) => void },
+): Promise<void> {
+  const finding = (output ?? '').trim();
+  // Skip trivial / refusal-ish outputs — not worth storing as knowledge.
+  if (finding.length < 80 || /^\(the agent returned no output\)$/i.test(finding)) return;
+
+  const title = `Agent findings — ${agent.name}`;
+  const stamp = new Date().toLocaleString();
+  const tag = opts.goalTitle ? ` · Goal: ${opts.goalTitle}` : '';
+  const entry = `## ${stamp}${tag}\n\n${finding}\n`;
+
+  // Upsert one living findings doc per agent (newest entry first, capped).
+  const meta: Record<string, unknown> = {
+    format: 'md', source: 'agent-finding', findingAgentId: agent.id, lastRunId: opts.runId ?? null,
+    ...(opts.goalId ? { goalId: opts.goalId, goalTitle: opts.goalTitle } : {}),
+  };
+  let itemId: string | null = null;
+  try {
+    const { data: existing } = await req.db!
+      .from('context_items').select('id, content').eq('org_id', orgId).eq('meta->>findingAgentId', agent.id).maybeSingle();
+    if (existing) {
+      itemId = (existing as { id: string }).id;
+      const prior = String((existing as { content?: string }).content ?? '').replace(/^# .*?\n+/, '');
+      const content = `# ${title}\n\n${entry}\n---\n\n${prior}`.slice(0, 40000);
+      await req.db!.from('context_items').update({ name: title, content, meta, enabled: true }).eq('id', itemId);
+    } else {
+      const { data: ins } = await req.db!
+        .from('context_items')
+        .insert({ org_id: orgId, owner_id: req.user!.id, scope: 'org', kind: 'doc', name: title, content: `# ${title}\n\n${entry}`, meta, enabled: true })
+        .select('id').maybeSingle();
+      itemId = (ins as { id: string } | null)?.id ?? null;
+    }
+  } catch (e) { console.error('[harvest] vault doc failed', e); }
+
+  // Feed the memory graph so the finding becomes recallable knowledge.
+  try {
+    await ingestEpisode(
+      req.db!, orgId,
+      { sourceKind: 'agent', sourceRef: itemId ?? opts.runId ?? undefined, title: `${agent.name} finding`, text: finding },
+      ai, resolveEmbeddingKey(ai),
+    );
+  } catch (e) { console.error('[harvest] memory ingest failed', e); }
+
+  opts.onStep?.({ icon: '🧠', text: 'Saved finding to Data Vault & memory' });
+}
+
 // Run an internal agent autonomously: gather workspace context, let it use its
 // tools (research + Data Vault), record the whole trace to the activity log, and
 // keep the agent's live status in sync. Shared by the chat run_agent tool and
@@ -2157,6 +2212,15 @@ export async function executeInternalAgentRun(
     await appendEvent(req.db!, orgId, runId, 'output', output.slice(0, 2000), '📄');
     await finishRun(req.db!, runId, 'succeeded', { result: output });
     await req.db!.from('agents').update({ status: 'idle', last_run_at: new Date().toISOString(), last_run_status: 'ok' }).eq('id', agent.id).eq('org_id', orgId);
+    // Harvest the finding into the Data Vault + memory graph so it compounds the
+    // workspace's knowledge (best-effort — never fails the run).
+    const tctx = triggerContext as Record<string, unknown>;
+    await harvestAgentFinding(req, orgId, agent, output, ai, {
+      runId,
+      goalId: typeof tctx.goalId === 'string' ? tctx.goalId : undefined,
+      goalTitle: typeof tctx.goalTitle === 'string' ? tctx.goalTitle : undefined,
+      onStep: opts.onStep,
+    }).catch((e) => console.error('[harvest] failed', e));
     return { output, runId };
   } catch (e) {
     const errMsg = e instanceof Error ? e.message : 'Agent run failed.';

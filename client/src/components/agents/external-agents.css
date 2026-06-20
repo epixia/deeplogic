@@ -5,6 +5,38 @@
 .ea-head h2 { font-size: 20px; font-weight: 800; letter-spacing: -0.02em; }
 .ea-sub { font-size: 13px; color: var(--mut); }
 
+/* "when to use" guidance panel */
+.ea-when {
+  border: 1px solid var(--line);
+  background: var(--card2);
+  border-radius: 14px;
+  padding: 16px 18px;
+  margin-bottom: 22px;
+}
+.ea-when-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.ea-when-ic { font-size: 16px; }
+.ea-when-head strong { font-size: 14px; color: var(--ink); }
+.ea-when-sub { font-size: 12.5px; color: var(--mut); flex: 1; min-width: 200px; }
+.ea-when-list {
+  list-style: none; margin: 0; padding: 0;
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 8px 18px;
+}
+.ea-when-list li { display: flex; gap: 9px; align-items: flex-start; font-size: 12.5px; color: var(--mut); line-height: 1.45; }
+.ea-when-list li span { flex-shrink: 0; }
+.ea-when-list li strong { color: var(--ink); font-weight: 700; }
+
+/* deploy modal — Orgo status + random-name row */
+.ea-orgo-note {
+  font-size: 12.5px; line-height: 1.45; border-radius: 9px; padding: 9px 12px; margin-bottom: 4px;
+}
+.ea-orgo-note a { color: var(--cyan); text-decoration: none; font-weight: 600; }
+.ea-orgo-note a:hover { text-decoration: underline; }
+.ea-orgo-note--ok { color: #4caf7d; background: rgba(76,175,125,.1); border: 1px solid rgba(76,175,125,.3); }
+.ea-orgo-note--warn { color: #d6a23e; background: rgba(214,162,62,.1); border: 1px solid rgba(214,162,62,.3); }
+.ea-name-row { display: flex; gap: 8px; align-items: center; }
+.ea-name-row .studio-input { flex: 1; }
+.ea-name-dice { flex-shrink: 0; font-size: 15px; line-height: 1; padding: 0 10px; }
+
 .ea-section {
   border: 1px solid var(--line);
   border-radius: 16px;

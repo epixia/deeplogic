@@ -2264,6 +2264,9 @@ export interface Goal {
   plan: string[]
   agents: GoalAgent[]
   status: 'active' | 'done' | 'archived'
+  lastFindingsSummary: string | null
+  lastFindingsDocId: string | null
+  lastFindingsAt: string | null
   createdAt: string
   updatedAt: string
 }
@@ -2307,7 +2310,7 @@ export function deleteGoal(token: string, orgId: string, goalId: string): Promis
 
 export type GoalRunStreamEvent =
   | { type: 'step'; icon: string; text: string }
-  | { type: 'done'; results: { agent: string; ok: boolean; output?: string; error?: string }[] }
+  | { type: 'done'; results: { agent: string; ok: boolean; output?: string; error?: string }[]; findingsDocId?: string | null; findingsSummary?: string }
   | { type: 'error'; error: string }
 
 // POST /goals/:id/run/stream — spin up & run a goal's agents, streaming live

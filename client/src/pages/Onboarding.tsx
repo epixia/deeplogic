@@ -4,7 +4,7 @@
 // workspace; the account is created instantly (set-password link emailed) and
 // the gathered data is persisted. An optional Power BI step follows.
 
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import {
@@ -41,6 +41,17 @@ function randomPassword(): string {
   return `Dl!${rnd.slice(0, 16)}` // satisfies length + a little complexity
 }
 
+function firstSentence(s: string): string {
+  const m = (s || '').trim().match(/^.*?[.!?](\s|$)/)
+  return (m ? m[0] : (s || '')).trim()
+}
+// Pull an industry/sector value out of the gathered company facts, if present.
+function industryFact(company: Company | null): string | null {
+  const f = company?.facts?.find((x) => /industry|sector|category|market|vertical/i.test(x.label))
+  return f?.value?.trim() || null
+}
+const isPbi = (n: string) => /\.(pbit|pbix)$/i.test(n)
+
 export default function Onboarding() {
   const { orgs, session, getAccessToken, signUp, resetPassword, refreshOrgs, loading } = useAuth()
   const navigate = useNavigate()
@@ -75,6 +86,20 @@ export default function Onboarding() {
   const feedEndRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => { feedEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [feed])
+
+  // A warm "we understand your business" reflection from the Power BI scans —
+  // references the user's REAL detected KPIs, tables and connectors.
+  const pbiInsight = useMemo(() => {
+    const done = Object.values(pbiScans).filter((s) => s.status === 'done' && s.scan)
+    if (!done.length) return null
+    const measures = new Set<string>(), tables = new Set<string>(), conns = new Set<string>()
+    for (const d of done) {
+      for (const t of d.scan!.tables) { tables.add(t.name); for (const m of t.measures) measures.add(m) }
+      for (const c of d.scan!.connectors) conns.add(c.name)
+    }
+    return { measures: [...measures], tables: [...tables], conns: [...conns], reports: done.length }
+  }, [pbiScans])
+  const otherDocs = useMemo(() => pbiFiles.filter((f) => !isPbi(f.name)), [pbiFiles])
 
   // Existing user who already has a workspace → straight in.
   if (!loading && !busy && phase === 'intro' && orgs.length > 0) {
@@ -216,14 +241,14 @@ export default function Onboarding() {
           <h1>
             {phase === 'running' ? 'Analysing your business…'
               : phase === 'review' ? 'Your intelligence is ready'
-              : phase === 'powerbi' ? 'Add your Power BI reports'
+              : phase === 'powerbi' ? 'Show us how you run'
               : phase === 'claim' ? 'Activate your workspace'
               : 'Your workspace is ready'}
           </h1>
           <p>
-            {phase === 'running' ? 'Watch the AI reason through your business — live.'
+            {phase === 'running' ? 'Watch the AI reason through your business, live — this is where it gets good.'
               : phase === 'review' ? 'We’ve built your picture. Activate your workspace to see it all.'
-              : phase === 'powerbi' ? 'Optional — we’ll detect connectors, datasets & KPIs.'
+              : phase === 'powerbi' ? 'Optional — a Power BI report, a financials PDF, a strategy deck… the more you share, the sharper we get.'
               : phase === 'claim' ? 'Last step — just your name and email.'
               : (summary ? `${summary.company} · ${summary.competitors} competitor${summary.competitors === 1 ? '' : 's'} — open your dashboard to dive in` : 'All set up for you.')}
           </p>
@@ -235,6 +260,19 @@ export default function Onboarding() {
 
       {/* the AI's live reasoning — the focus. We intentionally do NOT show the
           gathered data here; the payoff lives in the dashboard after signup. */}
+      {company && (phase === 'running' || phase === 'review') && (
+        <div className="ob-welcome">
+          <span className="ob-welcome-emoji" aria-hidden>👋</span>
+          <div className="ob-welcome-body">
+            <div className="ob-welcome-title">So great to meet you, {company.name} 🎉</div>
+            <p className="ob-welcome-text">
+              {industryFact(company) && <><strong>{industryFact(company)}</strong> — honestly one of the more exciting spaces to build for right now. </>}
+              {firstSentence(company.summary)} We're genuinely getting into it — and the more we read, the more we think you're going to love what comes next.
+            </p>
+          </div>
+        </div>
+      )}
+
       {(phase === 'running' || phase === 'review') && (
         <div className="ob-think">
           <section className="ob-feed ob-feed--center">
@@ -261,9 +299,11 @@ export default function Onboarding() {
         <div className="ob-reveal-backdrop">
           <section className="ob-reveal ob-glass" role="dialog" aria-modal="true" aria-label="Analysis complete">
             <div className="ob-reveal-ic">🔒</div>
-            <h2>We've built your intelligence picture</h2>
+            <h2>{company?.name ? `We're all in on ${company.name}.` : "We've built your intelligence picture"}</h2>
             <p className="ob-reveal-lead">
-              DeepLogic has analysed your business — the full breakdown is waiting inside your dashboard.
+              This is the part that gets really fun. Everything you just watched us learn is built and
+              waiting for you — agents drafted, competitors mapped, your numbers understood. It's already
+              yours; claim it in 20 seconds and let's see what it can really do together.
             </p>
             <ul className="ob-reveal-list">
               {company && <li>✓ Company profile &amp; positioning</li>}
@@ -271,10 +311,12 @@ export default function Onboarding() {
               {stats && <li>✓ Website &amp; domain intelligence</li>}
               {summary && summary.competitors > 0 && <li>✓ {summary.competitors} competitors mapped</li>}
               {agents.length > 0 && <li>✓ {agents.length} AI agent{agents.length === 1 ? '' : 's'} drafted &amp; ready to deploy</li>}
-              {pbiFiles.length > 0 && <li>✓ {pbiFiles.length} Power BI report{pbiFiles.length === 1 ? '' : 's'} — connectors detected</li>}
+              {(pbiFiles.length - otherDocs.length) > 0 && <li>✓ {pbiFiles.length - otherDocs.length} Power BI report{(pbiFiles.length - otherDocs.length) === 1 ? '' : 's'} — connectors &amp; KPIs detected</li>}
+              {otherDocs.length > 0 && <li>✓ {otherDocs.length} document{otherDocs.length === 1 ? '' : 's'} queued for deep reading</li>}
               <li>✓ Memory graph + a starter dashboard, built for you</li>
             </ul>
-            <button className="btn btn-primary ob-reveal-cta" onClick={() => setPhase('claim')}>Continue →</button>
+            <p className="ob-reveal-nudge">No credit card. No setup. Just open the door and it's all here waiting.</p>
+            <button className="btn btn-primary ob-reveal-cta" onClick={() => setPhase('claim')}>Let's do this — claim my workspace →</button>
           </section>
         </div>
       )}
@@ -284,29 +326,29 @@ export default function Onboarding() {
         <div className="ob-reveal-backdrop">
           <section className="ob-reveal ob-glass" role="dialog" aria-modal="true" aria-label="Why connect Power BI">
             <div className="ob-reveal-ic">📈</div>
-            <h2>Connect your Power BI — go deeper</h2>
+            <h2>Show DeepLogic how your business runs</h2>
             <p className="ob-reveal-lead">
-              Your reports are where your business already lives. Hand us one and DeepLogic
-              learns it from the inside — far beyond what your website shows.
+              Your reports and documents are where your business already lives. Hand us one and
+              DeepLogic learns it from the inside — far beyond what your website shows.
             </p>
             <ul className="ob-reveal-list">
-              <li>🔌 Detects your <strong>data connectors</strong> — where your data actually lives</li>
-              <li>🗂 Maps your <strong>tables &amp; fields</strong> — the shape of your business</li>
-              <li>📐 Surfaces your <strong>KPIs &amp; measures</strong> — what you already track</li>
-              <li>⚡ Pre-fills your <strong>Connectors</strong> so agents &amp; reports use real data — no setup</li>
+              <li>📈 <strong>Power BI</strong> — we detect your connectors, tables &amp; the KPIs you already track</li>
+              <li>📄 <strong>A financials PDF, strategy deck, or any doc</strong> — we read it to understand your goals</li>
+              <li>📐 We reflect back <strong>what we learned</strong> so you can see we get your business</li>
+              <li>⚡ Pre-fills your workspace so agents &amp; reports use <strong>real data</strong> — no setup</li>
             </ul>
             <div className="ob-step-actions">
               <button className="btn btn-ghost" onClick={() => { setPbiFiles([]); setPbiIntro(false); setPhase('review') }}>Not now</button>
-              <button className="btn btn-primary ob-reveal-cta" onClick={() => setPbiIntro(false)}>Upload a report →</button>
+              <button className="btn btn-primary ob-reveal-cta" onClick={() => setPbiIntro(false)}>Add a file →</button>
             </div>
           </section>
         </div>
       )}
       {phase === 'powerbi' && !pbiIntro && (
         <section className="ob-step">
-          <p className="ob-step-lead">Add a Power BI export (<code>.pbit</code> parses best) and we'll detect its connectors, datasets and KPIs to pre-fill your Connectors. Totally optional — you can do this later.</p>
+          <p className="ob-step-lead">Add a Power BI export (<code>.pbit</code> parses best) — or any business doc (PDF, deck, spreadsheet). We'll reflect back what we learn. Totally optional — you can do this later.</p>
           <input
-            ref={fileRef} type="file" hidden multiple accept=".pbit,.pbix,.xlsx,.csv,.json"
+            ref={fileRef} type="file" hidden multiple accept=".pbit,.pbix,.xlsx,.csv,.json,.pdf,.docx,.doc,.txt,.md,.pptx,.ppt"
             onChange={(e) => { addPbiFiles(e.target.files); e.target.value = '' }}
           />
           <div
@@ -321,10 +363,23 @@ export default function Onboarding() {
           >
             <div className="ob-drop-ic">📈</div>
             <div className="ob-drop-title">
-              <strong>Drag &amp; drop</strong> Power BI files here, or <span className="ob-drop-link">browse</span>
+              <strong>Drag &amp; drop</strong> reports or documents here, or <span className="ob-drop-link">browse</span>
             </div>
-            <div className="ob-drop-hint"><code>.pbit</code> parses best · also .pbix, .xlsx, .csv, .json</div>
+            <div className="ob-drop-hint">Power BI (<code>.pbit</code> best), or PDF · deck · spreadsheet · text</div>
           </div>
+
+          {pbiInsight && (
+            <div className="ob-reflect">
+              <div className="ob-reflect-title">✨ Here's what we already understand</div>
+              <p className="ob-reflect-text">
+                You track{' '}
+                <strong>{pbiInsight.measures.length ? pbiInsight.measures.slice(0, 4).join(', ') : `${pbiInsight.tables.length} areas of your business`}</strong>
+                {' '}across {pbiInsight.tables.length} table{pbiInsight.tables.length === 1 ? '' : 's'}
+                {pbiInsight.conns.length ? <>, pulling from <strong>{pbiInsight.conns.slice(0, 3).join(', ')}</strong></> : null}.
+                {' '}We'll make sure every report, agent and answer speaks your numbers.
+              </p>
+            </div>
+          )}
           {pbiFiles.length > 0 && (
             <>
               <div className="ob-filecount">{pbiFiles.length} file{pbiFiles.length === 1 ? '' : 's'} selected{pbiFiles.length >= 20 ? ' (max)' : ''}</div>
@@ -377,6 +432,7 @@ export default function Onboarding() {
                         </div>
                       )}
                       {sc?.status === 'failed' && <span className="ob-filescan ob-filescan--fail">Couldn't read connectors from this file.</span>}
+                      {!isPbi(f.name) && <span className="ob-filescan">📄 We'll study this once your workspace is live — it sharpens everything.</span>}
                     </li>
                   )
                 })}

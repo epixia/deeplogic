@@ -16,7 +16,6 @@ import {
 } from '../lib/api'
 import ReactGridLayout, { type Layout, type LayoutItem } from 'react-grid-layout/legacy'
 import WidgetBuilder from '../components/dashboard/WidgetBuilder'
-import DashboardSidebar from '../components/DashboardSidebar'
 import { useAppTheme } from '../components/studio/reportTheme'
 import { widgetFrameSrcDoc } from '../lib/genFrame'
 import 'react-grid-layout/css/styles.css'
@@ -321,7 +320,6 @@ export default function DashboardEditor() {
           {saveMsg.ok ? '✓' : '✗'} {saveMsg.text}
         </div>
       )}
-      <DashboardSidebar orgId={orgId ?? ''} activeId={dashboardId} refreshKey={`${board.id}:${board.group ?? ''}:${board.name}`} />
       <main className="dbe-main">
         <div className="dbe-header">
           <div className="dbe-header-left">

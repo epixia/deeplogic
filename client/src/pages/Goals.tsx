@@ -3,7 +3,7 @@
 // deliver it. CRUD lives in routes/goals.ts; drafting uses the org's AI key.
 
 import { useCallback, useEffect, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, Link } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import {
   listGoals,
@@ -164,6 +164,7 @@ export default function Goals() {
           done = true
           const ok = ev.results.filter((r) => r.ok).length
           endActivity(actId, `Ran ${ok}/${ev.results.length} agent${ev.results.length === 1 ? '' : 's'}`)
+          void load() // refresh to surface the new "Latest findings" brief
         } else if (ev.type === 'error') {
           done = true
           setError(ev.error)
@@ -256,6 +257,16 @@ export default function Goals() {
                       </li>
                     ))}
                   </ul>
+                </div>
+              )}
+
+              {g.lastFindingsSummary && (
+                <div className="goal-sec goal-findings">
+                  <h3>🧠 Latest findings{g.lastFindingsAt ? <span className="goal-findings-when"> · {new Date(g.lastFindingsAt).toLocaleDateString()}</span> : null}</h3>
+                  <p className="goal-findings-summary">{g.lastFindingsSummary}</p>
+                  {g.lastFindingsDocId && (
+                    <Link className="goal-findings-link" to={`/app/${orgId}/memory?note=${g.lastFindingsDocId}`}>View full brief →</Link>
+                  )}
                 </div>
               )}
 
