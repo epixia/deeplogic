@@ -290,6 +290,11 @@ export default function Nav() {
                 </Link>
               )}
               {activeOrgId && (
+                <Link className="btn btn-ghost" to={`/app/${activeOrgId}/competitors`}>
+                  Competitors
+                </Link>
+              )}
+              {activeOrgId && (
                 <Link className="btn btn-ghost" to={`/app/${activeOrgId}/memory`}>
                   Memory
                 </Link>

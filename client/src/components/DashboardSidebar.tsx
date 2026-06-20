@@ -59,10 +59,14 @@ export default function DashboardSidebar({
   }, [orgId, getAccessToken, refreshKey])
 
   // Group; order Company first, custom groups next, ungrouped ("Other") last.
+  // Competitor dashboards have their own top-level Competitors page, so they're
+  // excluded from the sidebar to keep it focused on your own dashboards.
   const grouped = useMemo(() => {
+    const isCompetitorGroup = (g: string) => g.toLowerCase() === 'competitors' || g.toLowerCase() === 'competitor'
     const map = new Map<string, DashboardListItem[]>()
     for (const b of boards) {
       const key = b.group?.trim() || 'Company'
+      if (isCompetitorGroup(key)) continue
       if (!map.has(key)) map.set(key, [])
       map.get(key)!.push(b)
     }
@@ -70,7 +74,7 @@ export default function DashboardSidebar({
     return [...map.entries()].sort((a, b) => order(a[0]) - order(b[0]) || a[0].localeCompare(b[0]))
   }, [boards])
 
-  if (boards.length === 0) return null
+  if (grouped.length === 0) return null
 
   return (
     <aside className="dbsb">

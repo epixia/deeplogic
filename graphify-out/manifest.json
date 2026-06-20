@@ -35,8 +35,8 @@
     "semantic_hash": ""
   },
   "client/src/App.tsx": {
-    "mtime": 1781878533.1197553,
-    "ast_hash": "39c6869a374ba8d196fe220f79b574c2",
+    "mtime": 1781978397.1933188,
+    "ast_hash": "5687bcd5bffa1d347ed40c1a9eef092c",
     "semantic_hash": ""
   },
   "client/src/auth/AuthContext.tsx": {
@@ -60,8 +60,8 @@
     "semantic_hash": ""
   },
   "client/src/components/Nav.tsx": {
-    "mtime": 1781873824.1246333,
-    "ast_hash": "f609447ba4b2621c14bdf128893e3a4a",
+    "mtime": 1781978402.012056,
+    "ast_hash": "31076b3c6b8e6f7866a7992a11b1e9cc",
     "semantic_hash": ""
   },
   "client/src/components/OrgSwitcher.tsx": {
@@ -180,8 +180,8 @@
     "semantic_hash": ""
   },
   "client/src/lib/api.ts": {
-    "mtime": 1781977725.0325587,
-    "ast_hash": "f08b4119850b3c315e2019adb67a82d5",
+    "mtime": 1781986887.3326268,
+    "ast_hash": "04d8e1781cffa50b29193596196cd0eb",
     "semantic_hash": ""
   },
   "client/src/lib/supabase.ts": {
@@ -435,8 +435,8 @@
     "semantic_hash": ""
   },
   "server/src/routes/studio.ts": {
-    "mtime": 1781977712.0520792,
-    "ast_hash": "fb7b0b2ca6db4ed1be803a59746f7ecb",
+    "mtime": 1781980383.8724794,
+    "ast_hash": "2238bbe38aac1c9767f910d94a27a8d8",
     "semantic_hash": ""
   },
   "server/src/sse.ts": {
@@ -915,8 +915,8 @@
     "semantic_hash": ""
   },
   "client/src/components/vault/Competitors.tsx": {
-    "mtime": 1781977833.0159893,
-    "ast_hash": "9765cf7f2ccf073edfa109dcee0dd2ed",
+    "mtime": 1781979618.0102756,
+    "ast_hash": "e05799c4d42297ab93442c4522d0ba86",
     "semantic_hash": ""
   },
   "server/src/studio/suggestCompetitors.ts": {
@@ -990,8 +990,8 @@
     "semantic_hash": ""
   },
   "client/src/pages/SiteInsights.tsx": {
-    "mtime": 1781840041.1502967,
-    "ast_hash": "fe526ce9c66d3705914d0be269f85aa8",
+    "mtime": 1781986949.947587,
+    "ast_hash": "ab9a99b1a5cbcdf8ebb7bc9e84acaa60",
     "semantic_hash": ""
   },
   "client/src/components/vault/TrendChart.tsx": {
@@ -1275,8 +1275,8 @@
     "semantic_hash": ""
   },
   "client/src/components/DashboardSidebar.tsx": {
-    "mtime": 1781812185.9217677,
-    "ast_hash": "bda72eb647e2f2e28c53f3d4bb5cbb78",
+    "mtime": 1781979387.4821303,
+    "ast_hash": "c92c0ce41445b147cacea2b3f233fe64",
     "semantic_hash": ""
   },
   "client/src/pages/DashboardsManage.tsx": {
@@ -1365,13 +1365,33 @@
     "semantic_hash": ""
   },
   "server/src/integrations/dataforseo.ts": {
-    "mtime": 1781977662.2745152,
-    "ast_hash": "cf62a6bb7938c482c8465958e827db3b",
+    "mtime": 1781986880.6301558,
+    "ast_hash": "bf26725e6aa2fdc6fb4b924a3fa7503b",
     "semantic_hash": ""
   },
   "supabase/migrations/20260620000001_platform_apis.sql": {
     "mtime": 1781976215.575174,
     "ast_hash": "37125b6d5bcff361e1d30ba8768f7061",
+    "semantic_hash": ""
+  },
+  "client/src/pages/CompetitorsPage.tsx": {
+    "mtime": 1781978385.7902968,
+    "ast_hash": "e2ad3f03d933f3282816c7fcae4e4825",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/20260620000002_domain_intel.sql": {
+    "mtime": 1781978911.5268986,
+    "ast_hash": "b4f2d374a3604595c44217f450c1f78f",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/20260620000003_site_insights_cache.sql": {
+    "mtime": 1781979573.1387253,
+    "ast_hash": "50867c40659fb84cbb7ba6c05462c1f7",
+    "semantic_hash": ""
+  },
+  "client/src/components/vault/IntelTrafficChart.tsx": {
+    "mtime": 1781986907.731576,
+    "ast_hash": "2c7c3a0bc51e31fb045a7e04b609dcab",
     "semantic_hash": ""
   }
 }

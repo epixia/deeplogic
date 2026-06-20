@@ -79,3 +79,43 @@
   font-size: 11.5px; padding: 2px 8px; border-radius: 999px;
   background: color-mix(in srgb, var(--cyan) 14%, transparent); color: var(--cyan); white-space: nowrap;
 }
+
+.si-cached-stamp { font-size: 12px; color: var(--mut2); margin-left: auto; }
+
+/* Online intel (DataForSEO) */
+.si-intel-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.si-intel-head h2 { margin: 0; }
+.si-intel-src { font-size: 13px; font-weight: 600; color: var(--mut); }
+.si-intel-actions { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+.si-intel-stamp { font-size: 12px; color: var(--mut2); }
+.si-intel-metrics { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 14px; }
+.si-intel-metric {
+  flex: 1; min-width: 130px;
+  border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.si-im-val { font-size: 20px; font-weight: 800; letter-spacing: -.02em; color: var(--ink); }
+.si-im-lbl { font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--mut); }
+
+.si-dist { display: flex; flex-direction: column; gap: 6px; }
+.si-dist-row { display: flex; align-items: center; gap: 10px; }
+.si-dist-label { width: 56px; font-size: 12px; color: var(--mut); text-align: right; flex: none; }
+.si-dist-bar { flex: 1; height: 10px; border-radius: 999px; background: var(--line); overflow: hidden; }
+.si-dist-fill { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, #22d3ee, #6f8cff); }
+.si-dist-val { width: 52px; font-size: 12px; color: var(--ink); text-align: right; flex: none; font-variant-numeric: tabular-nums; }
+
+.si-intel-block { margin-top: 16px; }
+.si-intel-block h3 {
+  font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--mut); margin-bottom: 8px;
+}
+.si-kw-table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 480px; }
+.si-kw-table thead th {
+  text-align: left; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--mut); padding: 6px 10px; border-bottom: 1px solid var(--line); white-space: nowrap;
+}
+.si-kw-table thead th:not(:first-child) { text-align: right; }
+.si-kw-table tbody td { padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.si-kw-table tbody td:not(:first-child) { text-align: right; white-space: nowrap; color: var(--mut); }
+.si-kw-table tbody td:first-child { color: var(--ink); }
+.si-kw-table tbody tr:hover td { background: var(--bg-soft, rgba(127,127,127,.05)); }

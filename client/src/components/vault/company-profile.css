@@ -134,12 +134,60 @@
 .cp-view-btn:hover { color: var(--ink); }
 .cp-view-btn.active { color: var(--ink); background: var(--bg2); }
 
-/* list view — single column, compact rows */
-.cp-sections--list { grid-template-columns: 1fr; gap: 8px; }
-.cp-sections--list .cp-comp-card { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
-.cp-sections--list .cp-comp-card-head { flex: 1; min-width: 220px; align-items: center; }
-.cp-sections--list .cp-web { flex: none; }
-.cp-sections--list .cp-seo { flex: none; }
+/* ---- CRM list view: flat, full-width, no card chrome ---- */
+.cp-card--list {
+  border: none;
+  background: none;
+  border-radius: 0;
+  padding: 0;
+}
+.cp-card--list .cp-list-toolbar {
+  margin: 0 0 0;
+  padding: 8px 4px;
+  border-bottom: 1px solid var(--line);
+}
+
+.cp-table-scroll { overflow-x: auto; }
+.cp-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+
+/* sticky header bar, CRM-style */
+.cp-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  text-align: left;
+  font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--mut);
+  background: var(--bg2);
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+.cp-th { cursor: pointer; user-select: none; }
+.cp-th:hover { color: var(--ink); }
+.cp-th--active { color: var(--cyan); }
+.cp-th--num { text-align: right; }
+.cp-sort-arrow { font-size: 9px; }
+.cp-th-check, .cp-td-check { width: 34px; text-align: center; }
+.cp-th-actions { width: 1%; }
+
+.cp-table tbody td { padding: 11px 12px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+.cp-table tbody tr { transition: background .1s; }
+.cp-table tbody tr:hover td { background: rgba(255, 255, 255, .03); }
+.cp-table tbody tr.is-selected td { background: rgba(111, 227, 240, .07); }
+.cp-td-name { font-weight: 700; }
+.cp-td-name a { color: var(--ink); font-weight: 700; text-decoration: none; }
+.cp-td-name a:hover { color: var(--cyan); text-decoration: underline; }
+.cp-td-web { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cp-td-web a { color: var(--cyan); text-decoration: none; }
+.cp-td-web a:hover { text-decoration: underline; }
+.cp-num { text-align: right; white-space: nowrap; color: var(--ink); font-variant-numeric: tabular-nums; }
+.cp-muted { color: var(--mut2); }
+.cp-td-check input, .cp-check input { accent-color: var(--cyan); cursor: pointer; }
+.cp-td-actions { white-space: nowrap; text-align: right; }
+.cp-td-actions .cp-comp-iconbtn { opacity: 0; transition: opacity .1s; }
+.cp-table tbody tr:hover .cp-comp-iconbtn,
+.cp-table tbody tr.is-selected .cp-comp-iconbtn { opacity: 1; }
 
 /* ---- generated competitor suggestions ---- */
 .cp-suggest {

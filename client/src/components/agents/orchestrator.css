@@ -3,9 +3,7 @@
 .orch-card {
   border: 1px solid color-mix(in srgb, var(--cyan) 30%, var(--line));
   border-radius: 18px;
-  background:
-    radial-gradient(120% 140% at 0% 0%, color-mix(in srgb, var(--cyan) 9%, transparent), transparent 60%),
-    var(--card);
+  background: transparent;
   padding: 22px;
 }
 

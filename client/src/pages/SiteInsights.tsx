@@ -6,63 +6,24 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
-import { getSiteInsights, persistSiteInsights, type SiteInsights as SI } from '../lib/api'
+import {
+  getSiteInsights,
+  persistSiteInsights,
+  getDomainIntel,
+  fetchDomainIntel,
+  type SiteInsights as SI,
+  type DomainIntel,
+} from '../lib/api'
+import IntelTrafficChart from '../components/vault/IntelTrafficChart'
 import './site-insights.css'
 
-// Reference matrix of the data providers that fill in the metrics this page can't
-// get for free. Costs are approximate published list prices (entry tier) — kept
-// as a static table so users can compare before connecting one.
-type Provider = {
-  name: string
-  coverage: string[]
-  price: string
-  free: string
-  bestFor: string
+// Compact number formatting for SEO metrics (12345 → 12.3K).
+function fmtNum(n: number | null | undefined): string {
+  if (n == null || Number.isNaN(n)) return '—'
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
+  return `${Math.round(n)}`
 }
-const PROVIDERS: Provider[] = [
-  {
-    name: 'SimilarWeb',
-    coverage: ['Unique visitors', 'Traffic trends', 'Traffic sources', 'Audience'],
-    price: '~$125/mo (Starter), Enterprise for API',
-    free: 'Limited free web view; API is paid only',
-    bestFor: 'Competitor traffic & visitor estimates',
-  },
-  {
-    name: 'Semrush',
-    coverage: ['Keyword rankings', 'Traffic est.', 'Keywords', 'Ads', 'Backlinks'],
-    price: '~$140/mo (Pro)',
-    free: '~10 free UI lookups/day; API is paid (Business ~$500/mo + API units)',
-    bestFor: 'All-in-one SEO + traffic in one tool',
-  },
-  {
-    name: 'Ahrefs',
-    coverage: ['Keyword rankings', 'Backlinks', 'Organic traffic est.', 'Keywords'],
-    price: '~$129/mo (Lite)',
-    free: 'Free Webmaster Tools (own site only); paid API',
-    bestFor: 'Deepest backlinks & ranking data',
-  },
-  {
-    name: 'Moz Pro',
-    coverage: ['Domain Authority', 'Keyword rankings', 'Backlinks'],
-    price: '~$99/mo (Standard)',
-    free: 'Free MozBar + limited queries; paid API',
-    bestFor: 'Domain Authority & lighter SEO budgets',
-  },
-  {
-    name: 'Google Analytics',
-    coverage: ['Unique visitors', 'Traffic sources', 'Conversions'],
-    price: 'Free (GA4)',
-    free: 'Fully free + free API — your own sites only',
-    bestFor: 'Your own site’s real traffic',
-  },
-  {
-    name: 'RDAP / WHOIS',
-    coverage: ['Age of site', 'Registrar', 'Domain status'],
-    price: 'Free',
-    free: 'Fully free, no key — already used here',
-    bestFor: 'Domain age & registration (built in)',
-  },
-]
 
 export default function SiteInsights() {
   const { orgId = '' } = useParams<{ orgId: string }>()
@@ -78,12 +39,19 @@ export default function SiteInsights() {
   const [saving, setSaving] = useState(false)
   const savedFor = useRef<string>('')
 
-  const load = useCallback(async () => {
+  // DataForSEO "online intel" — cached per domain in the DB. We read the cache on
+  // load (no cost) and only hit DataForSEO when the user clicks Fetch / Re-fetch.
+  const [intel, setIntel] = useState<DomainIntel | null>(null)
+  const [intelFetchedAt, setIntelFetchedAt] = useState<string | null>(null)
+  const [intelFetching, setIntelFetching] = useState(false)
+  const [intelError, setIntelError] = useState<string | null>(null)
+
+  const load = useCallback(async (refresh = false) => {
     setLoading(true); setError(null)
     try {
       const t = await getAccessToken()
       if (!t) throw new Error('Session expired')
-      setData(await getSiteInsights(t, orgId, url))
+      setData(await getSiteInsights(t, orgId, url, refresh))
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load insights.')
     } finally { setLoading(false) }
@@ -106,11 +74,41 @@ export default function SiteInsights() {
 
   useEffect(() => { if (url) void load() }, [load, url])
 
-  // By default, once insights load, store them and add to the competitor's
-  // dashboard — one auto-save per url per visit (idempotent server-side).
+  // Read cached intel from the DB whenever the target changes (no external call).
+  useEffect(() => {
+    if (!url) return
+    let cancelled = false
+    void (async () => {
+      try {
+        const t = await getAccessToken()
+        if (!t) return
+        const r = await getDomainIntel(t, orgId, url)
+        if (!cancelled) { setIntel(r.intel); setIntelFetchedAt(r.fetchedAt) }
+      } catch { /* cache miss is fine */ }
+    })()
+    return () => { cancelled = true }
+  }, [getAccessToken, orgId, url])
+
+  // Fetch fresh intel from DataForSEO and cache it (the only path with cost).
+  const fetchIntel = useCallback(async () => {
+    if (intelFetching || !url) return
+    setIntelFetching(true); setIntelError(null)
+    try {
+      const t = await getAccessToken()
+      if (!t) throw new Error('Session expired')
+      const r = await fetchDomainIntel(t, orgId, url)
+      setIntel(r.intel); setIntelFetchedAt(r.fetchedAt)
+    } catch (e) {
+      setIntelError(e instanceof Error ? e.message : 'Failed to fetch intel.')
+    } finally { setIntelFetching(false) }
+  }, [getAccessToken, orgId, url, intelFetching])
+
+  // On the FIRST gather of a url (cache miss), store the insights and add a card
+  // to the competitor's dashboard. Cached revisits skip this — nothing to re-do.
   useEffect(() => {
     if (!data || !url || savedFor.current === url) return
     savedFor.current = url
+    if (data.cached) return // already persisted when first gathered
     void save(true)
   }, [data, url, save])
 
@@ -127,7 +125,8 @@ export default function SiteInsights() {
           <h1>{data?.title || domain}</h1>
           {url && <a className="si-domain" href={url} target="_blank" rel="noreferrer">{domain} ↗</a>}
         </div>
-        <button className="btn btn-ghost btn-xs" onClick={() => void load()} disabled={loading}>{loading ? 'Loading…' : '↻ Refresh'}</button>
+        {data?.cachedAt && <span className="si-cached-stamp">Updated {new Date(data.cachedAt).toLocaleDateString()}</span>}
+        <button className="btn btn-ghost btn-xs" onClick={() => void load(true)} disabled={loading}>{loading ? 'Loading…' : '↻ Refresh'}</button>
       </header>
 
       {error && <div className="studio-error">{error}</div>}
@@ -175,24 +174,131 @@ export default function SiteInsights() {
               )}
             </section>
 
-            {/* Traffic — honest about provider need */}
+            {/* Estimated organic traffic — from DataForSEO when fetched */}
             <section className="si-card si-metric">
-              <span className="si-metric-label">Unique visitors / month</span>
-              {(() => {
-                const t = data.facts.find((f) => /traffic|visitor/i.test(f.label))
-                return t
-                  ? <span className="si-metric-value si-est">{t.value}</span>
-                  : <span className="si-metric-sub">Needs a traffic provider (SimilarWeb / Semrush)</span>
-              })()}
-              <span className="si-metric-sub">Live numbers require a connected analytics provider.</span>
+              <span className="si-metric-label">Est. organic traffic / mo</span>
+              {intel?.overview.organicTraffic != null ? (
+                <>
+                  <span className="si-metric-value si-est">{fmtNum(intel.overview.organicTraffic)}</span>
+                  <span className="si-metric-sub">DataForSEO · organic search estimate</span>
+                </>
+              ) : (
+                <span className="si-metric-sub">Fetch SEO intel below to populate</span>
+              )}
             </section>
 
-            {/* Search rankings */}
+            {/* Organic keywords — from DataForSEO when fetched */}
             <section className="si-card si-metric">
-              <span className="si-metric-label">Search keyword rankings</span>
-              <span className="si-metric-sub">Needs an SEO provider (Semrush / Ahrefs) to show ranked terms.</span>
+              <span className="si-metric-label">Organic keywords ranked</span>
+              {intel?.overview.organicKeywords != null ? (
+                <>
+                  <span className="si-metric-value">{fmtNum(intel.overview.organicKeywords)}</span>
+                  <span className="si-metric-sub">
+                    #1: {fmtNum(intel.overview.pos1)} · #2–3: {fmtNum(intel.overview.pos2_3)} · #4–10: {fmtNum(intel.overview.pos4_10)}
+                  </span>
+                </>
+              ) : (
+                <span className="si-metric-sub">Fetch SEO intel below to populate</span>
+              )}
             </section>
           </div>
+
+          {/* Online intel — DataForSEO, cached in the DB */}
+          <section className="si-card">
+            <div className="si-intel-head">
+              <h2>Online intel <span className="si-intel-src">· DataForSEO</span></h2>
+              <div className="si-intel-actions">
+                {intelFetchedAt && <span className="si-intel-stamp">Updated {new Date(intelFetchedAt).toLocaleString()}</span>}
+                <button className="btn btn-primary btn-xs" onClick={() => void fetchIntel()} disabled={intelFetching}>
+                  {intelFetching ? 'Fetching…' : intel ? '↻ Re-fetch' : '🔍 Fetch SEO intel'}
+                </button>
+              </div>
+            </div>
+            {intelError && <div className="studio-error">{intelError}</div>}
+            {!intel && !intelFetching && !intelError && (
+              <p className="si-note">
+                No SEO intel yet. Click <strong>Fetch SEO intel</strong> to pull keywords, traffic &amp; competing
+                domains from DataForSEO. Results are stored, so coming back here is instant and free — re-fetch only
+                when you want fresh numbers.
+              </p>
+            )}
+            {intel?.backlinks && (intel.backlinks.referringDomains != null || intel.backlinks.backlinks != null || intel.backlinks.rank != null) && (
+              <div className="si-intel-metrics">
+                <div className="si-intel-metric">
+                  <span className="si-im-val">{fmtNum(intel.backlinks.referringDomains)}</span>
+                  <span className="si-im-lbl">Referring domains</span>
+                </div>
+                <div className="si-intel-metric">
+                  <span className="si-im-val">{fmtNum(intel.backlinks.backlinks)}</span>
+                  <span className="si-im-lbl">Backlinks</span>
+                </div>
+                <div className="si-intel-metric">
+                  <span className="si-im-val">{fmtNum(intel.backlinks.rank)}</span>
+                  <span className="si-im-lbl">Domain rank</span>
+                </div>
+              </div>
+            )}
+
+            {intel && intel.history.length > 1 && (
+              <div className="si-intel-block">
+                <h3>Estimated organic traffic over time</h3>
+                <IntelTrafficChart points={intel.history} />
+              </div>
+            )}
+
+            {intel && intel.distribution.some((d) => d.count > 0) && (() => {
+              const distMax = Math.max(1, ...intel.distribution.map((d) => d.count))
+              return (
+                <div className="si-intel-block">
+                  <h3>Keyword position distribution</h3>
+                  <div className="si-dist">
+                    {intel.distribution.map((d) => (
+                      <div className="si-dist-row" key={d.bucket}>
+                        <span className="si-dist-label">{d.bucket}</span>
+                        <span className="si-dist-bar"><span className="si-dist-fill" style={{ width: `${(d.count / distMax) * 100}%` }} /></span>
+                        <span className="si-dist-val">{fmtNum(d.count)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )
+            })()}
+
+            {intel && intel.topKeywords.length > 0 && (
+              <div className="si-intel-block">
+                <h3>Top organic keywords</h3>
+                <div className="si-matrix-scroll">
+                  <table className="si-kw-table">
+                    <thead>
+                      <tr><th>Keyword</th><th>Pos.</th><th>Volume</th><th>Est. traffic</th></tr>
+                    </thead>
+                    <tbody>
+                      {intel.topKeywords.slice(0, 20).map((k, i) => (
+                        <tr key={i}>
+                          <td>{k.keyword}</td>
+                          <td>{k.position ?? '—'}</td>
+                          <td>{fmtNum(k.searchVolume)}</td>
+                          <td>{fmtNum(k.etv)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+            {intel && intel.competitors.length > 0 && (
+              <div className="si-intel-block">
+                <h3>Competing domains</h3>
+                <div className="si-chips">
+                  {intel.competitors.slice(0, 12).map((c, i) => (
+                    <span className="si-chip" key={i} title={`${fmtNum(c.organicKeywords)} keywords · ${fmtNum(c.organicTraffic)} est. traffic`}>
+                      {c.domain}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </section>
 
           {data.facts.length > 0 && (
             <section className="si-card">
@@ -219,42 +325,6 @@ export default function SiteInsights() {
             </section>
           )}
 
-          <section className="si-card">
-            <h2>Connect a data provider</h2>
-            <p className="si-note">
-              Live <strong>unique visitors</strong>, <strong>traffic trends</strong> and <strong>keyword rankings</strong> aren’t
-              free data — they come from a paid provider. Compare the options below, then connect one in Settings → Data providers.
-            </p>
-            <div className="si-matrix-scroll">
-              <table className="si-matrix">
-                <thead>
-                  <tr>
-                    <th>Provider</th>
-                    <th>Data coverage</th>
-                    <th>Price / month</th>
-                    <th>Free tier / API</th>
-                    <th>Best for</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {PROVIDERS.map((p) => (
-                    <tr key={p.name}>
-                      <th scope="row">{p.name}</th>
-                      <td>
-                        <div className="si-chips">
-                          {p.coverage.map((c) => <span className="si-chip" key={c}>{c}</span>)}
-                        </div>
-                      </td>
-                      <td className="si-price">{p.price}</td>
-                      <td className="si-free">{p.free}</td>
-                      <td>{p.bestFor}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <p className="si-note">Prices are approximate published entry-tier list prices and may change — check each provider for current rates.</p>
-          </section>
         </>
       )}
     </main>

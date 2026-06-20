@@ -31,7 +31,7 @@ import { analyzeUrl, parseLenses } from '../studio/urlAnalysis.js';
 import { suggestIdeas, parseTarget, type VaultInventoryItem } from '../studio/suggestIdeas.js';
 import { suggestCompetitors } from '../studio/suggestCompetitors.js';
 import { loadPlatformApiCreds } from './integrations.js';
-import { dataforseoDomainOverview, toDomain } from '../integrations/dataforseo.js';
+import { dataforseoDomainIntel, toDomain, type DomainIntel } from '../integrations/dataforseo.js';
 import { runAssistant, runAgentTask, type ChatMsg, type WebResult } from '../studio/assistant.js';
 import { generateTitle } from '../studio/titler.js';
 import { webSearch, wikipediaSummary } from '../webSearch.js';
@@ -1902,7 +1902,9 @@ function insightWidgetHtml(name: string, d: SiteInsightData): string {
   </div>`;
 }
 
-// GET site-insights?url= — public insights about a competitor/company website.
+// GET site-insights?url=[&refresh=1] — insights about a competitor/company
+// website. Served from the org_site_insights cache so revisiting is instant;
+// a fresh gather (AI + web search) runs only on a cache miss or ?refresh=1.
 studioRouter.get(
   '/orgs/:orgId/studio/site-insights',
   requireMember(),
@@ -1910,8 +1912,22 @@ studioRouter.get(
     const orgId = req.params.orgId;
     const normalized = normalizeUrl((req.query.url ?? '').toString());
     if (!normalized) { res.status(400).json({ error: 'Enter a valid public URL.' }); return; }
+    const refresh = req.query.refresh === '1' || req.query.refresh === 'true';
+    const domain = toDomain(normalized);
     try {
-      res.json(await gatherSiteInsights(orgId, normalized));
+      if (!refresh && domain) {
+        const { data } = await req.db!
+          .from('org_site_insights').select('data, fetched_at').eq('org_id', orgId).eq('domain', domain).maybeSingle();
+        const row = data as { data: SiteInsightData; fetched_at: string } | null;
+        if (row?.data) { res.json({ ...row.data, cached: true, cachedAt: row.fetched_at }); return; }
+      }
+      const fresh = await gatherSiteInsights(orgId, normalized);
+      const fetchedAt = new Date().toISOString();
+      if (domain) {
+        await req.db!.from('org_site_insights')
+          .upsert({ org_id: orgId, domain, data: fresh, fetched_at: fetchedAt }, { onConflict: 'org_id,domain' });
+      }
+      res.json({ ...fresh, cached: false, cachedAt: fetchedAt });
     } catch (err) {
       console.error('GET site-insights failed', err);
       res.status(500).json({ error: 'Failed to load site insights.' });
@@ -2071,10 +2087,26 @@ studioRouter.get(
   }
 );
 
-// POST competitors/analyze { ids } — pull DataForSEO SEO metrics (organic
-// keywords & estimated traffic) for each selected competitor's domain and merge
-// them into the competitor's Data Vault note (meta.seo). Returns a per-
-// competitor result list. Requires DataForSEO configured in Settings → APIs.
+// A compact SEO summary (for the competitors table / note meta) derived from a
+// full intel bundle — so the table and the detail page always agree.
+function seoSummary(intel: DomainIntel) {
+  return {
+    provider: 'dataforseo',
+    domain: intel.domain,
+    organicKeywords: intel.overview.organicKeywords,
+    organicTraffic: intel.overview.organicTraffic,
+    organicTrafficCost: intel.overview.organicTrafficCost,
+    pos1: intel.overview.pos1,
+    pos2_3: intel.overview.pos2_3,
+    fetchedAt: intel.fetchedAt,
+  };
+}
+
+// POST competitors/analyze { ids } — fetch FULL DataForSEO intel for each
+// selected competitor's domain and store it in BOTH places so it shows
+// everywhere without re-fetching: the shared org_domain_intel cache (used by the
+// detail page) and a summary on the competitor's note meta.seo (used by the
+// competitors table). Requires DataForSEO configured in Settings → APIs.
 studioRouter.post(
   '/orgs/:orgId/studio/competitors/analyze',
   requireMember(),
@@ -2109,17 +2141,10 @@ studioRouter.post(
           return { id: it.id, name, ok: false, error: 'No valid website to analyze.' };
         }
         try {
-          const ov = await dataforseoDomainOverview(dfsCreds, domain);
-          const seo = {
-            provider: 'dataforseo',
-            domain,
-            organicKeywords: ov.organicKeywords,
-            organicTraffic: ov.organicTraffic,
-            organicTrafficCost: ov.organicTrafficCost,
-            pos1: ov.pos1,
-            pos2_3: ov.pos2_3,
-            fetchedAt: new Date().toISOString(),
-          };
+          const intel = await dataforseoDomainIntel(dfsCreds, domain);
+          const seo = seoSummary(intel);
+          await req.db!.from('org_domain_intel')
+            .upsert({ org_id: orgId, domain, intel, fetched_at: intel.fetchedAt }, { onConflict: 'org_id,domain' });
           await req.db!.from('context_items').update({ meta: { ...meta, seo } }).eq('id', it.id);
           return { id: it.id, name, ok: true, seo };
         } catch (e) {
@@ -2131,6 +2156,67 @@ studioRouter.post(
     } catch (err) {
       console.error('POST competitors/analyze failed', err);
       res.status(500).json({ error: 'Failed to analyze competitors.' });
+    }
+  }
+);
+
+// GET domain-intel?url= — return the CACHED DataForSEO intel for a domain (DB
+// only, no external call). intel is null when nothing has been fetched yet.
+studioRouter.get(
+  '/orgs/:orgId/studio/domain-intel',
+  requireMember(),
+  async (req: Request, res: Response) => {
+    const orgId = req.params.orgId;
+    const domain = toDomain((req.query.url ?? '').toString());
+    if (!domain) { res.status(400).json({ error: 'Provide a url.' }); return; }
+    try {
+      const { data } = await req.db!
+        .from('org_domain_intel').select('intel, fetched_at').eq('org_id', orgId).eq('domain', domain).maybeSingle();
+      const row = data as { intel: unknown; fetched_at: string } | null;
+      res.json({ domain, intel: row?.intel ?? null, fetchedAt: row?.fetched_at ?? null });
+    } catch (err) {
+      console.error('GET domain-intel failed', err);
+      res.status(500).json({ error: 'Failed to load intel.' });
+    }
+  }
+);
+
+// POST domain-intel { url } — fetch FRESH intel from DataForSEO, cache it in
+// org_domain_intel, and return it. The only path that spends DataForSEO credit.
+studioRouter.post(
+  '/orgs/:orgId/studio/domain-intel',
+  requireMember(),
+  async (req: Request, res: Response) => {
+    const orgId = req.params.orgId;
+    const domain = toDomain((req.body?.url ?? '').toString());
+    if (!domain || !domain.includes('.')) { res.status(400).json({ error: 'Provide a valid website url.' }); return; }
+    const creds = await loadPlatformApiCreds(orgId, 'dataforseo');
+    if (!creds?.login || !creds?.password) {
+      res.status(400).json({ error: 'Connect DataForSEO first in Settings → APIs.' });
+      return;
+    }
+    try {
+      const intel = await dataforseoDomainIntel({ login: creds.login, password: creds.password }, domain);
+      await req.db!.from('org_domain_intel').upsert(
+        { org_id: orgId, domain, intel, fetched_at: intel.fetchedAt },
+        { onConflict: 'org_id,domain' },
+      );
+      // Mirror a summary onto any competitor note for this domain, so the
+      // competitors table reflects intel fetched from the detail page too.
+      try {
+        const { data } = await req.db!
+          .from('context_items').select('id, meta').eq('org_id', orgId).like('name', 'Competitor: %');
+        const seo = seoSummary(intel);
+        for (const row of (data ?? []) as { id: string; meta: Record<string, unknown> | null }[]) {
+          const site = typeof row.meta?.website === 'string' ? row.meta.website : '';
+          if (site && toDomain(site) === domain) {
+            await req.db!.from('context_items').update({ meta: { ...(row.meta ?? {}), seo } }).eq('id', row.id);
+          }
+        }
+      } catch { /* mirror is best-effort */ }
+      res.json({ domain, intel, fetchedAt: intel.fetchedAt });
+    } catch (e) {
+      res.status(502).json({ error: e instanceof Error ? e.message : 'Failed to fetch intel.' });
     }
   }
 );

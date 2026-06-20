@@ -97,7 +97,7 @@ button {
 /* rounded card + hairline border utilities */
 .rounded-card {
   border-radius: 16px;
-  background: var(--card);
+  background: transparent;
   border: 1px solid var(--line);
 }
 

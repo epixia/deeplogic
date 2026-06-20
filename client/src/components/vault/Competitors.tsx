@@ -6,7 +6,7 @@
 // "✨ Auto-fill" reuses analyzeUrl (company + competitive lenses) to populate a
 // competitor from their own website.
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useStickyTab } from '../../lib/useStickyTab'
 import {
@@ -31,6 +31,7 @@ import './company-profile.css'
 
 type CompView = 'cards' | 'list'
 const COMP_VIEWS: readonly CompView[] = ['cards', 'list']
+type SortKey = 'name' | 'website' | 'traffic' | 'keywords' | 'value' | 'pos1' | 'updated'
 
 // Compact number formatting for SEO metrics (12345 → 12.3K).
 function fmtNum(n: number | null | undefined): string {
@@ -101,7 +102,57 @@ export default function Competitors({
   const [view, setView] = useStickyTab<CompView>(`vault.competitors.view.${orgId}`, 'cards', COMP_VIEWS)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [analyzing, setAnalyzing] = useState(false)
+  const [sortKey, setSortKey] = useState<SortKey>('name')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
   const navigate = useNavigate()
+
+  function sortBy(k: SortKey) {
+    if (k === sortKey) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+    } else {
+      setSortKey(k)
+      setSortDir(k === 'name' || k === 'website' ? 'asc' : 'desc') // metrics default high→low
+    }
+  }
+
+  const sortedEntries = useMemo(() => {
+    const val = (e: Entry): string | number | null => {
+      switch (sortKey) {
+        case 'name': return e.name.toLowerCase()
+        case 'website': return e.website.toLowerCase()
+        case 'traffic': return e.seo?.organicTraffic ?? null
+        case 'keywords': return e.seo?.organicKeywords ?? null
+        case 'value': return e.seo?.organicTrafficCost ?? null
+        case 'pos1': return e.seo?.pos1 ?? null
+        case 'updated': return e.seo?.fetchedAt ? Date.parse(e.seo.fetchedAt) : null
+      }
+    }
+    const dir = sortDir === 'asc' ? 1 : -1
+    return [...entries].sort((a, b) => {
+      const va = val(a), vb = val(b)
+      if (va == null && vb == null) return 0
+      if (va == null) return 1 // nulls always last
+      if (vb == null) return -1
+      if (typeof va === 'string' && typeof vb === 'string') return va.localeCompare(vb) * dir
+      return ((va as number) - (vb as number)) * dir
+    })
+  }, [entries, sortKey, sortDir])
+
+  function renderTh(k: SortKey, label: string, num?: boolean) {
+    const active = sortKey === k
+    return (
+      <th
+        className={`cp-th${num ? ' cp-th--num' : ''}${active ? ' cp-th--active' : ''}`}
+        onClick={() => sortBy(k)}
+        role="button"
+        tabIndex={0}
+        aria-sort={active ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
+        onKeyDown={(ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); sortBy(k) } }}
+      >
+        {label}<span className="cp-sort-arrow">{active ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</span>
+      </th>
+    )
+  }
 
   const selectableIds = entries.map((e) => e.id).filter((id): id is string => !!id)
   const selectedCount = selectableIds.filter((id) => selected.has(id)).length
@@ -148,8 +199,15 @@ export default function Competitors({
     try {
       const t = await getToken()
       const items = await listContext(t, orgId)
+      // Only true competitor notes (prefixed "Competitor: "). The persisted
+      // "Insights — <name>" site-insight docs also carry meta.competitor, so we
+      // exclude anything without the prefix to avoid duplicate rows.
       const found = items
-        .filter((i: ContextItem) => (i.meta as Record<string, unknown> | undefined)?.competitor === true)
+        .filter(
+          (i: ContextItem) =>
+            (i.meta as Record<string, unknown> | undefined)?.competitor === true &&
+            i.name.startsWith(COMPETITOR_PREFIX),
+        )
         .map(entryFromItem)
       setEntries(found)
     } catch (e) {
@@ -337,7 +395,7 @@ export default function Competitors({
   }
 
   return (
-    <section className="cp-card">
+    <section className={`cp-card${view === 'list' ? ' cp-card--list' : ''}`}>
       <div className="cp-head">
         <h2>⚔ Competitors</h2>
         <span className="cp-sub">Tracked rivals — grounding context for research, reports &amp; the assistant.</span>
@@ -487,42 +545,113 @@ export default function Competitors({
             </label>
             <span className="cp-list-hint">Select competitors, then 🔍 Analyze to pull SEO data from DataForSEO.</span>
           </div>
-          <div className={`cp-sections${view === 'list' ? ' cp-sections--list' : ''}`}>
-            {entries.map((e) => (
-              <div className={`cp-section cp-comp-card${e.id && selected.has(e.id) ? ' is-selected' : ''}`} key={e.id}>
-                <div className="cp-comp-card-head">
-                  {e.id && (
-                    <label className="cp-check" title="Select for analysis">
-                      <input type="checkbox" checked={selected.has(e.id)} onChange={() => toggleSel(e.id!)} />
-                    </label>
+
+          {view === 'list' ? (
+            <div className="cp-table-scroll">
+              <table className="cp-table">
+                <thead>
+                  <tr>
+                    <th className="cp-th-check">
+                      <input type="checkbox" checked={allSelected} onChange={toggleAll} aria-label="Select all" />
+                    </th>
+                    {renderTh('name', 'Competitor')}
+                    {renderTh('website', 'Website')}
+                    {renderTh('traffic', 'Traffic/mo', true)}
+                    {renderTh('keywords', 'Keywords', true)}
+                    {renderTh('value', 'Traffic value', true)}
+                    {renderTh('pos1', '#1', true)}
+                    {renderTh('updated', 'Updated', true)}
+                    <th className="cp-th-actions" aria-label="actions" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {sortedEntries.map((e) => (
+                    <tr key={e.id} className={e.id && selected.has(e.id) ? 'is-selected' : ''}>
+                      <td className="cp-td-check">
+                        {e.id && (
+                          <input
+                            type="checkbox"
+                            checked={selected.has(e.id)}
+                            onChange={() => toggleSel(e.id!)}
+                            aria-label={`Select ${e.name}`}
+                          />
+                        )}
+                      </td>
+                      <td className="cp-td-name">
+                        {e.website ? (
+                          <Link to={`/app/${orgId}/site?url=${encodeURIComponent(e.website)}&name=${encodeURIComponent(e.name)}`}>
+                            {e.name}
+                          </Link>
+                        ) : (
+                          e.name
+                        )}
+                      </td>
+                      <td className="cp-td-web">
+                        {e.website ? (
+                          <a href={e.website.startsWith('http') ? e.website : `https://${e.website}`} target="_blank" rel="noreferrer">
+                            {e.website.replace(/^https?:\/\//, '').replace(/\/$/, '')}
+                          </a>
+                        ) : (
+                          <span className="cp-muted">—</span>
+                        )}
+                      </td>
+                      <td className="cp-num">{fmtNum(e.seo?.organicTraffic)}</td>
+                      <td className="cp-num">{fmtNum(e.seo?.organicKeywords)}</td>
+                      <td className="cp-num">{e.seo?.organicTrafficCost != null ? `$${fmtNum(e.seo.organicTrafficCost)}` : '—'}</td>
+                      <td className="cp-num">{fmtNum(e.seo?.pos1)}</td>
+                      <td className="cp-num cp-muted">{e.seo?.fetchedAt ? new Date(e.seo.fetchedAt).toLocaleDateString() : '—'}</td>
+                      <td className="cp-td-actions">
+                        <button className="cp-comp-iconbtn" title="Create a dashboard for this competitor" disabled={dashBusy === e.id} onClick={() => void createDashboardFor(e)}>
+                          {dashBusy === e.id ? '…' : '📊'}
+                        </button>
+                        <button className="cp-comp-iconbtn" title="Edit" onClick={() => { setDraft(e); setError(null) }}>✎</button>
+                        <button className="cp-comp-iconbtn" title="Remove" disabled={removing === e.id} onClick={() => e.id && void remove(e.id, e.name)}>
+                          {removing === e.id ? '…' : '✕'}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="cp-sections">
+              {sortedEntries.map((e) => (
+                <div className={`cp-section cp-comp-card${e.id && selected.has(e.id) ? ' is-selected' : ''}`} key={e.id}>
+                  <div className="cp-comp-card-head">
+                    {e.id && (
+                      <label className="cp-check" title="Select for analysis">
+                        <input type="checkbox" checked={selected.has(e.id)} onChange={() => toggleSel(e.id!)} />
+                      </label>
+                    )}
+                    <div className="cp-comp-name">{e.name}</div>
+                    <div className="cp-comp-card-actions">
+                      <button className="cp-comp-iconbtn" title="Create a dashboard for this competitor" disabled={dashBusy === e.id} onClick={() => void createDashboardFor(e)}>
+                        {dashBusy === e.id ? '…' : '📊'}
+                      </button>
+                      <button className="cp-comp-iconbtn" title="Edit" onClick={() => { setDraft(e); setError(null) }}>✎</button>
+                      <button className="cp-comp-iconbtn" title="Remove" disabled={removing === e.id} onClick={() => e.id && void remove(e.id, e.name)}>
+                        {removing === e.id ? '…' : '✕'}
+                      </button>
+                    </div>
+                  </div>
+                  {e.website && (
+                    <Link className="cp-web" to={`/app/${orgId}/site?url=${encodeURIComponent(e.website)}&name=${encodeURIComponent(e.name)}`}>
+                      {e.website.replace(/^https?:\/\//, '')} → insights
+                    </Link>
                   )}
-                  <div className="cp-comp-name">{e.name}</div>
-                  <div className="cp-comp-card-actions">
-                    <button className="cp-comp-iconbtn" title="Create a dashboard for this competitor" disabled={dashBusy === e.id} onClick={() => void createDashboardFor(e)}>
-                      {dashBusy === e.id ? '…' : '📊'}
-                    </button>
-                    <button className="cp-comp-iconbtn" title="Edit" onClick={() => { setDraft(e); setError(null) }}>✎</button>
-                    <button className="cp-comp-iconbtn" title="Remove" disabled={removing === e.id} onClick={() => e.id && void remove(e.id, e.name)}>
-                      {removing === e.id ? '…' : '✕'}
-                    </button>
-                  </div>
+                  {e.seo && (
+                    <div className="cp-seo" title={`SEO via DataForSEO · ${new Date(e.seo.fetchedAt).toLocaleString()}`}>
+                      <span className="cp-seo-metric"><b>{fmtNum(e.seo.organicKeywords)}</b> keywords</span>
+                      <span className="cp-seo-metric"><b>{fmtNum(e.seo.organicTraffic)}</b> est. traffic/mo</span>
+                      {e.seo.pos1 != null && <span className="cp-seo-metric"><b>{fmtNum(e.seo.pos1)}</b> #1</span>}
+                    </div>
+                  )}
+                  {e.summary && <div className="cp-section-val cp-comp-summary">{e.summary}</div>}
                 </div>
-                {e.website && (
-                  <Link className="cp-web" to={`/app/${orgId}/site?url=${encodeURIComponent(e.website)}&name=${encodeURIComponent(e.name)}`}>
-                    {e.website.replace(/^https?:\/\//, '')} → insights
-                  </Link>
-                )}
-                {e.seo && (
-                  <div className="cp-seo" title={`SEO via DataForSEO · ${new Date(e.seo.fetchedAt).toLocaleString()}`}>
-                    <span className="cp-seo-metric"><b>{fmtNum(e.seo.organicKeywords)}</b> keywords</span>
-                    <span className="cp-seo-metric"><b>{fmtNum(e.seo.organicTraffic)}</b> est. traffic/mo</span>
-                    {e.seo.pos1 != null && <span className="cp-seo-metric"><b>{fmtNum(e.seo.pos1)}</b> #1</span>}
-                  </div>
-                )}
-                {view === 'cards' && e.summary && <div className="cp-section-val cp-comp-summary">{e.summary}</div>}
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </>
       )}
     </section>

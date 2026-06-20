@@ -1936,11 +1936,20 @@ export interface SiteInsights {
   facts: { label: string; value: string }[]
   sources: { title: string; url: string; snippet: string }[]
   usedAI: boolean
+  cached?: boolean       // served from the DB cache (no fresh gather)
+  cachedAt?: string | null
 }
 
-// GET /api/orgs/:orgId/studio/site-insights?url= — insights about a website
-export function getSiteInsights(token: string, orgId: string, url: string): Promise<SiteInsights> {
-  return jsonFetch(token, `/orgs/${enc(orgId)}/studio/site-insights?url=${encodeURIComponent(url)}`)
+// GET /api/orgs/:orgId/studio/site-insights?url= — insights about a website.
+// Served from cache unless refresh=true (which forces a fresh AI + web gather).
+export function getSiteInsights(
+  token: string,
+  orgId: string,
+  url: string,
+  refresh = false,
+): Promise<SiteInsights> {
+  const q = refresh ? '&refresh=1' : ''
+  return jsonFetch(token, `/orgs/${enc(orgId)}/studio/site-insights?url=${encodeURIComponent(url)}${q}`)
 }
 
 // POST site-insights/persist — store insights (DB + Vault .md) and, by default,
@@ -2071,6 +2080,45 @@ export function analyzeCompetitors(
   return jsonFetch(token, `/orgs/${enc(orgId)}/studio/competitors/analyze`, {
     method: 'POST',
     body: JSON.stringify({ ids }),
+  })
+}
+
+// DataForSEO "online intel" bundle for a single domain (cached per org+domain).
+export interface DomainIntel {
+  domain: string
+  locationCode: number
+  languageCode: string
+  overview: {
+    organicKeywords: number | null
+    organicTraffic: number | null
+    organicTrafficCost: number | null
+    pos1: number | null
+    pos2_3: number | null
+    pos4_10: number | null
+  }
+  topKeywords: { keyword: string; position: number | null; searchVolume: number | null; etv: number | null; url: string | null }[]
+  competitors: { domain: string; organicKeywords: number | null; organicTraffic: number | null; avgPosition: number | null }[]
+  history: { date: string; organicTraffic: number | null; organicKeywords: number | null }[]
+  distribution: { bucket: string; count: number }[]
+  backlinks: { backlinks: number | null; referringDomains: number | null; rank: number | null } | null
+  fetchedAt: string
+}
+export interface DomainIntelResponse {
+  domain: string
+  intel: DomainIntel | null
+  fetchedAt: string | null
+}
+
+// GET cached intel for a domain (DB only — no external call, no cost).
+export function getDomainIntel(token: string, orgId: string, url: string): Promise<DomainIntelResponse> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/studio/domain-intel?url=${encodeURIComponent(url)}`)
+}
+
+// POST — fetch fresh intel from DataForSEO and cache it. The only path with cost.
+export function fetchDomainIntel(token: string, orgId: string, url: string): Promise<DomainIntelResponse> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/studio/domain-intel`, {
+    method: 'POST',
+    body: JSON.stringify({ url }),
   })
 }
 
