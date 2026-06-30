@@ -81,3 +81,6 @@
   .ho-spoke, .ho-halo, .ho-brain, .ho-data, .ho-agent, .ho-caption-v { animation: none; }
   .ho-spin { transition: none; }
 }
+
+/* Slate skin is intentionally flat — drop the triangle's glow. */
+[data-skin='slate'] .ho-brain { filter: none !important; }

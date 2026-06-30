@@ -6,26 +6,28 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-width: min(360px, calc(100vw - 32px));
+  max-width: min(400px, calc(100vw - 32px));
   pointer-events: none;
 }
 .aat-toast {
   display: flex;
-  align-items: flex-start;
-  gap: 10px;
+  flex-direction: column;
+  gap: 8px;
   background: var(--card);
   border: 1px solid color-mix(in srgb, var(--cyan) 35%, var(--line));
   border-radius: 12px;
-  padding: 10px 13px;
+  padding: 11px 13px;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
   animation: aat-in 0.18s ease-out;
+  pointer-events: auto;
 }
+.aat-head { display: flex; align-items: center; gap: 10px; }
 .aat-toast--done { border-color: color-mix(in srgb, #4caf7d 45%, var(--line)); }
 @keyframes aat-in {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
 }
-.aat-spin { flex-shrink: 0; margin-top: 2px; width: 16px; display: flex; justify-content: center; }
+.aat-spin { flex-shrink: 0; width: 16px; display: flex; justify-content: center; }
 .aat-check { color: #4caf7d; font-weight: 700; }
 .aat-dots { display: inline-flex; gap: 3px; align-items: center; }
 .aat-dots span {
@@ -38,11 +40,23 @@
   0%, 80%, 100% { opacity: 0.25; transform: scale(0.8); }
   40% { opacity: 1; transform: scale(1); }
 }
-.aat-body { min-width: 0; }
-.aat-title { font-size: 12px; font-weight: 700; color: var(--ink); }
-.aat-step { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--mut); margin-top: 1px; }
+.aat-title { font-size: 12px; font-weight: 700; color: var(--ink); min-width: 0; }
+/* Scrollable live log of recent steps — taller so more feedback is visible. */
+.aat-log {
+  max-height: 200px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-left: 26px;
+  scrollbar-width: thin;
+}
+.aat-step { display: flex; align-items: flex-start; gap: 6px; font-size: 12px; color: var(--mut2); line-height: 1.4; }
+.aat-step--current { color: var(--ink); }
 .aat-step-ic { flex-shrink: 0; }
-.aat-step-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.aat-step-text { min-width: 0; word-break: break-word; }
+.aat-link { color: var(--cyan); text-decoration: underline; word-break: break-all; }
+.aat-link:hover { text-decoration: none; }
 
 @media (max-width: 600px) {
   .aat-wrap { left: 8px; bottom: 76px; }

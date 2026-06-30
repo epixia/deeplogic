@@ -11,6 +11,12 @@ const NAV = [
   { to: '/admin',        label: 'Dashboard' },
   { to: '/admin/orgs',   label: 'Organizations' },
   { to: '/admin/users',  label: 'Users' },
+  { to: '/admin/blocks', label: 'Blocks' },
+  { to: '/admin/block-builder', label: 'Block Builder' },
+  { to: '/admin/mail', label: 'Mail Server' },
+  { to: '/admin/integrations', label: 'Integrations' },
+  { to: '/admin/appearance', label: 'Appearance' },
+  { to: '/admin/cannara-demo', label: '🌿 Cannara Demo ↗', newTab: true },
 ]
 
 export default function AdminLayout({ children }: Props) {
@@ -26,13 +32,19 @@ export default function AdminLayout({ children }: Props) {
       <aside className="dl-admin__sidebar">
         <div className="dl-admin__sidebar-label">Admin</div>
         {NAV.map((n) => (
-          <Link
-            key={n.to}
-            to={n.to}
-            className={`dl-admin__nav-link${isActive(n.to) ? ' active' : ''}`}
-          >
-            {n.label}
-          </Link>
+          n.newTab ? (
+            <a key={n.to} href={n.to} target="_blank" rel="noopener noreferrer" className="dl-admin__nav-link">
+              {n.label}
+            </a>
+          ) : (
+            <Link
+              key={n.to}
+              to={n.to}
+              className={`dl-admin__nav-link${isActive(n.to) ? ' active' : ''}`}
+            >
+              {n.label}
+            </Link>
+          )
         ))}
         <div style={{ marginTop: 'auto', paddingTop: 24 }}>
           <Link to="/app" className="dl-admin__nav-link" style={{ fontSize: 13 }}>

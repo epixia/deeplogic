@@ -20,7 +20,7 @@ function mdTitle(text: string): string {
 
 // A chat turn as shown in the panel — assistant turns may carry performed
 // actions and the trace of "thinking" steps it took.
-type ChatTurn = AssistantMessage & { actions?: string[]; suggestions?: SuggestedAction[]; steps?: AssistantStep[] }
+type ChatTurn = AssistantMessage & { actions?: string[]; suggestions?: SuggestedAction[]; readDocs?: string[]; steps?: AssistantStep[] }
 
 // Only offer "Add to Vault as .md" for substantial, document-like answers
 // (research write-ups). Short replies and action confirmations (e.g. "I created
@@ -106,7 +106,7 @@ export default function GlobalChat() {
   const [draft, setDraft] = useState('')
   const [sending, setSending] = useState(false)
   const [liveSteps, setLiveSteps] = useState<AssistantStep[]>([])
-  const [webResearch, setWebResearch] = useState(true)
+  const webResearch = true // web research is always on
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState<Record<number, { status: 'saving' | 'done'; id?: string; title?: string }>>({})
   // Action runner popup — confirm → live feedback → result.
@@ -116,7 +116,7 @@ export default function GlobalChat() {
     steps: AssistantStep[]; result?: string; error?: string
   } | null>(null)
   // Random starter prompts, reshuffled each time the chat is opened.
-  const quickActions = useMemo(() => sample(QUICK_POOL, 4), [open])
+  const quickActions = useMemo(() => sample(QUICK_POOL, 6), [open])
 
   async function saveToVault(i: number, content: string) {
     if (!orgId || saved[i]) return
@@ -198,7 +198,7 @@ export default function GlobalChat() {
           updateActivity(actId, { icon: ev.icon, text: ev.text })
         } else if (ev.type === 'done') {
           answered = true
-          setMessages((prev) => [...prev, { role: 'assistant', content: ev.text, actions: ev.actions, suggestions: ev.suggestions, steps: [...steps] }])
+          setMessages((prev) => [...prev, { role: 'assistant', content: ev.text, actions: ev.actions, suggestions: ev.suggestions, readDocs: ev.readDocs, steps: [...steps] }])
           if (ev.aiError) setError(`AI error: ${ev.aiError}`)
         } else if (ev.type === 'error') {
           setError(ev.error)
@@ -244,7 +244,7 @@ export default function GlobalChat() {
           setMessages((prev) => [
             ...prev,
             { role: 'user', content: prompt },
-            { role: 'assistant', content: ev.text, actions: ev.actions, suggestions: ev.suggestions, steps: [...steps] },
+            { role: 'assistant', content: ev.text, actions: ev.actions, suggestions: ev.suggestions, readDocs: ev.readDocs, steps: [...steps] },
           ])
           endActivity(actId, 'Completed')
         } else if (ev.type === 'error') {
@@ -322,6 +322,14 @@ export default function GlobalChat() {
                             <div key={j} className="gchat-step"><span className="gchat-step-ic">{s.icon}</span>{s.text}</div>
                           ))}
                         </details>
+                      )}
+                      {m.readDocs && m.readDocs.length > 0 && (
+                        <div className="gchat-readdocs" title="Data Vault files read to answer this">
+                          <span className="gchat-readdocs-label">📄 Read from your Data Vault:</span>
+                          {m.readDocs.map((d, j) => (
+                            <span key={j} className="gchat-readdoc">{d}</span>
+                          ))}
+                        </div>
                       )}
                       {(() => {
                         const sugg = m.suggestions ?? []
@@ -421,14 +429,6 @@ export default function GlobalChat() {
           </div>
 
           <div className="gchat-composer">
-            <button
-              type="button"
-              className={`gchat-web${webResearch ? ' is-on' : ''}`}
-              onClick={() => setWebResearch((v) => !v)}
-              title={webResearch ? 'Web research ON' : 'Web research OFF'}
-            >
-              🔍
-            </button>
             <textarea
               ref={inputRef}
               className="gchat-input"
@@ -448,7 +448,13 @@ export default function GlobalChat() {
                 title={speech.listening ? 'Stop dictation' : 'Speak'}
                 aria-pressed={speech.listening}
               >
-                {speech.listening ? '⏺' : '🎤'}
+                {speech.listening ? (
+                  <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" /></svg>
+                ) : (
+                  <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                    <rect x="9" y="2" width="6" height="11" rx="3" /><path d="M5 10v1a7 7 0 0 0 14 0v-1" /><line x1="12" y1="19" x2="12" y2="22" />
+                  </svg>
+                )}
               </button>
             )}
             <button
@@ -458,7 +464,11 @@ export default function GlobalChat() {
               disabled={!draft.trim() || sending}
               title="Send"
             >
-              {sending ? <span className="gchat-send-spinner" /> : '↑'}
+              {sending ? <span className="gchat-send-spinner" /> : (
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <path d="M22 2 11 13" /><path d="M22 2 15 22l-4-9-9-4 20-7Z" />
+                </svg>
+              )}
             </button>
           </div>
 

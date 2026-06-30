@@ -1,0 +1,75 @@
+.dba-backdrop {
+  position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 200;
+  display: flex; align-items: center; justify-content: center; padding: 24px;
+}
+.dba-modal {
+  background: var(--card); border: 1px solid var(--line); border-radius: 16px;
+  width: 100%; max-width: 720px; max-height: 86vh; display: flex; flex-direction: column;
+  overflow: hidden; box-shadow: 0 16px 48px rgba(0,0,0,.4);
+}
+.dba-head { display: flex; align-items: center; justify-content: space-between; padding: 18px 20px; border-bottom: 1px solid var(--line); }
+.dba-head h2 { font-size: 16px; font-weight: 800; }
+.dba-head-actions { display: inline-flex; align-items: center; gap: 10px; }
+.dba-cache { font-size: 11.5px; font-weight: 600; color: var(--cyan); background: rgba(111,227,240,.1); border: 1px solid rgba(111,227,240,.25); border-radius: 999px; padding: 2px 9px; white-space: nowrap; }
+.dba-log { padding: 14px 20px; max-height: 180px; overflow-y: auto; font-family: ui-monospace, Menlo, monospace; font-size: 12px; line-height: 1.6; background: var(--bg2); }
+.dba-log-line { color: var(--mut); }
+.dba-log-line.dba-err { color: var(--bad); }
+.dba-spin { color: var(--cyan); }
+.dba-results { padding: 14px 20px; overflow-y: auto; }
+.dba-note { font-size: 13px; color: var(--mut); padding: 8px 0; }
+.dba-summary { display: flex; gap: 18px; font-size: 13px; color: var(--mut); margin-bottom: 12px; }
+.dba-summary strong { color: var(--ink); font-size: 16px; }
+.dba-tables { display: flex; flex-direction: column; gap: 6px; }
+.dba-table { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.dba-table-head { display: flex; align-items: center; gap: 9px; width: 100%; background: none; border: 0; cursor: pointer; padding: 10px 12px; font: inherit; color: var(--ink); text-align: left; }
+.dba-table-head:hover { background: rgba(111,227,240,.05); }
+.dba-chev { font-size: 10px; color: var(--mut); width: 10px; }
+.dba-table-name { font-weight: 700; font-size: 13.5px; flex: 1; }
+.dba-table-count { font-size: 11px; color: var(--mut2); }
+.dba-kpi-badge { font-size: 10px; font-weight: 700; color: #4caf7d; background: rgba(76,175,125,.12); border: 1px solid rgba(76,175,125,.3); border-radius: 99px; padding: 1px 7px; }
+.dba-cols { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 6px; padding: 8px 12px 12px; }
+.dba-col { display: flex; flex-direction: column; padding: 6px 8px; border: 1px solid var(--line); border-radius: 7px; }
+.dba-col-num { border-color: rgba(76,175,125,.35); background: rgba(76,175,125,.05); }
+.dba-col-time { border-color: rgba(111,227,240,.3); background: rgba(111,227,240,.04); }
+.dba-col-name { font-size: 12.5px; font-weight: 600; color: var(--ink); }
+.dba-col-type { font-size: 10.5px; color: var(--mut2); }
+
+/* table head now holds a toggle + a build button */
+.dba-table-head { display: flex; align-items: center; gap: 6px; padding: 0 8px 0 0; }
+.dba-table-toggle { display: flex; align-items: center; gap: 9px; flex: 1; background: none; border: 0; cursor: pointer; padding: 10px 12px; font: inherit; color: var(--ink); text-align: left; }
+.dba-table-toggle:hover { background: rgba(111,227,240,.05); }
+.dba-build-btn { flex-shrink: 0; }
+
+/* Data Block Builder */
+.dbb-modal { max-width: 860px; }
+.dbb-grid { display: grid; grid-template-columns: 300px 1fr; gap: 16px; padding: 16px 20px; }
+@media (max-width: 760px) { .dbb-grid { grid-template-columns: 1fr; } }
+.dbb-config { display: flex; flex-direction: column; gap: 12px; }
+.dbb-row { display: flex; gap: 10px; }
+.dbb-row .studio-field { flex: 1; }
+.dbb-preview { display: flex; flex-direction: column; }
+.dbb-preview-label { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--mut2); font-weight: 700; margin-bottom: 6px; }
+.dbb-frame { width: 100%; flex: 1; min-height: 240px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg2); }
+.dbb-foot { display: flex; align-items: flex-end; gap: 12px; padding: 0 20px 18px; border-top: 1px solid var(--line); padding-top: 14px; }
+.dbb-dash { flex: 1; max-width: 320px; }
+.dbb-note { font-size: 12px; color: var(--mut); flex: 1; }
+
+/* Data Block Builder — column picker + smart-alert rules */
+.dbb-colpick { display: flex; flex-wrap: wrap; gap: 6px; }
+.dbb-colchip { font-size: 11.5px; font-weight: 600; color: var(--mut); background: var(--bg2); border: 1px solid var(--line); border-radius: 99px; padding: 3px 10px; cursor: pointer; }
+.dbb-colchip.on { color: var(--cyan); border-color: color-mix(in srgb, var(--cyan) 45%, var(--line)); background: color-mix(in srgb, var(--cyan) 10%, transparent); }
+.dbb-alert-hint { font-weight: 400; color: var(--mut); font-size: 11px; }
+.dbb-rule { display: flex; gap: 6px; align-items: center; margin-top: 6px; }
+.dbb-rule .studio-input { padding: 6px 8px; font-size: 12.5px; }
+.dbb-rule-op { flex: 0 0 92px; }
+.dbb-rule-val { flex: 0 0 96px; }
+.dbb-rule-del { flex: none; width: 28px; height: 30px; border: 1px solid var(--line); background: var(--bg2); color: var(--mut); border-radius: 8px; cursor: pointer; }
+.dbb-rule-del:hover { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 40%, var(--line)); }
+.dbb-rule-add { margin-top: 8px; align-self: flex-start; }
+
+/* Data Block Builder — Block Data / Smart Alerts tabs */
+.dbb-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 14px; }
+.dbb-tab { background: none; border: none; border-bottom: 2px solid transparent; margin-bottom: -1px; padding: 8px 12px; font: inherit; font-size: 13px; font-weight: 600; color: var(--mut); cursor: pointer; }
+.dbb-tab:hover { color: var(--ink); }
+.dbb-tab.on { color: var(--ink); border-bottom-color: var(--cyan); }
+.dbb-alert-empty { font-size: 12px; color: var(--mut); line-height: 1.5; margin: 10px 0 0; }

@@ -95,14 +95,144 @@ async function evaluateCondition(
   return { fired: false, summary: 'Evaluation failed — AI call error.' };
 }
 
+// ---------------------------------------------------------------------------
+// Structured triggers (no AI): keyword / uptime / threshold. Fire on the
+// state-CHANGE (so we don't re-notify every tick), using the alert's `state`.
+// ---------------------------------------------------------------------------
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+async function fetchTimeout(url: string, opts: any = {}, ms = 12_000): Promise<globalThis.Response> {
+  const c = new AbortController();
+  const t = setTimeout(() => c.abort(), ms);
+  try { return await fetch(url, { ...opts, signal: c.signal }); } finally { clearTimeout(t); }
+}
+function getPath(obj: any, path: string): any {
+  return String(path || '').split('.').reduce((o: any, k) => (o == null ? undefined : o[k]), obj);
+}
+
+type CheckResult = { fired: boolean; summary: string; state?: Record<string, unknown> };
+
+async function evaluateStructured(alert: Record<string, any>): Promise<CheckResult> {
+  const kind = alert.kind as string;
+  const cfg = (alert.config ?? {}) as Record<string, any>;
+  const state = (alert.state ?? {}) as Record<string, any>;
+  const url = String(cfg.url ?? '').trim();
+
+  if (kind === 'uptime') {
+    if (!url) return { fired: false, summary: 'No URL configured', state };
+    let up = false, code = 0;
+    try { const r = await fetchTimeout(url, { method: 'GET' }); code = r.status; up = r.ok; } catch { up = false; }
+    const prev = state.status as string | undefined;
+    const now = up ? 'up' : 'down';
+    const newState = { ...state, status: now };
+    if (prev !== undefined && now !== prev) {
+      return { fired: true, summary: up ? `Recovered — site is back up (HTTP ${code})` : `DOWN — site not responding${code ? ` (HTTP ${code})` : ''}`, state: newState };
+    }
+    if (prev === undefined && !up) return { fired: true, summary: `DOWN — site not responding${code ? ` (HTTP ${code})` : ''}`, state: newState };
+    return { fired: false, summary: up ? `Up (HTTP ${code})` : `Down (HTTP ${code})`, state: newState };
+  }
+
+  if (kind === 'keyword') {
+    if (!url) return { fired: false, summary: 'No URL configured', state };
+    const list = Array.isArray(cfg.keywords) ? cfg.keywords : String(cfg.keywords ?? '').split(',');
+    const keywords = list.map((k: any) => String(k).trim().toLowerCase()).filter(Boolean);
+    let text = '';
+    try { const r = await fetchTimeout(url); text = (await r.text()).toLowerCase(); } catch { return { fired: false, summary: 'Fetch failed', state }; }
+    const matched = keywords.filter((k: string) => text.includes(k));
+    const present = matched.length > 0;
+    const lastFired = state.lastFired ? new Date(state.lastFired).getTime() : 0;
+    const cooled = Date.now() - lastFired > 6 * 3600 * 1000; // 6h cooldown
+    if (present && (!state.present || cooled)) {
+      return { fired: true, summary: `Keyword match: ${matched.join(', ')}`, state: { ...state, present, lastFired: new Date().toISOString() } };
+    }
+    return { fired: false, summary: present ? `Present: ${matched.join(', ')}` : 'No keyword match', state: { ...state, present } };
+  }
+
+  if (kind === 'threshold') {
+    if (!url) return { fired: false, summary: 'No URL configured', state };
+    // Supabase/PostgREST column alerts pass an apiKey so the query authenticates.
+    const headers = cfg.apiKey ? { apikey: String(cfg.apiKey), Authorization: 'Bearer ' + String(cfg.apiKey) } : undefined;
+    let val: number;
+    try { const r = await fetchTimeout(url, headers ? { headers } : {}); val = Number(getPath(await r.json(), cfg.path)); } catch { return { fired: false, summary: 'Fetch/parse failed', state }; }
+    if (!isFinite(val)) return { fired: false, summary: `No numeric value at "${cfg.path}"`, state };
+    const target = Number(cfg.value);
+    const op = (cfg.op as string) || 'gt';
+    const breached = op === 'gt' ? val > target : op === 'lt' ? val < target : val === target;
+    const sym = op === 'gt' ? '>' : op === 'lt' ? '<' : '=';
+    const newState = { ...state, breached, value: val };
+    if (breached && !state.breached) return { fired: true, summary: `${cfg.path} = ${val} ${sym} ${target}`, state: newState };
+    return { fired: false, summary: `${cfg.path} = ${val} (threshold ${sym} ${target})`, state: newState };
+  }
+
+  return { fired: false, summary: 'Unknown alert kind', state };
+}
+
+// Route a single alert to the right evaluator (AI condition or structured).
+async function performCheck(orgId: string, alert: Record<string, any>): Promise<CheckResult> {
+  if ((alert.kind ?? 'ai') === 'ai') {
+    const ai = await loadAiConfig(orgId);
+    if (!ai) return { fired: false, summary: 'No AI provider configured — add an API key in Settings.' };
+    const context = await buildContext(orgId, alert.sources ?? []);
+    const r = await evaluateCondition(alert.condition as string, context, ai);
+    return { fired: r.fired, summary: r.summary };
+  }
+  return evaluateStructured(alert);
+}
+
+// Persist a check result: timestamps, fire bookkeeping, event log, email.
+async function applyCheckResult(orgId: string, alert: Record<string, any>, result: CheckResult): Promise<void> {
+  const now = new Date().toISOString();
+  const patch: Record<string, unknown> = { last_checked: now, updated_at: now };
+  if (result.state) patch.state = result.state;
+  if (result.fired) {
+    patch.last_fired = now;
+    patch.fire_count = (Number(alert.fire_count) || 0) + 1;
+    await serviceClient.from('alert_events').insert({ alert_id: alert.id, org_id: orgId, fired_at: now, summary: result.summary });
+    if (alert.notify_email) {
+      await sendEmail({
+        to: alert.notify_email as string,
+        subject: `🔔 Alert fired: ${alert.name}`,
+        html: `<!DOCTYPE html><html><body style="font-family:sans-serif;max-width:560px;margin:40px auto;color:#1a1a1a">
+          <h2 style="margin-bottom:4px">Alert fired: <strong>${alert.name}</strong></h2>
+          <p style="color:#555;background:#f5f5f5;padding:12px;border-radius:6px;margin:16px 0">${result.summary}</p>
+          <p style="color:#aaa;font-size:12px">Fired at ${new Date(now).toLocaleString()}</p>
+        </body></html>`,
+      }).catch((e: Error) => console.error('[alert email] failed:', e.message));
+    }
+  }
+  await serviceClient.from('alerts').update(patch).eq('id', alert.id);
+}
+
+// Scheduler entry point — evaluate every active alert. Structured alerts run
+// each tick (cheap fetches); AI alerts are throttled to ~30 min (token cost).
+export async function checkAllActiveAlerts(): Promise<void> {
+  const { data } = await serviceClient.from('alerts').select('*').eq('status', 'active');
+  for (const a of (data ?? []) as Record<string, any>[]) {
+    if ((a.kind ?? 'ai') === 'ai') {
+      const last = a.last_checked ? new Date(a.last_checked).getTime() : 0;
+      if (Date.now() - last < 30 * 60 * 1000) continue;
+    }
+    try {
+      const r = await performCheck(a.org_id, a);
+      await applyCheckResult(a.org_id, a, r);
+    } catch (e) {
+      console.error('[alert tick] failed', a.id, e);
+    }
+  }
+}
+/* eslint-enable @typescript-eslint/no-explicit-any */
+
 function mapAlert(row: Record<string, unknown>) {
   return {
     id: row.id,
     orgId: row.org_id,
     createdBy: row.created_by,
     name: row.name,
+    kind: row.kind ?? 'ai',
+    config: row.config ?? {},
     condition: row.condition,
     sources: row.sources ?? [],
+    widgetId: row.widget_id ?? null,
     notifyEmail: row.notify_email ?? null,
     status: row.status,
     lastChecked: row.last_checked ?? null,
@@ -134,13 +264,17 @@ alertsRouter.get('/orgs/:orgId/alerts', requireMember(), async (req: Request, re
 // POST /orgs/:orgId/alerts
 alertsRouter.post('/orgs/:orgId/alerts', requireMember(), async (req: Request, res: Response) => {
   const { orgId } = req.params;
-  const { name, condition, sources = [], notifyEmail, status = 'active' } = req.body ?? {};
+  const { name, condition, sources = [], notifyEmail, status = 'active', kind = 'ai', config = {}, widgetId } = req.body ?? {};
   if (!name?.trim()) { res.status(400).json({ error: 'name is required' }); return; }
-  if (!condition?.trim()) { res.status(400).json({ error: 'condition is required' }); return; }
+  if (kind === 'ai' && !condition?.trim()) { res.status(400).json({ error: 'condition is required' }); return; }
   try {
     const { data, error } = await serviceClient
       .from('alerts')
-      .insert({ org_id: orgId, created_by: req.user!.id, name: name.trim(), condition: condition.trim(), sources, notify_email: notifyEmail || null, status })
+      .insert({
+        org_id: orgId, created_by: req.user!.id, name: name.trim(),
+        condition: (condition ?? '').trim(), sources, notify_email: notifyEmail || null, status,
+        kind, config: config ?? {}, widget_id: widgetId || null,
+      })
       .select('*').maybeSingle();
     if (error) throw new Error(error.message);
     res.status(201).json(mapAlert(data as Record<string, unknown>));
@@ -157,10 +291,13 @@ alertsRouter.patch('/orgs/:orgId/alerts/:id', requireMember(), async (req: Reque
   try {
     const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
     if (typeof body.name === 'string' && body.name.trim()) patch.name = body.name.trim();
-    if (typeof body.condition === 'string' && body.condition.trim()) patch.condition = body.condition.trim();
+    if (typeof body.condition === 'string') patch.condition = body.condition.trim();
     if (Array.isArray(body.sources)) patch.sources = body.sources;
     if (typeof body.notifyEmail === 'string') patch.notify_email = body.notifyEmail || null;
     if (body.status === 'active' || body.status === 'paused') patch.status = body.status;
+    if (typeof body.kind === 'string') patch.kind = body.kind;
+    if (body.config && typeof body.config === 'object') { patch.config = body.config; patch.state = {}; }
+    if (typeof body.widgetId === 'string') patch.widget_id = body.widgetId || null;
     const { data, error } = await serviceClient
       .from('alerts').update(patch).eq('id', id).eq('org_id', orgId).select('*').maybeSingle();
     if (error) throw new Error(error.message);
@@ -197,40 +334,10 @@ alertsRouter.post('/orgs/:orgId/alerts/:id/check', requireMember(), async (req: 
       .from('alerts').select('*').eq('id', id).eq('org_id', orgId).maybeSingle();
     if (aErr || !alert) { res.status(404).json({ error: 'Alert not found' }); return; }
 
-    const ai = await loadAiConfig(orgId);
-    if (!ai) { res.status(400).json({ error: 'No AI provider configured — add an API key in Settings.' }); return; }
+    const result = await performCheck(orgId, alert as Record<string, unknown>);
+    await applyCheckResult(orgId, alert as Record<string, unknown>, result);
 
-    const context = await buildContext(orgId, alert.sources ?? []);
-    const result = await evaluateCondition(alert.condition as string, context, ai);
-
-    const now = new Date().toISOString();
-    const updatePatch: Record<string, unknown> = { last_checked: now, updated_at: now };
-
-    if (result.fired) {
-      updatePatch.last_fired = now;
-      updatePatch.fire_count = (Number(alert.fire_count) || 0) + 1;
-
-      await serviceClient.from('alert_events').insert({
-        alert_id: id, org_id: orgId, fired_at: now, summary: result.summary,
-      });
-
-      if (alert.notify_email) {
-        await sendEmail({
-          to: alert.notify_email as string,
-          subject: `🔔 Alert fired: ${alert.name}`,
-          html: `<!DOCTYPE html><html><body style="font-family:sans-serif;max-width:560px;margin:40px auto;color:#1a1a1a">
-            <h2 style="margin-bottom:4px">Alert fired: <strong>${alert.name}</strong></h2>
-            <p style="color:#555;background:#f5f5f5;padding:12px;border-radius:6px;margin:16px 0">${result.summary}</p>
-            <p style="color:#888;font-size:13px">Condition: ${alert.condition}</p>
-            <p style="color:#aaa;font-size:12px">Checked at ${new Date(now).toLocaleString()}</p>
-          </body></html>`,
-        }).catch((e: Error) => console.error('[alert email] failed:', e.message));
-      }
-    }
-
-    await serviceClient.from('alerts').update(updatePatch).eq('id', id);
-
-    res.json({ fired: result.fired, summary: result.summary, checkedAt: now });
+    res.json({ fired: result.fired, summary: result.summary, checkedAt: new Date().toISOString() });
   } catch (err) {
     console.error('alert check failed', err);
     res.status(500).json({ error: 'Check failed' });

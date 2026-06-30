@@ -53,6 +53,20 @@ html {
   scroll-behavior: smooth;
 }
 
+/* Subtle, theme-matching scrollbars — thin, transparent track (no white bars). */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-corner { background: transparent; }
+*::-webkit-scrollbar-thumb {
+  background: var(--line); border-radius: 8px;
+  border: 2px solid transparent; background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:hover { background: var(--mut2); background-clip: padding-box; }
+
 body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
     Helvetica, Arial, sans-serif;
@@ -81,6 +95,13 @@ button {
 }
 
 /* ---------- helpers ---------- */
+/* "fx" badge marking a KPI / measure (replaces the ƒ glyph that renders oddly). */
+.kpi-fx {
+  display: inline-block; font: 700 9px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--cyan); border: 1px solid color-mix(in srgb, var(--cyan) 40%, transparent);
+  border-radius: 4px; padding: 2px 4px; margin-right: 5px; vertical-align: middle; text-transform: lowercase;
+}
+
 .grad-text {
   background: none;
   -webkit-background-clip: unset;
@@ -395,3 +416,34 @@ nav.dl-nav {
   color: var(--mut);
   font-size: 15px;
 }
+
+/* Lightweight CSS-only ambient background — GPU-composited (transform/opacity
+   only), no canvas or requestAnimationFrame, so it never blocks the main thread. */
+.dl-css-bg { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+.dl-css-bg-blob {
+  position: absolute; border-radius: 50%; filter: blur(90px); opacity: 0.28;
+  will-change: transform;
+}
+.dl-css-bg-blob--1 {
+  width: 46vw; height: 46vw; left: -8vw; top: -10vh;
+  background: radial-gradient(circle, var(--cyan), transparent 70%);
+  animation: dl-bg-drift1 26s ease-in-out infinite;
+}
+.dl-css-bg-blob--2 {
+  width: 52vw; height: 52vw; right: -12vw; top: 16vh;
+  background: radial-gradient(circle, var(--blue), transparent 70%);
+  animation: dl-bg-drift2 32s ease-in-out infinite;
+}
+.dl-css-bg-blob--3 {
+  width: 38vw; height: 38vw; left: 32vw; bottom: -16vh;
+  background: radial-gradient(circle, var(--cyan), transparent 70%);
+  opacity: 0.18;
+  animation: dl-bg-drift3 38s ease-in-out infinite;
+}
+[data-theme='light'] .dl-css-bg-blob { opacity: 0.12; }
+/* Slate skin is intentionally flat & grey — no coloured ambient glow. */
+[data-skin='slate'] .dl-css-bg { display: none; }
+@keyframes dl-bg-drift1 { 0%, 100% { transform: translate(0, 0) scale(1); } 50% { transform: translate(6vw, 4vh) scale(1.12); } }
+@keyframes dl-bg-drift2 { 0%, 100% { transform: translate(0, 0) scale(1); } 50% { transform: translate(-5vw, -3vh) scale(1.08); } }
+@keyframes dl-bg-drift3 { 0%, 100% { transform: translate(0, 0) scale(1); } 50% { transform: translate(3vw, -5vh) scale(1.15); } }
+@media (prefers-reduced-motion: reduce) { .dl-css-bg-blob { animation: none; } }

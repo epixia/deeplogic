@@ -25,6 +25,9 @@ interface Fields {
   website: string
   tagline: string
   industry: string
+  address: string
+  phone: string
+  email: string
   description: string
   products: string
   audience: string
@@ -33,7 +36,7 @@ interface Fields {
 }
 
 const EMPTY: Fields = {
-  name: '', website: '', tagline: '', industry: '',
+  name: '', website: '', tagline: '', industry: '', address: '', phone: '', email: '',
   description: '', products: '', audience: '', competitors: '', differentiators: '',
 }
 
@@ -50,6 +53,7 @@ function fieldsFromMeta(meta: Record<string, unknown> | undefined): Fields {
   const s = (k: string) => (typeof m[k] === 'string' ? (m[k] as string) : '')
   return {
     name: s('name'), website: s('website'), tagline: s('tagline'), industry: s('industry'),
+    address: s('address'), phone: s('phone'), email: s('email'),
     description: s('description'), products: s('products'), audience: s('audience'),
     competitors: s('competitors'), differentiators: s('differentiators'),
   }
@@ -64,6 +68,9 @@ function renderContent(f: Fields): string {
   if (f.website) lines.push(`Website: ${f.website}`)
   if (f.industry) lines.push(`Industry: ${f.industry}`)
   if (f.tagline) lines.push(`Tagline: ${f.tagline}`)
+  if (f.address) lines.push(`Address: ${f.address}`)
+  if (f.phone) lines.push(`Phone: ${f.phone}`)
+  if (f.email) lines.push(`Email: ${f.email}`)
   const block = (label: string, val: string) => { if (val.trim()) lines.push('', `## ${label}`, val.trim()) }
   block('What we do', f.description)
   block('Products & services', f.products)
@@ -210,6 +217,13 @@ export default function CompanyProfile({
             )}
           </div>
           {fields.tagline && <div className="cp-tagline">{fields.tagline}</div>}
+          {(fields.address || fields.phone || fields.email) && (
+            <div className="cp-contact">
+              {fields.address && <span>📍 {fields.address}</span>}
+              {fields.phone && <span>📞 {fields.phone}</span>}
+              {fields.email && <span>✉️ <a href={`mailto:${fields.email}`}>{fields.email}</a></span>}
+            </div>
+          )}
           <div className="cp-sections">
             {filledSections.map((s) => (
               <div className="cp-section" key={s.key}>
@@ -253,6 +267,20 @@ export default function CompanyProfile({
               <input className="cp-input" value={fields.tagline} onChange={(e) => set('tagline', e.target.value)} placeholder="One line on what you do" />
             </label>
           </div>
+          <div className="cp-row">
+            <label className="cp-field cp-field--grow">
+              <span>Phone</span>
+              <input className="cp-input" value={fields.phone} onChange={(e) => set('phone', e.target.value)} placeholder="+1 514 555 0123" />
+            </label>
+            <label className="cp-field cp-field--grow">
+              <span>Email</span>
+              <input className="cp-input" value={fields.email} onChange={(e) => set('email', e.target.value)} placeholder="hello@acme.com" />
+            </label>
+          </div>
+          <label className="cp-field">
+            <span>Address</span>
+            <input className="cp-input" value={fields.address} onChange={(e) => set('address', e.target.value)} placeholder="123 Main St, Montreal, QC" />
+          </label>
           {SECTIONS.map((s) => (
             <label className="cp-field" key={s.key}>
               <span>{s.label}</span>

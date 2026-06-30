@@ -49,10 +49,13 @@ export default function DashboardScopeBar({
     return () => { active = false }
   }, [orgId, getAccessToken])
 
-  // Group by dashboard group (Company first), ungrouped → Company.
+  // Group by dashboard group (Company first), ungrouped → Company. Competitor
+  // dashboards live on the dedicated Competitors page, so they're excluded here.
+  const isCompetitorGroup = (g: string) => g.toLowerCase() === 'competitors' || g.toLowerCase() === 'competitor'
   const groups = new Map<string, DashboardListItem[]>()
   for (const b of boards) {
     const g = b.group?.trim() || 'Company'
+    if (isCompetitorGroup(g)) continue
     if (!groups.has(g)) groups.set(g, [])
     groups.get(g)!.push(b)
   }

@@ -17,6 +17,7 @@ export default function OrgoIntegrationCard({
   const [enabled, setEnabled] = useState(false)
   const [hasKey, setHasKey] = useState(false)
   const [keyInput, setKeyInput] = useState('')
+  const [workspaceId, setWorkspaceId] = useState('')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
@@ -29,6 +30,7 @@ export default function OrgoIntegrationCard({
       const v = await getIntegrations(t, orgId)
       setEnabled(v.orgo.enabled)
       setHasKey(v.orgo.hasKey)
+      setWorkspaceId(v.orgo.workspaceId ?? '')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load integration settings.')
     } finally {
@@ -42,12 +44,18 @@ export default function OrgoIntegrationCard({
     setSaving(true); setError(null); setNote(null)
     try {
       const t = await getToken()
-      const body: { enabled?: boolean; apiKey?: string } = {}
+      const body: { enabled?: boolean; apiKey?: string; workspaceId?: string } = {}
       if (typeof nextEnabled === 'boolean') body.enabled = nextEnabled
-      if (keyInput.trim()) body.apiKey = keyInput.trim()
+      if (keyInput.trim()) {
+        body.apiKey = keyInput.trim()
+        // Saving a key implies you want Orgo on — auto-enable (unless explicitly toggling off).
+        if (nextEnabled === undefined) body.enabled = true
+      }
+      body.workspaceId = workspaceId.trim()
       const v = await saveOrgoIntegration(t, orgId, body)
       setEnabled(v.orgo.enabled)
       setHasKey(v.orgo.hasKey)
+      setWorkspaceId(v.orgo.workspaceId ?? '')
       setKeyInput('')
       setNote('Saved.')
       setTimeout(() => setNote(null), 2500)
@@ -116,6 +124,20 @@ export default function OrgoIntegrationCard({
         <span className="orgo-hint">
           Get a key at <a href="https://www.orgo.ai/start" target="_blank" rel="noreferrer">orgo.ai/start</a>.
           Stored encrypted server-side — never shown again.
+        </span>
+      </label>
+
+      <label className="orgo-field">
+        <span>Workspace ID <em className="orgo-haskey">· optional</em></span>
+        <input
+          className="orgo-input"
+          autoComplete="off"
+          placeholder="Leave blank to auto-create a DeepLogic workspace"
+          value={workspaceId}
+          onChange={(e) => setWorkspaceId(e.target.value)}
+        />
+        <span className="orgo-hint">
+          Paste your existing Orgo workspace ID so VMs appear in <em>your</em> Orgo dashboard. If blank, DeepLogic creates &amp; reuses its own workspace (computers still run, but show under that workspace).
         </span>
       </label>
 

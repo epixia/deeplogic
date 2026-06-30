@@ -11,6 +11,8 @@ import {
   listAlertEvents,
   listContext,
   type Alert,
+  type AlertKind,
+  type AlertConfig,
   type AlertEvent,
   type WidgetSource,
 } from '../lib/api'
@@ -24,12 +26,25 @@ const TABS: readonly Tab[] = ['all', 'active', 'paused']
 
 type Draft = {
   name: string
+  kind: AlertKind
   condition: string
+  url: string
+  keywords: string
+  path: string
+  op: 'gt' | 'lt' | 'eq'
+  value: string
   notifyEmail: string
   status: 'active' | 'paused'
 }
 
-const BLANK: Draft = { name: '', condition: '', notifyEmail: '', status: 'active' }
+const BLANK: Draft = { name: '', kind: 'ai', condition: '', url: '', keywords: '', path: '', op: 'gt', value: '', notifyEmail: '', status: 'active' }
+
+const KIND_META: Record<AlertKind, { label: string; icon: string }> = {
+  ai: { label: 'AI condition', icon: '✦' },
+  keyword: { label: 'Keyword', icon: '🔍' },
+  uptime: { label: 'Uptime', icon: '🌐' },
+  threshold: { label: 'Threshold', icon: '📈' },
+}
 
 function fmtDate(iso: string | null) {
   if (!iso) return '—'
@@ -106,7 +121,15 @@ export default function Alerts() {
 
   function openEdit(a: Alert) {
     setEditing(a)
-    setDraft({ name: a.name, condition: a.condition, notifyEmail: a.notifyEmail ?? '', status: a.status })
+    setDraft({
+      name: a.name, kind: a.kind ?? 'ai', condition: a.condition,
+      url: a.config?.url ?? '',
+      keywords: (a.config?.keywords ?? []).join(', '),
+      path: a.config?.path ?? '',
+      op: a.config?.op ?? 'gt',
+      value: a.config?.value != null ? String(a.config.value) : '',
+      notifyEmail: a.notifyEmail ?? '', status: a.status,
+    })
     setSources(a.sources ?? [])
     setAddRef('')
     setFormError(null)
@@ -126,7 +149,26 @@ export default function Alerts() {
 
   async function handleSave() {
     if (!draft.name.trim()) { setFormError('Name is required'); return }
-    if (!draft.condition.trim()) { setFormError('Condition is required'); return }
+    let config: AlertConfig = {}
+    let condition = draft.condition.trim()
+    if (draft.kind === 'ai') {
+      if (!condition) { setFormError('Condition is required'); return }
+    } else {
+      if (!draft.url.trim()) { setFormError('A URL is required for this trigger'); return }
+      if (draft.kind === 'keyword') {
+        const keywords = draft.keywords.split(',').map((s) => s.trim()).filter(Boolean)
+        if (!keywords.length) { setFormError('Add at least one keyword'); return }
+        config = { url: draft.url.trim(), keywords }
+        condition = condition || `Keyword: ${keywords.join(', ')}`
+      } else if (draft.kind === 'uptime') {
+        config = { url: draft.url.trim() }
+        condition = condition || 'Site uptime monitor'
+      } else if (draft.kind === 'threshold') {
+        if (!draft.path.trim() || draft.value === '') { setFormError('Path and value are required'); return }
+        config = { url: draft.url.trim(), path: draft.path.trim(), op: draft.op, value: Number(draft.value) }
+        condition = condition || `${draft.path} ${draft.op} ${draft.value}`
+      }
+    }
     setFormError(null)
     setSaving(true)
     try {
@@ -134,8 +176,10 @@ export default function Alerts() {
       if (!t) throw new Error('Session expired')
       const body = {
         name: draft.name.trim(),
-        condition: draft.condition.trim(),
-        sources,
+        kind: draft.kind,
+        condition,
+        config,
+        sources: draft.kind === 'ai' ? sources : [],
         notifyEmail: draft.notifyEmail.trim() || undefined,
         status: draft.status,
       }
@@ -274,6 +318,7 @@ export default function Alerts() {
                     className={`alert-status-dot ${hasFired || fired ? 'fired' : 'ok'}`}
                     title={hasFired || fired ? 'Has fired' : 'OK'}
                   />
+                  <span className="alert-kind-badge">{KIND_META[a.kind]?.icon ?? '✦'} {KIND_META[a.kind]?.label ?? 'AI'}</span>
                   {a.status === 'paused' && <span className="alert-badge-paused">Paused</span>}
                   {a.fireCount > 0 && (
                     <span className="studio-pill studio-pill-org" style={{ marginLeft: 'auto' }}>
@@ -385,6 +430,67 @@ export default function Alerts() {
               />
             </label>
 
+            <div className="studio-field">
+              <span>Trigger</span>
+              <div className="studio-seg studio-seg--wrap">
+                {(['ai', 'keyword', 'uptime', 'threshold'] as AlertKind[]).map((k) => (
+                  <button
+                    key={k}
+                    type="button"
+                    className={`studio-seg-btn${draft.kind === k ? ' active' : ''}`}
+                    onClick={() => setDraft((d) => ({ ...d, kind: k }))}
+                  >
+                    {KIND_META[k].icon} {KIND_META[k].label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {draft.kind !== 'ai' && (
+              <label className="studio-field">
+                <span>{draft.kind === 'uptime' ? 'URL to monitor' : draft.kind === 'keyword' ? 'Feed / API URL' : 'JSON API URL'}</span>
+                <input
+                  className="studio-input"
+                  value={draft.url}
+                  onChange={(e) => setDraft((d) => ({ ...d, url: e.target.value }))}
+                  placeholder="https://…"
+                />
+              </label>
+            )}
+
+            {draft.kind === 'keyword' && (
+              <label className="studio-field">
+                <span>Keywords <span style={{ fontSize: 11, opacity: 0.6, fontStyle: 'italic', textTransform: 'none' }}>(comma-separated)</span></span>
+                <input
+                  className="studio-input"
+                  value={draft.keywords}
+                  onChange={(e) => setDraft((d) => ({ ...d, keywords: e.target.value }))}
+                  placeholder="trump, recall, shortage"
+                />
+              </label>
+            )}
+
+            {draft.kind === 'threshold' && (
+              <>
+                <label className="studio-field">
+                  <span>JSON path <span style={{ fontSize: 11, opacity: 0.6, fontStyle: 'italic', textTransform: 'none' }}>(dot notation)</span></span>
+                  <input className="studio-input" value={draft.path} onChange={(e) => setDraft((d) => ({ ...d, path: e.target.value }))} placeholder="current.temp" />
+                </label>
+                <div className="studio-field">
+                  <span>Condition</span>
+                  <div className="alerts-threshold-row">
+                    <select className="studio-input" value={draft.op} onChange={(e) => setDraft((d) => ({ ...d, op: e.target.value as 'gt' | 'lt' | 'eq' }))}>
+                      <option value="gt">greater than &gt;</option>
+                      <option value="lt">less than &lt;</option>
+                      <option value="eq">equals =</option>
+                    </select>
+                    <input className="studio-input" type="number" value={draft.value} onChange={(e) => setDraft((d) => ({ ...d, value: e.target.value }))} placeholder="0" />
+                  </div>
+                </div>
+              </>
+            )}
+
+            {draft.kind === 'ai' && (
             <label className="studio-field">
               <span>Condition</span>
               <textarea
@@ -395,7 +501,9 @@ export default function Alerts() {
                 rows={4}
               />
             </label>
+            )}
 
+            {draft.kind === 'ai' && (
             <div className="studio-field">
               <span>
                 Data sources{' '}
@@ -447,6 +555,7 @@ export default function Alerts() {
                 <p className="studio-file">No data sources yet — add content in Data Vault first.</p>
               )}
             </div>
+            )}
 
             <label className="studio-field">
               <span>

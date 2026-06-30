@@ -33,8 +33,11 @@ import { suggestCompetitors } from '../studio/suggestCompetitors.js';
 import { suggestProducts, type ProductSuggestion, type ProductsResult } from '../studio/suggestProducts.js';
 import { scrapeProducts, scrapeUrls, fetchPageImage, type ScrapedProduct } from '../studio/productScrape.js';
 import { hostImage } from '../studio/imageHost.js';
+import { fetchPublicCompany } from '../studio/publicCompany.js';
+import { describePowerBi, type PbiStructure } from '../studio/describePowerBi.js';
 import { loadPlatformApiCreds } from './integrations.js';
 import { dataforseoDomainIntel, toDomain, type DomainIntel } from '../integrations/dataforseo.js';
+import { introspectDatabase } from '../integrations/dbIntrospect.js';
 import { runAssistant, runAgentTask, type ChatMsg, type WebResult } from '../studio/assistant.js';
 import { generateTitle } from '../studio/titler.js';
 import { webSearch, wikipediaSummary } from '../webSearch.js';
@@ -429,6 +432,41 @@ export function serverFallbackAi(): AiConfig | null {
   return null;
 }
 
+/**
+ * Platform AI for org-less flows (anonymous onboarding). Prefers a dedicated
+ * server env key; if none is set, falls back to any AI provider key already
+ * configured by a workspace so onboarding is AI-powered out of the box.
+ * (For production, set ANTHROPIC_API_KEY as a dedicated platform key.)
+ */
+export async function platformAi(): Promise<AiConfig | null> {
+  const env = serverFallbackAi();
+  if (env) return env;
+  try {
+    const { data } = await serviceClient
+      .from('org_ai_settings').select('provider, providers').order('updated_at', { ascending: false }).limit(25);
+    for (const row of (data ?? []) as { provider?: string; providers?: Record<string, { apiKey?: string; model?: string }> }[]) {
+      const providers = row.providers ?? {};
+      const active = (row.provider as AiProvider) || 'anthropic';
+      const tryOrder = [active, ...Object.keys(providers).filter((p) => p !== active)] as AiProvider[];
+      for (const p of tryOrder) {
+        const e = providers[p];
+        if (e?.apiKey) return { provider: p, apiKey: e.apiKey, model: e.model || undefined };
+      }
+    }
+  } catch { /* ignore */ }
+  return null;
+}
+
+/** Clean a page <title> into a brand name — drop "Home", taglines & separators. */
+function cleanCompanyName(raw: string, domain: string): string {
+  const parts = (raw || '').split(/\s*[|·•–—]\s*|\s+-\s+/).map((p) => p.trim()).filter(Boolean);
+  const generic = /^(home|homepage|home page|welcome|official site|official website|start|index)$/i;
+  const meaningful = parts.filter((p) => !generic.test(p));
+  let s = (meaningful[0] || parts[0] || '').replace(/^(home|welcome to)\s*[-–—:]\s*/i, '').trim();
+  if (!s) { const base = domain.split('.')[0] || domain; s = base.charAt(0).toUpperCase() + base.slice(1); }
+  return s.slice(0, 80);
+}
+
 /** Public (no-secret) view of the settings for the client. */
 function aiSettingsView(row: AiSettingsRow | null, canEdit: boolean) {
   const providers = row?.providers ?? {};
@@ -742,6 +780,7 @@ studioRouter.patch(
         if (v.id !== itemId) return v;
         const updated = { ...v };
         if (typeof body.name === 'string' && body.name.trim()) updated.name = body.name.trim();
+        if (typeof body.content === 'string') updated.content = body.content.slice(0, MAX_VAULT_CONTENT);
         if (body.meta && typeof body.meta === 'object') {
           updated.meta = { ...(v.meta ?? {}), ...(body.meta as Record<string, unknown>) };
         }
@@ -757,7 +796,7 @@ studioRouter.patch(
         .maybeSingle();
       if (error) throw new Error(error.message);
       if (!data) { res.status(404).json({ error: 'Project not found' }); return; }
-      res.json({ ok: true });
+      res.json(mapProject(data as ProjectRow, req.user!.id));
     } catch (err) {
       console.error('PATCH studio vault failed', err);
       res.status(500).json({ error: 'Failed to update vault item' });
@@ -879,6 +918,22 @@ interface VaultDocumentRow {
   ownerEmail?: string | null;
   url?: string | null;     // for kind 'website'
   format?: string | null;  // for kind 'data' (CSV, XLSX, …)
+  createdAt?: string | null;
+  category?: string | null; // derived bucket for markdown docs
+}
+
+// Derive a friendly category for a Vault doc from its meta source / name.
+function docCategory(meta: Record<string, unknown> | null, name: string): string {
+  const m = meta ?? {};
+  const src = typeof m.source === 'string' ? m.source : '';
+  if (src === 'agent-finding') return 'Agent findings';
+  if (src === 'site-insights') return m.competitor ? 'Competitor intel' : 'Company intel';
+  if (/^competitor:/i.test(name)) return 'Competitor intel';
+  if (/^company:/i.test(name)) return 'Company intel';
+  if (/^product:/i.test(name)) return 'Product';
+  if (/^insights/i.test(name)) return 'Site insights';
+  if (src === 'site-insights' || /report/i.test(name)) return 'Report';
+  return 'Document';
 }
 
 // GET vault -> { connectors, documents } aggregated across models, the context
@@ -894,7 +949,7 @@ studioRouter.get(
         db.from('models').select('id, name, data').eq('org_id', orgId),
         db
           .from('context_items')
-          .select('id, owner_id, scope, kind, name, meta, enabled')
+          .select('id, owner_id, scope, kind, name, meta, enabled, created_at')
           .eq('org_id', orgId),
         db
           .from('studio_projects')
@@ -933,6 +988,7 @@ studioRouter.get(
         kind: string;
         name: string;
         meta: Record<string, unknown> | null;
+        created_at: string;
       }[]) {
         ownerIds.add(c.owner_id);
         const srcName = c.scope === 'org' ? 'Org library' : 'Personal library';
@@ -960,6 +1016,8 @@ studioRouter.get(
             ownerId: c.owner_id,
             url: typeof c.meta?.url === 'string' ? c.meta.url : null,
             format: typeof c.meta?.format === 'string' ? c.meta.format : null,
+            createdAt: c.created_at,
+            category: docCategory(c.meta, c.name),
           });
         }
       }
@@ -1039,6 +1097,8 @@ studioRouter.get(
         ownerEmail: r.ownerId ? emails.get(r.ownerId) ?? null : (r.ownerEmail ?? null),
         url: r.url ?? null,
         format: r.format ?? null,
+        createdAt: r.createdAt ?? null,
+        category: r.category ?? null,
       }));
 
       res.json({ connectors: finishC, documents: finishD });
@@ -1369,7 +1429,14 @@ studioRouter.get(
     };
 
     let host = '';
-    try { host = new URL(url).hostname; } catch { /* ignore */ }
+    // API hosts return 404 at their root even when healthy. Probe a known
+    // health endpoint where we recognise the host (e.g. Supabase).
+    let probe = url;
+    try {
+      const u = new URL(url);
+      host = u.hostname;
+      if (u.hostname.endsWith('supabase.co')) probe = `${u.origin}/auth/v1/health`;
+    } catch { /* ignore */ }
 
     emit(`Resolving ${host || url}…`);
 
@@ -1380,17 +1447,20 @@ studioRouter.get(
 
       emit('Connecting…');
 
-      let r = await fetch(url, { method: 'HEAD', signal: controller.signal }).catch(() =>
-        fetch(url, { method: 'GET', signal: controller.signal })
+      let r = await fetch(probe, { method: 'HEAD', signal: controller.signal }).catch(() =>
+        fetch(probe, { method: 'GET', signal: controller.signal })
       );
-      if (r.status === 405) r = await fetch(url, { method: 'GET', signal: controller.signal });
+      if (r.status === 405) r = await fetch(probe, { method: 'GET', signal: controller.signal });
       clearTimeout(timer);
 
       const ms = Date.now() - start;
       const ct = r.headers.get('content-type') ?? '';
 
-      if (r.ok) {
-        emit(`${r.status} ${r.statusText}`, true);
+      // The host is reachable if it returns ANY HTTP response below 500 — a 404 at
+      // the root (or a 401 needing auth) still proves DNS/TLS/connectivity work.
+      const reachable = r.status < 500;
+      if (reachable) {
+        emit(`${r.status} ${r.statusText}${r.ok ? '' : ' — host reachable'}`, true);
         if (ct) emit(`Content-Type: ${ct}`);
         emit(`Latency: ${ms}ms`, true);
         emit('Connected', true, true);
@@ -1406,6 +1476,51 @@ studioRouter.get(
 
     res.end();
   }
+);
+
+// GET /orgs/:orgId/vault/db-analyze?ref=ctx:<id> — SSE: introspect a database
+// connector's live schema (tables + fields) and flag KPI-worthy columns.
+studioRouter.get(
+  '/orgs/:orgId/vault/db-analyze',
+  requireMember(),
+  async (req: Request, res: Response) => {
+    const { orgId } = req.params;
+    const ref = String(req.query.ref ?? '');
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders?.();
+    const emit = (obj: unknown) => res.write(`data: ${JSON.stringify(obj)}\n\n`);
+    try {
+      if (!ref.startsWith('ctx:')) { emit({ type: 'error', error: 'Only library database connectors can be analyzed.' }); res.end(); return; }
+      const ctxId = ref.slice(4);
+      const { data } = await req.db!.from('context_items').select('name, kind, meta').eq('id', ctxId).eq('org_id', orgId).maybeSingle();
+      if (!data) { emit({ type: 'error', error: 'Connector not found.' }); res.end(); return; }
+      const meta = ((data as any).meta ?? {}) as Record<string, unknown>;
+      const force = String(req.query.force ?? '') === 'true';
+      // Serve the cached schema unless a refresh is explicitly requested.
+      if (!force && meta.dbSchema && typeof meta.dbSchema === 'object') {
+        emit({ type: 'done', schema: meta.dbSchema, cached: true, analyzedAt: meta.dbAnalyzedAt ?? null });
+        res.end();
+        return;
+      }
+      const type = String(meta.connectorType ?? (data as any).kind);
+      emit({ type: 'step', msg: `Analyzing ${(data as any).name} (${type})…` });
+      const schema = await introspectDatabase(type, meta, (msg) => emit({ type: 'step', msg }));
+      emit({ type: 'step', msg: `Found ${schema.tables.length} table${schema.tables.length === 1 ? '' : 's'}, ${schema.kpiCandidates.length} KPI-worthy fields.` });
+      // Cache the result on the connector so we don't re-introspect every time.
+      const analyzedAt = new Date().toISOString();
+      try {
+        await req.db!.from('context_items')
+          .update({ meta: { ...meta, dbSchema: schema, dbAnalyzedAt: analyzedAt } })
+          .eq('id', ctxId).eq('org_id', orgId);
+      } catch { /* best-effort cache; analysis still returns */ }
+      emit({ type: 'done', schema, cached: false, analyzedAt });
+    } catch (e) {
+      emit({ type: 'error', error: e instanceof Error ? e.message : 'Analysis failed.' });
+    }
+    res.end();
+  },
 );
 
 // PATCH /orgs/:orgId/vault/ctx/:ctxId { name?, url?, description? } — update a context-library MCP connector
@@ -1771,17 +1886,34 @@ studioRouter.post(
       if (error) throw new Error(error.message);
       res.status(201).json(mapContext(data as ContextRow, req.user!.id));
 
-      // Auto-grow the memory graph from substantial new content (best-effort,
-      // fire-and-forget — never blocks or fails the create).
+      // Best-effort, fire-and-forget post-processing — never blocks the create:
+      //  1) Embed the doc so it's findable by semantic recall (the "second brain"
+      //     read_section path). Without this, match_context_items can't see it.
+      //  2) Grow the memory graph from substantial new content.
       const content = typeof body.content === 'string' ? body.content : '';
-      if (['doc', 'note', 'data', 'website'].includes(kind) && content.trim().length > 80) {
-        const itemId = (data as { id: string }).id;
+      const itemId = (data as { id: string }).id;
+      const embeddable = ['doc', 'note', 'data', 'website', 'html'].includes(kind) && !!content.trim();
+      const memorable = ['doc', 'note', 'data', 'website'].includes(kind) && content.trim().length > 80;
+      if (embeddable || memorable) {
         void (async () => {
           try {
             const ai = await loadAiConfig(orgId).catch(() => null);
-            if (!ai) return;
-            await ingestEpisode(req.db!, orgId,
-              { sourceKind: 'vault', sourceRef: itemId, title: name, text: content }, ai, resolveEmbeddingKey(ai));
+            const embedKey = resolveEmbeddingKey(ai);
+            if (embeddable && embedKey) {
+              const vec = await embedText(
+                profileText({ name, content, profile: (body.meta as Record<string, unknown>) ?? null }),
+                embedKey
+              );
+              if (vec) {
+                await req.db!.from('context_items')
+                  .update({ embedding: toVectorLiteral(vec) })
+                  .eq('id', itemId).eq('org_id', orgId);
+              }
+            }
+            if (memorable && ai) {
+              await ingestEpisode(req.db!, orgId,
+                { sourceKind: 'vault', sourceRef: itemId, title: name, text: content }, ai, embedKey);
+            }
           } catch { /* best-effort */ }
         })();
       }
@@ -2410,11 +2542,253 @@ export async function executeInternalAgentRun(
   }
 }
 
+// Compact, model-friendly summary of a domain's DataForSEO intel.
+function summarizeDomainIntel(intel: DomainIntel | null | undefined): unknown {
+  if (!intel) return null;
+  const last = intel.history?.[intel.history.length - 1];
+  return {
+    organicKeywords: intel.overview?.organicKeywords,
+    estMonthlyOrganicTraffic: intel.overview?.organicTraffic ?? last?.organicTraffic ?? null,
+    estTrafficValueUsd: intel.overview?.organicTrafficCost,
+    backlinks: intel.backlinks?.backlinks ?? null,
+    referringDomains: intel.backlinks?.referringDomains ?? null,
+    domainRank: intel.backlinks?.rank ?? null,
+    positionDistribution: intel.distribution ?? [],
+    topKeywords: (intel.topKeywords ?? []).slice(0, 10).map((k) => ({ keyword: k.keyword, position: k.position, volume: k.searchVolume })),
+    topCompetingDomains: (intel.competitors ?? []).slice(0, 8).map((c) => c.domain),
+    fetchedAt: intel.fetchedAt,
+  };
+}
+
+// Read the live data behind any header page so the assistant can answer from it.
+/* eslint-disable @typescript-eslint/no-explicit-any */
+// Opportunistically embed doc-like vault items that still lack an embedding, so
+// uploads created before semantic recall existed become findable. Best-effort and
+// self-draining: each call handles a small batch, so repeated reads converge.
+async function backfillDocEmbeddings(db: SupabaseClient, orgId: string, embedKey: string, limit = 8): Promise<void> {
+  try {
+    const { data } = await db.from('context_items')
+      .select('id, name, kind, content, meta, profile, tags')
+      .eq('org_id', orgId).eq('enabled', true).is('embedding', null).limit(40);
+    const rows = (data ?? []) as { id: string; name: string; kind: string; content: string | null; meta: any; profile: any; tags: string[] | null }[];
+    const docs = rows.filter((i) => {
+      if (i.meta?.companyProfile) return false;
+      if (/^competitor:|^company:|^product:/i.test(i.name)) return false;
+      if (!i.content || !i.content.trim()) return false;
+      return ['doc', 'file', 'data', 'html', 'md', 'note', 'website'].includes(String(i.kind)) || i.meta?.format === 'md';
+    }).slice(0, limit);
+    for (const d of docs) {
+      const vec = await embedText(
+        profileText({ name: d.name, tags: d.tags ?? undefined, profile: d.profile, content: d.content ?? '' }),
+        embedKey
+      );
+      if (vec) await db.from('context_items').update({ embedding: toVectorLiteral(vec) }).eq('id', d.id).eq('org_id', orgId);
+    }
+  } catch { /* best-effort */ }
+}
+
+async function readWorkspaceSection(req: Request, orgId: string, section: string, query: string): Promise<unknown> {
+  const db = req.db!;
+  const q = query.trim();
+  const intelFor = async (domain: string) => {
+    if (!domain) return null;
+    const { data } = await db.from('org_domain_intel').select('intel').eq('org_id', orgId).eq('domain', domain).maybeSingle();
+    return summarizeDomainIntel((data as any)?.intel as DomainIntel | undefined);
+  };
+  const insightsFor = async (domain: string) => {
+    if (!domain) return { overview: '', facts: [] as unknown[] };
+    const { data } = await db.from('org_site_insights').select('data').eq('org_id', orgId).eq('domain', domain).maybeSingle();
+    const d = (data as any)?.data;
+    return { overview: typeof d?.overview === 'string' ? d.overview.slice(0, 1500) : '', facts: Array.isArray(d?.facts) ? d.facts : [] };
+  };
+  try {
+    switch (section) {
+      case 'company': {
+        const { data: items } = await db.from('context_items').select('name, content, meta').eq('org_id', orgId);
+        const list = (items ?? []) as { name: string; content: string; meta: any }[];
+        const profile = list.find((i) => i.meta?.companyProfile === true);
+        const website = (profile?.meta?.website as string) || (profile?.content?.match(/https?:\/\/[^\s)]+/i)?.[0] ?? '');
+        const domain = website ? toDomain(website) : '';
+        const { overview, facts } = await insightsFor(domain);
+        return {
+          name: profile?.meta?.name ?? '',
+          website, domain,
+          profile: typeof profile?.content === 'string' ? profile.content.slice(0, 2500) : '',
+          overview, facts,
+          products: list.filter((i) => i.name.startsWith('Product: ')).map((p) => p.name.replace(/^Product:\s*/, '')),
+          seo: await intelFor(domain),
+        };
+      }
+      case 'competitor': {
+        const { data: items } = await db.from('context_items').select('name, content, meta').eq('org_id', orgId).ilike('name', 'Competitor: %');
+        const comps = (items ?? []) as { name: string; meta: any }[];
+        const names = comps.map((c) => c.name.replace(/^Competitor:\s*/, ''));
+        if (!q) return { competitors: names };
+        const match = comps.find((c) => c.name.toLowerCase().includes(q.toLowerCase()));
+        if (!match) return { note: `No tracked competitor matching "${q}". Known: ${names.join(', ') || 'none'}` };
+        const meta = match.meta ?? {};
+        const domain = meta.website ? toDomain(String(meta.website)) : '';
+        const { overview, facts } = await insightsFor(domain);
+        return { name: match.name.replace(/^Competitor:\s*/, ''), website: meta.website ?? '', summary: meta.summary ?? '', overview, facts, seo: await intelFor(domain) };
+      }
+      case 'blocks': {
+        const { data } = await db.from('widgets').select('name, type, dashboard_id, updated_at').eq('org_id', orgId).order('updated_at', { ascending: false }).limit(100);
+        return { blocks: data ?? [] };
+      }
+      case 'dashboards': {
+        const { data } = await db.from('dashboards').select('name, slug, "group", visibility, updated_at').eq('org_id', orgId).order('updated_at', { ascending: false }).limit(100);
+        return { dashboards: data ?? [] };
+      }
+      case 'reports': {
+        const { data } = await db.from('studio_projects').select('*').eq('org_id', orgId).order('updated_at', { ascending: false }).limit(50);
+        return { reports: (data ?? []).map((r: any) => ({ id: r.id, name: r.title ?? r.name ?? 'Report', updatedAt: r.updated_at })) };
+      }
+      case 'alerts': {
+        const { data } = await db.from('alerts').select('*').eq('org_id', orgId).order('created_at', { ascending: false }).limit(50);
+        return { alerts: data ?? [] };
+      }
+      case 'activity': {
+        const { data } = await db.from('agent_runs').select('*').eq('org_id', orgId).order('created_at', { ascending: false }).limit(20);
+        return { recentRuns: (data ?? []).map((r: any) => ({ id: r.id, agent: r.agent_name ?? r.agent_id, status: r.status, startedAt: r.created_at, summary: r.summary })) };
+      }
+      case 'connectors': {
+        const { data: conn } = await db.from('context_items').select('name, kind, meta').eq('org_id', orgId).eq('kind', 'connector').limit(100);
+        const { data: apis } = await db.from('org_platform_apis').select('provider').eq('org_id', orgId);
+        return { connectors: conn ?? [], platformApis: (apis ?? []).map((a: any) => a.provider) };
+      }
+      case 'documents': {
+        // Vault documents: uploaded files, markdown, saved reports/findings. With a
+        // query we surface the most RELEVANT doc by meaning (semantic recall over
+        // embeddings — the "second brain" path), honoring an explicit filename match
+        // first; without a query we list what's available.
+        const { data } = await db.from('context_items').select('id, name, kind, content, meta').eq('org_id', orgId).order('created_at', { ascending: false }).limit(300);
+        const all = (data ?? []) as { id: string; name: string; kind: string; content: string; meta: any }[];
+        const docs = all.filter((i) => {
+          if (i.meta?.companyProfile) return false;
+          if (/^competitor:|^company:|^product:/i.test(i.name)) return false;
+          return ['doc', 'file', 'data', 'html', 'md'].includes(String(i.kind)) || (!!i.content && i.meta?.format === 'md');
+        });
+        if (q) {
+          // 1) Explicit filename match — the assistant often passes a known name.
+          const named = docs.find((d) => d.name.toLowerCase().includes(q.toLowerCase()))
+            ?? all.find((d) => d.name.toLowerCase().includes(q.toLowerCase()));
+          // 2) Semantic recall over embedded docs, ranked by meaning.
+          let semantic: { id: string; name: string }[] = [];
+          try {
+            const ai = await loadAiConfig(orgId).catch(() => null);
+            const embedKey = resolveEmbeddingKey(ai);
+            const allowed = new Set(docs.map((d) => d.id));
+            const rel = await retrieveRelevant(db, orgId, q, 6, embedKey);
+            semantic = rel.filter((r) => allowed.has(r.id)).map((r) => ({ id: r.id, name: r.name }));
+            // Warm up older, un-embedded docs so the next read ranks them too.
+            if (embedKey) void backfillDocEmbeddings(db, orgId, embedKey);
+          } catch { /* fall back to name match */ }
+
+          const primaryId = named?.id ?? semantic[0]?.id ?? null;
+          if (!primaryId) return { note: `No document matching "${q}". Available: ${docs.map((d) => d.name).join(', ').slice(0, 800) || 'none'}` };
+          const rec = all.find((d) => d.id === primaryId)!;
+          const text = typeof rec.content === 'string' ? rec.content : '';
+          const related = semantic.map((s) => s.name).filter((n) => n !== rec.name).slice(0, 5);
+          return {
+            name: rec.name, kind: rec.kind, format: rec.meta?.format ?? null,
+            content: text.slice(0, 9000),
+            matchedBy: named ? 'name' : 'relevance',
+            related: related.length ? related : undefined,
+            note: !text.trim()
+              ? 'This document has no extracted text (e.g. a binary file whose contents were not parsed).'
+              : related.length
+                ? `Other documents relevant to "${q}" — call read_section("documents", query=…) again to read any: ${related.join(', ')}.`
+                : undefined,
+          };
+        }
+        return { documents: docs.map((d) => ({ name: d.name, kind: d.kind, format: d.meta?.format ?? null, hasText: !!(typeof d.content === 'string' && d.content.trim()) })) };
+      }
+      case 'goals': {
+        const { data } = await db.from('goals').select('title, status, plan, agents').eq('org_id', orgId).order('created_at', { ascending: false }).limit(50);
+        return { goals: data ?? [] };
+      }
+      case 'agents': {
+        const { data } = await db.from('agents').select('name, description, schedule').eq('org_id', orgId).limit(60);
+        const { data: ext } = await db.from('external_agents').select('name, provider, status, mission_status').eq('org_id', orgId).limit(40);
+        return { scheduledAgents: data ?? [], externalAgents: ext ?? [] };
+      }
+      default:
+        return { error: `Unknown section "${section}". Valid: company, competitor, documents, blocks, reports, dashboards, alerts, activity, connectors, goals, agents.` };
+    }
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'Failed to read section.' };
+  }
+}
+/* eslint-enable @typescript-eslint/no-explicit-any */
+
+// Find a dashboard by name (loose match) or create it, and return where the
+// next Block should sit. Lets the assistant "add a Block to <dashboard>".
+async function resolveDashboardForBlock(req: Request, orgId: string, name: string): Promise<{ id: string; gridY: number } | null> {
+  const db = req.db!;
+  const nm = name.trim();
+  if (!nm) return null;
+  let id: string | undefined;
+  const { data: exact } = await db.from('dashboards').select('id').eq('org_id', orgId).ilike('name', nm).limit(1);
+  id = (exact?.[0] as { id: string } | undefined)?.id;
+  if (!id) {
+    const { data: partial } = await db.from('dashboards').select('id').eq('org_id', orgId).ilike('name', `%${nm}%`).limit(1);
+    id = (partial?.[0] as { id: string } | undefined)?.id;
+  }
+  if (!id) {
+    const base = nm.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'dashboard';
+    const { data: ex } = await db.from('dashboards').select('slug').eq('org_id', orgId).like('slug', `${base}%`);
+    const taken = new Set((ex ?? []).map((r: { slug: string }) => r.slug));
+    let slug = base; let n = 2;
+    while (taken.has(slug)) slug = `${base}-${n++}`;
+    const { data: created, error } = await db.from('dashboards')
+      .insert({ id: randomUUID(), org_id: orgId, owner_id: req.user!.id, name: nm, slug, description: null, group_name: 'Company' })
+      .select('id').single();
+    if (error || !created) return null;
+    id = (created as { id: string }).id;
+  }
+  const { data: ws } = await db.from('widgets').select('grid_y, grid_h').eq('org_id', orgId).eq('dashboard_id', id);
+  const maxY = (ws ?? []).reduce((m: number, w: { grid_y?: number; grid_h?: number }) => Math.max(m, (w.grid_y ?? 0) + (w.grid_h ?? 1) - 1), -1);
+  return { id, gridY: maxY + 1 };
+}
+
+// Self-contained HTML for an Open Canada (CKAN) live-table Block. Mirrors the
+// client Block Gallery builder; fetches our public /open-data/ckan proxy.
+function openCanadaWidgetHtml(origin: string, rid: string, q: string, limit: number): string {
+  const js = (v: unknown) => JSON.stringify(v);
+  const api = `${origin}/api/open-data/ckan`;
+  return [
+    '<div style="height:100%;display:flex;flex-direction:column;font-family:inherit;color:var(--ink)">',
+    '<div id="oc-head" style="font-size:12px;color:var(--mut);margin-bottom:8px">Loading Open Canada data…</div>',
+    '<div id="oc-body" style="flex:1;overflow:auto"></div>',
+    '<div style="font-size:10px;color:var(--mut2);margin-top:6px">Source: Open Government Canada · datastore_search</div>',
+    '</div>',
+    '<script>(function(){',
+    `var API=${js(api)},RID=${js(rid)},Q=${js(q)},LIMIT=${limit};`,
+    'function esc(s){return String(s).replace(/[&<>]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;"}[c]})}',
+    'var u=API+"?resource_id="+encodeURIComponent(RID)+"&limit="+LIMIT+(Q?("&q="+encodeURIComponent(Q)):"");',
+    'fetch(u).then(function(r){return r.json()}).then(function(j){',
+    'if(!j||!j.success||!j.result){throw new Error((j&&j.error)||"No data")}',
+    'var res=j.result,recs=res.records||[];',
+    'var cols=(res.fields||[]).map(function(f){return f.id}).filter(function(id){return id!=="_id"});',
+    'if(!cols.length&&recs[0]){cols=Object.keys(recs[0]).filter(function(k){return k!=="_id"})}',
+    'document.getElementById("oc-head").textContent=(res.total!=null?Number(res.total).toLocaleString()+" records":recs.length+" records")+(Q?(" · \\""+Q+"\\""):"");',
+    'if(!recs.length){document.getElementById("oc-body").textContent="No records.";return}',
+    'var h="<table style=\\"width:100%;border-collapse:collapse;font-size:12px\\"><thead><tr>"+cols.map(function(c){return "<th style=\\"text-align:left;padding:5px 8px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--card);font-size:10px;letter-spacing:.03em;text-transform:uppercase;color:var(--mut);white-space:nowrap\\">"+esc(c.replace(/_/g," "))+"</th>"}).join("")+"</tr></thead><tbody>";',
+    'recs.forEach(function(row){h+="<tr>"+cols.map(function(c){return "<td style=\\"padding:5px 8px;border-bottom:1px solid var(--line);white-space:nowrap\\">"+esc(row[c]==null?"":row[c])+"</td>"}).join("")+"</tr>"});',
+    'h+="</tbody></table>";document.getElementById("oc-body").innerHTML=h;',
+    '}).catch(function(e){document.getElementById("oc-head").textContent="Could not load Open Canada data: "+e.message});',
+    '})();</script>',
+  ].join('\n');
+}
+
 // Tools the assistant can dispatch — executed under the caller's RLS db.
 // `onAgentStep`, when provided, receives an inner agent's live thoughts so a
 // chat-triggered run_agent streams the sub-agent's reasoning to the client too.
 function assistantToolExecutor(req: Request, orgId: string, onAgentStep?: (s: { icon: string; text: string }) => void) {
   return async (name: string, input: Record<string, unknown>): Promise<unknown> => {
+    if (name === 'read_section') {
+      return await readWorkspaceSection(req, orgId, String(input.section ?? ''), String(input.query ?? ''));
+    }
     if (name === 'web_research') {
       const results = await webSearch(String(input.query ?? ''));
       return results.length ? results : { note: 'No web results — try wikipedia_lookup or fetch_url on the company site instead.' };
@@ -2540,12 +2914,54 @@ function assistantToolExecutor(req: Request, orgId: string, onAgentStep?: (s: { 
         note: 'Widget created and now visible on the Widgets page. Open it to generate the live visual from this prompt.',
       };
     }
+    if (name === 'create_open_canada_block') {
+      const rid = (String(input.resourceId ?? '').trim()) || '2f960711-2447-472d-81b0-731fdfbf59a1';
+      if (!/^[a-f0-9-]{8,40}$/i.test(rid)) return { error: 'Invalid resourceId — expected a CKAN resource id.' };
+      const qv = String(input.q ?? '').trim().slice(0, 200);
+      const limit = Math.min(Math.max(Number(input.limit) || 25, 1), 100);
+      const nm = String(input.name ?? '').trim().slice(0, 120) || 'Open Canada dataset';
+      const origin = (req.headers.origin as string) || (req.headers.referer ? new URL(String(req.headers.referer)).origin : '');
+      const html = openCanadaWidgetHtml(origin, rid, qv, limit);
+      // Optionally place it on a named dashboard (find-or-create).
+      const dashName = String(input.dashboard ?? '').trim();
+      const placement = dashName ? await resolveDashboardForBlock(req, orgId, dashName) : null;
+      const wid = randomUUID();
+      const now = new Date().toISOString();
+      const { data, error } = await req.db!.from('widgets').insert({
+        id: wid, org_id: orgId, dashboard_id: placement?.id ?? null, owner_id: req.user!.id,
+        name: nm, type: 'table', html, prompt: null,
+        grid_x: 0, grid_y: placement?.gridY ?? 0, grid_w: 4, grid_h: 3, sources: [], alert_rule: null,
+        created_at: now, updated_at: now,
+      }).select('id, name').single();
+      if (error) return { error: error.message };
+      return {
+        ok: true, id: (data as { id: string }).id, name: nm, type: 'table',
+        url: `/app/${orgId}/widgets/${wid}`,
+        note: placement
+          ? `Live Open Canada data Block created and added to the "${dashName}" dashboard.`
+          : 'Live Open Canada data Block created — it renders the dataset table immediately and is visible on the Blocks page (My Blocks).',
+      };
+    }
     if (name === 'deploy_agent') {
       const provider = ['hermes', 'openclaw'].includes(String(input.provider)) ? String(input.provider) : null;
       if (!provider) return { error: "provider must be 'hermes' or 'openclaw'." };
       const mission = String(input.mission ?? '').trim();
       if (!mission) return { error: 'A mission is required to deploy an agent.' };
       const nm = String(input.name ?? '').trim().slice(0, 80) || `${provider === 'hermes' ? 'Hermes' : 'OpenClaw'} mission`;
+      // Human-in-the-loop, enforced server-side (not just via the model): only
+      // deploy when (a) the model passed confirmed:true AND (b) the user's LATEST
+      // message is an actual approval. In the preview turn the latest user message
+      // is the original request, so a same-turn confirmed:true still returns a
+      // preview — the user must click "Approve & deploy" (a new message) first.
+      const msgs = (req.body?.messages ?? []) as { role?: string; content?: string }[];
+      const lastUser = [...msgs].reverse().find((m) => m?.role === 'user')?.content ?? '';
+      const approved = /\b(approv|deploy (it|the agent) now|go ahead|yes,? deploy|confirm deploy)\b/i.test(String(lastUser));
+      if (input.confirmed !== true || !approved) {
+        return {
+          needsApproval: true, provider, mission, reason: String(input.reason ?? ''),
+          note: 'PREVIEW ONLY — nothing was deployed (human approval required). Show the user this proposed agent (provider, mission, why) and append an <<ACTIONS>> block with the SINGLE action: label "✅ Approve & deploy", prompt "Approved — deploy the agent now with confirmed:true." Then STOP your turn and wait. Do NOT call deploy_agent again in this same turn.',
+        };
+      }
       try {
         const { row, runtime } = await provisionExternalAgent(req.db!, {
           orgId, userId: req.user!.id, provider: provider as 'hermes' | 'openclaw',
@@ -2594,6 +3010,16 @@ async function assistantContext(req: Request, orgId: string, rawMessages: ChatMs
     agents = (data ?? []) as typeof agents;
   } catch { /* agents are optional context */ }
 
+  // Currently-deployed external agents (Hermes / OpenClaw) — LIVE state, so the
+  // assistant never claims a deployed agent exists after it was deleted.
+  let externalAgents: { name: string; provider: string; status: string; mission_status: string }[] = [];
+  try {
+    const { data } = await req.db!
+      .from('external_agents').select('name, provider, status, mission_status')
+      .eq('org_id', orgId).order('created_at', { ascending: false }).limit(40);
+    externalAgents = (data ?? []) as typeof externalAgents;
+  } catch { /* optional */ }
+
   const lastUser = [...rawMessages].reverse().find((m) => m.role === 'user');
   let web: WebResult[] = [];
   if (webResearch && lastUser?.content) web = await webSearch(lastUser.content);
@@ -2607,7 +3033,7 @@ async function assistantContext(req: Request, orgId: string, rawMessages: ChatMs
     const facts = await recallMemory(req.db!, orgId, lastUser.content, 12, embedKey).catch(() => []);
     memory = facts.map((f) => f.statement);
   }
-  return { inventory, companyProfile, web, ai, memory, goals, agents };
+  return { inventory, companyProfile, web, ai, memory, goals, agents, externalAgents };
 }
 
 // GET status — platform health for the Settings → Status tab.
@@ -2643,6 +3069,34 @@ studioRouter.get(
   }
 );
 
+// POST studio/powerbi-describe — AI explanation of what a Power BI report
+// portrays, from its parsed structure (tables/columns, sources, KPIs, pages).
+studioRouter.post(
+  '/orgs/:orgId/studio/powerbi-describe',
+  requireMember(),
+  async (req: Request, res: Response) => {
+    const orgId = req.params.orgId;
+    const body = (req.body || {}) as Partial<PbiStructure>;
+    if (!body.name) { res.status(400).json({ error: 'name is required' }); return; }
+    try {
+      const ai = await loadAiConfig(orgId).catch(() => null);
+      const s: PbiStructure = {
+        name: String(body.name).slice(0, 200),
+        tables: Array.isArray(body.tables) ? body.tables.slice(0, 60).map((t) => ({ name: String(t?.name ?? ''), columns: (t?.columns ?? []).map(String).slice(0, 40) })) : [],
+        sources: (body.sources ?? []).map(String).slice(0, 20),
+        sourceTypes: (body.sourceTypes ?? []).map(String).slice(0, 20),
+        kpis: (body.kpis ?? []).map(String).slice(0, 80),
+        entities: (body.entities ?? []).map(String).slice(0, 60),
+        pages: (body.pages ?? []).map(String).slice(0, 40),
+      };
+      res.json(await describePowerBi(ai, s));
+    } catch (err) {
+      console.error('powerbi-describe failed', err);
+      res.status(500).json({ error: 'Failed to describe report.' });
+    }
+  }
+);
+
 // POST assistant/title { content } — a concise title for a markdown note.
 studioRouter.post(
   '/orgs/:orgId/assistant/title',
@@ -2673,9 +3127,9 @@ studioRouter.post(
       return;
     }
     try {
-      const { inventory, companyProfile, web, ai, memory, goals, agents } = await assistantContext(req, orgId, rawMessages, !!body.webResearch);
+      const { inventory, companyProfile, web, ai, memory, goals, agents, externalAgents } = await assistantContext(req, orgId, rawMessages, !!body.webResearch);
       const executeTool = assistantToolExecutor(req, orgId);
-      const reply = await runAssistant({ ai, inventory, messages: rawMessages, executeTool, web, companyProfile, memory, goals, agents });
+      const reply = await runAssistant({ ai, inventory, messages: rawMessages, executeTool, web, companyProfile, memory, goals, agents, externalAgents });
       res.json({ ...reply, sources: web });
     } catch (err) {
       console.error('POST assistant/chat failed', err);
@@ -2708,7 +3162,7 @@ studioRouter.post(
     }
     try {
       if (body.webResearch) send({ type: 'step', icon: '🔍', text: 'Gathering initial web context' });
-      const { inventory, companyProfile, web, ai, memory, goals, agents } = await assistantContext(req, orgId, rawMessages, !!body.webResearch);
+      const { inventory, companyProfile, web, ai, memory, goals, agents, externalAgents } = await assistantContext(req, orgId, rawMessages, !!body.webResearch);
       send({ type: 'step', icon: '🧭', text: 'Reviewing your Data Vault & company profile' });
       if (goals.length) send({ type: 'step', icon: '🎯', text: `Checking your ${goals.length} goal${goals.length === 1 ? '' : 's'}` });
       if (agents.length) send({ type: 'step', icon: '🤖', text: `Reviewing your ${agents.length} agent${agents.length === 1 ? '' : 's'}` });
@@ -2716,10 +3170,10 @@ studioRouter.post(
       const sendStep = (s: { icon: string; text: string }) => send({ type: 'step', ...s });
       const executeTool = assistantToolExecutor(req, orgId, sendStep);
       const reply = await runAssistant({
-        ai, inventory, messages: rawMessages, executeTool, web, companyProfile, memory, goals, agents,
+        ai, inventory, messages: rawMessages, executeTool, web, companyProfile, memory, goals, agents, externalAgents,
         onStep: sendStep,
       });
-      send({ type: 'done', text: reply.text, actions: reply.actions ?? [], suggestions: reply.suggestions ?? [], usedAI: reply.usedAI, aiError: reply.aiError ?? null, sources: web });
+      send({ type: 'done', text: reply.text, actions: reply.actions ?? [], suggestions: reply.suggestions ?? [], readDocs: reply.readDocs ?? [], usedAI: reply.usedAI, aiError: reply.aiError ?? null, sources: web });
       res.end();
     } catch (err) {
       console.error('POST assistant/chat/stream failed', err);
@@ -2769,7 +3223,7 @@ studioRouter.post(
         webSearch(`${siteTitle || domain} company`, 6).catch(() => [] as WebResult[]),
       ]);
       const analysis = await analyzeUrl({ ai, siteText, siteTitle, url: website, lenses: ['company', 'competitive'], web });
-      const companyName = analysis.sourceTitle || siteTitle || domain;
+      const companyName = cleanCompanyName(analysis.sourceTitle || siteTitle || domain, domain);
       send({ type: 'company', name: companyName, summary: analysis.company?.summary ?? '', facts: analysis.company?.facts ?? [] });
       if (analysis.company?.facts?.length) detail(`Extracted ${analysis.company.facts.length} company facts.`);
 
@@ -2845,8 +3299,8 @@ onboardingPublicRouter.post('/onboarding/analyze', async (req: Request, res: Res
 
   if (!website) { send({ type: 'error', error: 'Enter a valid website URL (e.g. https://acme.com).' }); res.end(); return; }
   const domain = (() => { try { return new URL(website).hostname.replace(/^www\./, ''); } catch { return website; } })();
-  // No org yet → use the platform server key for AI (any provider; graceful if absent).
-  const ai = serverFallbackAi();
+  // No org yet → use the platform AI (env key, else any workspace's configured key).
+  const ai = await platformAi();
 
   try {
     step('🌐', `Opening ${domain} and reading the site…`);
@@ -2860,7 +3314,7 @@ onboardingPublicRouter.post('/onboarding/analyze', async (req: Request, res: Res
       webSearch(`${siteTitle || domain} company`, 6).catch(() => [] as WebResult[]),
     ]);
     const analysis = await analyzeUrl({ ai, siteText, siteTitle, url: website, lenses: ['company', 'competitive', 'products', 'metrics'], web });
-    const companyName = analysis.sourceTitle || siteTitle || domain;
+    const companyName = cleanCompanyName(analysis.sourceTitle || siteTitle || domain, domain);
     send({ type: 'company', name: companyName, summary: analysis.company?.summary ?? '', facts: analysis.company?.facts ?? [] });
     if (analysis.company?.facts?.length) detail(`Extracted ${analysis.company.facts.length} company facts.`);
 
@@ -3197,6 +3651,42 @@ studioRouter.post(
     } catch (err) {
       console.error('POST studio suggest-products failed', err);
       res.status(500).json({ error: 'Failed to suggest products.' });
+    }
+  }
+);
+
+// GET gallery-blocks — all admin-built blocks + built-in overrides (the client
+// merges them: an override row whose slug matches a built-in edits/hides it).
+// Returns disabled rows too so the client can hide disabled built-ins.
+studioRouter.get(
+  '/orgs/:orgId/gallery-blocks',
+  requireMember(),
+  async (_req: Request, res: Response) => {
+    try {
+      const { data, error } = await serviceClient.from('gallery_blocks').select('*').order('created_at', { ascending: false });
+      if (error) throw new Error(error.message);
+      res.json({ blocks: data ?? [] });
+    } catch (err) {
+      console.error('GET gallery-blocks failed', err);
+      res.json({ blocks: [] });
+    }
+  }
+);
+
+// GET public-company?symbol=TSXV:LOVE — live market data for a listed company
+// from a reliable source (Yahoo Finance), to replace stale AI-guessed figures.
+studioRouter.get(
+  '/orgs/:orgId/studio/public-company',
+  requireMember(),
+  async (req: Request, res: Response) => {
+    const symbol = String(req.query.symbol ?? '').trim();
+    const name = String(req.query.name ?? '').trim();
+    if (!symbol && !name) { res.status(400).json({ error: 'Provide a symbol or name.' }); return; }
+    try {
+      res.json({ company: await fetchPublicCompany(symbol, name || undefined) });
+    } catch (err) {
+      console.error('GET public-company failed', err);
+      res.status(502).json({ error: 'Failed to fetch market data.' });
     }
   }
 );

@@ -13,6 +13,7 @@ import {
   type ExternalAgent,
   type ExternalAgentProvider,
 } from '../../lib/api'
+import AgentConfigModal from './AgentConfigModal'
 import './external-agents.css'
 
 // Memorable random codenames — used as the default instance name (editable).
@@ -67,10 +68,11 @@ export default function ExternalAgents({
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [deployProvider, setDeployProvider] = useState<ExternalAgentProvider | null>(null)
-  const [form, setForm] = useState({ name: '', region: 'us-east', size: 'small', mission: '', reason: '' })
+  const [form, setForm] = useState({ name: '', region: 'us-east', size: 'small', mission: '', reason: '', runtime: 'cloud' as 'cloud' | 'self-hosted' })
   const [deploying, setDeploying] = useState(false)
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const [orgoReady, setOrgoReady] = useState<boolean | null>(null)
+  const [configAgent, setConfigAgent] = useState<ExternalAgent | null>(null)
 
   useEffect(() => {
     let on = true
@@ -113,14 +115,37 @@ export default function ExternalAgents({
     setError(null)
     try {
       const t = await getToken()
-      await deployExternalAgent(t, orgId, { provider: deployProvider, ...form })
+      const { name, region, size, mission, reason, runtime } = form
+      await deployExternalAgent(t, orgId, {
+        provider: deployProvider, name, region, size, mission, reason,
+        runtime: runtime === 'self-hosted' ? 'self-hosted' : undefined,
+      })
       setDeployProvider(null)
-      setForm({ name: '', region: 'us-east', size: 'small', mission: '', reason: '' })
+      setForm({ name: '', region: 'us-east', size: 'small', mission: '', reason: '', runtime: 'cloud' })
       await load()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Deploy failed.')
     } finally {
       setDeploying(false)
+    }
+  }
+
+  async function redeploy(a: ExternalAgent) {
+    setBusy(a.id)
+    setError(null)
+    try {
+      const t = await getToken()
+      await deployExternalAgent(t, orgId, {
+        provider: a.provider, name: a.name, region: a.region ?? 'us-east', size: a.size ?? 'small',
+        mission: a.mission ?? '', reason: a.reason ?? '',
+        runtime: a.runtime === 'self-hosted' ? 'self-hosted' : undefined,
+        settings: a.settings ?? undefined, // carry the configured budget/cadence/guardrails into the re-run
+      })
+      await load()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Re-deploy failed.')
+    } finally {
+      setBusy(null)
     }
   }
 
@@ -182,9 +207,9 @@ export default function ExternalAgents({
               <button
                 type="button"
                 className="btn btn-primary btn-xs"
-                onClick={() => { setDeployProvider(p.id); setForm({ name: randomAgentName(), region: 'us-east', size: 'small', mission: '', reason: '' }); setError(null) }}
+                onClick={() => { setDeployProvider(p.id); setForm({ name: randomAgentName(), region: 'us-east', size: 'small', mission: '', reason: '', runtime: 'cloud' }); setError(null) }}
               >
-                🚀 Deploy to VM
+                🚀 Deploy
               </button>
             </div>
 
@@ -211,8 +236,39 @@ export default function ExternalAgents({
                       <div className="ea-card-meta">
                         {p.label} · {a.region ?? '—'} · {a.size ?? '—'}
                         <span className={`ea-via ea-via--${a.deployedVia}`}>{a.deployedVia === 'chat' ? '💬 via assistant' : '🛠 manual'}</span>
-                        <span className={`ea-runtime ea-runtime--${a.runtime}`}>{a.runtime === 'orgo' ? '🖥 Orgo VM' : '🧪 simulated'}</span>
+                        <span className={`ea-runtime ea-runtime--${a.runtime}`}>{a.runtime === 'orgo' ? '🖥 Orgo Cloud' : a.runtime === 'self-hosted' ? '🖥 Self-hosted' : '🧪 simulated'}</span>
                       </div>
+
+                      {a.soul && (
+                        <div className="ea-soul">
+                          {a.soul.soul && <p className="ea-soul-persona">{a.soul.soul}</p>}
+                          {a.soul.skills.length > 0 && (
+                            <div className="ea-soul-skills">
+                              {a.soul.skills.map((sk, i) => <span key={i} className="ea-soul-skill">{sk}</span>)}
+                            </div>
+                          )}
+                          {a.soul.humanMd && (
+                            <details className="ea-soul-human">
+                              <summary>🪪 human.md</summary>
+                              <pre className="ea-soul-md">{a.soul.humanMd}</pre>
+                            </details>
+                          )}
+                        </div>
+                      )}
+
+                      {a.settings && (() => {
+                        const b = a.settings.budget ?? {}
+                        const g = a.settings.guardrails ?? {}
+                        const chips: string[] = []
+                        if (b.maxRuntimeMin) chips.push(`⏱ ${b.maxRuntimeMin}m`)
+                        if (b.maxSteps) chips.push(`👣 ${b.maxSteps} steps`)
+                        if (b.maxSpendUsd) chips.push(`💰 $${b.maxSpendUsd}`)
+                        if (a.settings.cadence && a.settings.cadence !== 'once') chips.push(`🔁 ${a.settings.cadence}`)
+                        if (g.requireApproval) chips.push('🛡 approval')
+                        if (g.readOnly) chips.push('👁 read-only')
+                        if (g.allowedDomains && g.allowedDomains.length) chips.push(`🌐 ${g.allowedDomains.length} domains`)
+                        return chips.length ? <div className="ea-cfg-badges">{chips.map((c, i) => <span key={i} className="ea-cfg-badge">{c}</span>)}</div> : null
+                      })()}
 
                       {a.mission && (
                         <div className="ea-mission">
@@ -227,6 +283,22 @@ export default function ExternalAgents({
                           {a.reason && <p className="ea-reason"><strong>Why:</strong> {a.reason}</p>}
                         </div>
                       )}
+
+                      {(a.status === 'failed' || a.missionStatus === 'failed') && (() => {
+                        const failEv = [...a.events].reverse().find((e) => e.kind === 'failed')
+                        const msg = (failEv?.message ?? 'The deployment could not be completed.').replace(/^Orgo error:\s*/i, '')
+                        const isUpgrade = /paid plan|upgrade/i.test(msg)
+                        return (
+                          <div className="ea-fail">
+                            <div className="ea-fail-head">⚠ Deployment failed</div>
+                            <p className="ea-fail-msg">{msg}</p>
+                            <div className="ea-fail-actions">
+                              {isUpgrade && <a className="btn btn-primary btn-xs" href="https://www.orgo.ai/billing" target="_blank" rel="noreferrer">Upgrade Orgo →</a>}
+                              <button className="btn btn-ghost btn-xs" onClick={() => void redeploy(a)}>↻ Re-deploy</button>
+                            </div>
+                          </div>
+                        )
+                      })()}
 
                       {a.missionStatus === 'completed' && result?.summary && (
                         <div className="ea-result">
@@ -262,7 +334,25 @@ export default function ExternalAgents({
                       {a.status === 'running' && a.host && (
                         <a className="ea-host" href={a.host} target="_blank" rel="noreferrer">{a.host} ↗</a>
                       )}
+
+                      {a.runtime === 'self-hosted' && a.callbackToken && (() => {
+                        const origin = typeof window !== 'undefined' ? window.location.origin : ''
+                        const cmd = `DEEPLOGIC_URL=${origin} \\\nAGENT_ID=${a.id} \\\nAGENT_TOKEN=${a.callbackToken} \\\nHERMES_CMD='your-hermes "{{mission}}"' \\\nnode scripts/hermes-worker.mjs`
+                        return (
+                          <details className="ea-connect">
+                            <summary>🔌 Connect your worker</summary>
+                            <p className="ea-connect-note">
+                              Run this on your machine (Mac mini, etc.). It claims the mission and reports back — no inbound
+                              exposure needed. Replace <code>HERMES_CMD</code> with your Hermes command (<code>{'{{mission}}'}</code> is substituted).
+                            </p>
+                            <pre className="ea-connect-cmd"><code>{cmd}</code></pre>
+                            <button type="button" className="btn btn-ghost btn-xs" onClick={() => void navigator.clipboard?.writeText(cmd)}>Copy command</button>
+                          </details>
+                        )
+                      })()}
+
                       <div className="ea-card-actions">
+                        <button className="btn btn-ghost btn-xs" onClick={() => setConfigAgent(a)}>⚙ Configure</button>
                         {a.status === 'running' && (
                           <button className="btn btn-ghost btn-xs" disabled={busy === a.id} onClick={() => void stop(a.id)}>
                             {busy === a.id ? '…' : 'Stop'}
@@ -281,6 +371,15 @@ export default function ExternalAgents({
         )
       })}
 
+      {configAgent && (
+        <AgentConfigModal
+          orgId={orgId}
+          agent={configAgent}
+          onClose={() => setConfigAgent(null)}
+          onSaved={(updated) => setItems((prev) => prev.map((x) => (x.id === updated.id ? updated : x)))}
+        />
+      )}
+
       {deployProvider && (
         <div className="studio-modal-backdrop" onClick={() => !deploying && setDeployProvider(null)}>
           <form className="studio-modal" onClick={(e) => e.stopPropagation()} onSubmit={deploy}>
@@ -289,8 +388,8 @@ export default function ExternalAgents({
 
             {orgoReady === false && (
               <div className="ea-orgo-note ea-orgo-note--warn">
-                ⚠ No Orgo.ai key connected — this will run <strong>simulated</strong>. Connect Orgo in{' '}
-                <Link to={`/app/${orgId}/settings?tab=integrations`}>Settings → Integrations</Link> for a real VM.
+                ⚠ Orgo.ai not enabled — this will run <strong>simulated</strong>. Add your key <em>and turn Orgo on</em> in{' '}
+                <Link to={`/app/${orgId}/settings?tab=ai`}>Settings → AI Providers</Link> for a real VM.
               </div>
             )}
             {orgoReady && (
@@ -298,6 +397,20 @@ export default function ExternalAgents({
                 🖥 Deploys to a real <strong>Orgo.ai</strong> VM. It works autonomously and reports results back to DeepLogic securely.
               </div>
             )}
+
+            <label className="studio-field">
+              <span>Runtime</span>
+              <select className="studio-select" value={form.runtime} onChange={(e) => setForm((f) => ({ ...f, runtime: e.target.value as 'cloud' | 'self-hosted' }))}>
+                <option value="cloud">Orgo Cloud</option>
+                <option value="self-hosted">Self-hosted — my own machine</option>
+              </select>
+              {form.runtime === 'self-hosted' && (
+                <span className="ea-runtime-hint">
+                  Runs on your computer (e.g. a Mac mini). After deploy, use the agent’s <strong>Connect</strong> details
+                  to run the worker — it claims the mission and reports back. No inbound exposure needed.
+                </span>
+              )}
+            </label>
 
             <label className="studio-field">
               <span>Goal — what should this agent accomplish?</span>

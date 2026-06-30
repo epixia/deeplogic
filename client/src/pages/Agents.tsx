@@ -8,6 +8,7 @@ import {
   deleteAgent,
   stopAgent,
   suggestAgentTeam,
+  suggestAgentTools,
   createAgentsBulk,
   runAgentStream,
   type Agent,
@@ -264,6 +265,21 @@ export default function Agents() {
     }))
   }
 
+  const [genningTools, setGenningTools] = useState(false)
+  async function genTools() {
+    if (genningTools) return
+    setGenningTools(true)
+    try {
+      const t = await getAccessToken()
+      if (!t) return
+      const { tools } = await suggestAgentTools(t, orgId, {
+        name: draft.name, description: draft.description, systemPrompt: draft.systemPrompt,
+        available: AGENT_TOOLS.map((x) => ({ name: x.name, label: x.label, description: x.description })),
+      })
+      if (tools.length) set({ tools })
+    } catch { /* leave selection as-is */ } finally { setGenningTools(false) }
+  }
+
   return (
     <main className="wrap studio">
       <header className="studio-head">
@@ -366,7 +382,12 @@ export default function Agents() {
             </label>
 
             <div className="studio-field">
-              <span>Tools <span className="agents-optional">(what this agent can do)</span></span>
+              <span className="agents-tools-label">
+                Tools <span className="agents-optional">(what this agent can do)</span>
+                <button type="button" className="btn btn-ghost btn-xs agents-gen-skills" onClick={() => void genTools()} disabled={genningTools}>
+                  {genningTools ? '…' : '✨ Generate'}
+                </button>
+              </span>
               <div className="agents-tools">
                 {AGENT_TOOLS.map((t) => {
                   const on = draft.tools.includes(t.name)

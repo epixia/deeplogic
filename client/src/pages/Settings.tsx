@@ -22,7 +22,8 @@ import AiSettingsCard from '../components/studio/AiSettingsCard'
 import OrgoIntegrationCard from '../components/settings/OrgoIntegrationCard'
 import IntegrationsCatalog from '../components/settings/IntegrationsCatalog'
 import PlatformApisCatalog from '../components/settings/PlatformApisCatalog'
-import { SKINS, readSkin, saveSkin } from '../styles/skins'
+import CompanyProfile from '../components/vault/CompanyProfile'
+import { BRANDS, readBrand, saveBrand, type BrandId } from '../styles/skins'
 import { NAV_ITEMS, readHiddenNav, saveHiddenNav } from '../lib/navPrefs'
 import { getPlatformStatus, type PlatformStatus } from '../lib/api'
 import './settings.css'
@@ -36,7 +37,7 @@ const PLAN_LABELS: Record<string, string> = {
   enterprise: 'Enterprise',
 }
 
-type Tab = 'members' | 'ai' | 'integrations' | 'apis' | 'billing' | 'appearance' | 'profile' | 'status'
+type Tab = 'members' | 'ai' | 'integrations' | 'apis' | 'billing' | 'appearance' | 'profile' | 'status' | 'company'
 
 export default function Settings() {
   const { orgId = '' } = useParams<{ orgId: string }>()
@@ -46,6 +47,7 @@ export default function Settings() {
     rawTab === 'members' ? 'members' :
     rawTab === 'ai' ? 'ai' :
     rawTab === 'integrations' ? 'integrations' :
+    rawTab === 'company' ? 'company' :
     rawTab === 'apis' ? 'apis' :
     rawTab === 'billing' ? 'billing' :
     rawTab === 'appearance' ? 'appearance' :
@@ -65,6 +67,7 @@ export default function Settings() {
 
   const TABS: { id: Tab; label: string }[] = [
     { id: 'profile',    label: 'Profile' },
+    { id: 'company',    label: 'Company' },
     { id: 'appearance', label: 'Appearance' },
     { id: 'members',    label: 'Team' },
     { id: 'ai',         label: 'AI Providers' },
@@ -104,6 +107,12 @@ export default function Settings() {
 
       {activeTab === 'profile' && <ProfileTab />}
 
+      {activeTab === 'company' && (
+        <div className="dl-set__tab-body">
+          <CompanyProfile orgId={orgId} getToken={() => getAccessToken().then((t) => t ?? '')} />
+        </div>
+      )}
+
       {activeTab === 'status' && <StatusTab orgId={orgId} getAccessToken={getAccessToken} />}
 
       {activeTab === 'appearance' && <AppearanceTab />}
@@ -111,12 +120,12 @@ export default function Settings() {
       {activeTab === 'ai' && (
         <div className="dl-set__tab-body">
           <AiSettingsCard orgId={orgId} getToken={() => getAccessToken().then((t) => t ?? '')} />
+          <OrgoIntegrationCard orgId={orgId} getToken={() => getAccessToken().then((t) => t ?? '')} />
         </div>
       )}
 
       {activeTab === 'integrations' && (
         <div className="dl-set__tab-body">
-          <OrgoIntegrationCard orgId={orgId} getToken={() => getAccessToken().then((t) => t ?? '')} />
           <IntegrationsCatalog orgId={orgId} getToken={() => getAccessToken().then((t) => t ?? '')} />
         </div>
       )}
@@ -401,12 +410,12 @@ function StatusTab({
 // ---------------------------------------------------------------------------
 
 function AppearanceTab() {
-  const [skin, setSkinState] = useState<string>(readSkin)
+  const [brand, setBrandState] = useState<BrandId>(readBrand)
   const [hiddenNav, setHiddenNav] = useState<Set<string>>(readHiddenNav)
 
-  function choose(id: string) {
-    setSkinState(id)
-    saveSkin(id) // dispatches event → ThemeManager re-applies instantly
+  function chooseBrand(id: BrandId) {
+    setBrandState(id)
+    saveBrand(id) // dispatches event → ThemeManager re-applies accent/logo instantly
   }
 
   function toggleNav(key: string) {
@@ -450,35 +459,28 @@ function AppearanceTab() {
 
       <section className="rounded-card dl-set__card">
         <div className="dl-set__cardhead">
-          <h2>Theme style</h2>
+          <h2>Branding</h2>
         </div>
         <p className="dl-set__hint">
-          Pick a palette for the whole platform — it restyles both light and dark mode
-          (toggle modes with 🌙 / ☀️ in the top bar). Generated Blocks &amp; reports follow
-          your choice too. Saved on this device.
+          Set the accent &amp; logo colour for the platform — and for generated Blocks &amp; reports.
+          Layered on top of your theme style. Saved on this device.
         </p>
-
-        <div className="dl-skin-grid">
-          {SKINS.map((s) => (
+        <div className="dl-brand-grid">
+          {BRANDS.map((b) => (
             <button
-              key={s.id}
+              key={b.id}
               type="button"
-              className={`dl-skin-card${skin === s.id ? ' selected' : ''}`}
-              onClick={() => choose(s.id)}
+              className={`dl-brand-card${brand === b.id ? ' selected' : ''}`}
+              onClick={() => chooseBrand(b.id)}
+              aria-pressed={brand === b.id}
             >
-              <span className="dl-skin-preview" style={{ background: s.swatch.bg }}>
-                <span className="dl-skin-preview-card" style={{ background: s.swatch.card }}>
-                  <span className="dl-skin-preview-dot" style={{ background: s.swatch.accent }} />
-                  <span className="dl-skin-preview-line" style={{ background: s.swatch.ink, opacity: 0.85 }} />
-                  <span className="dl-skin-preview-line short" style={{ background: s.swatch.ink, opacity: 0.4 }} />
+              <span className="dl-brand-swatch" style={{ background: b.swatch }} />
+              <span className="dl-brand-meta">
+                <span className="dl-brand-name">
+                  {b.label}
+                  {brand === b.id && <span className="dl-skin-check">✓</span>}
                 </span>
-              </span>
-              <span className="dl-skin-meta">
-                <span className="dl-skin-name">
-                  {s.label}
-                  {skin === s.id && <span className="dl-skin-check">✓</span>}
-                </span>
-                <span className="dl-skin-desc">{s.description}</span>
+                <span className="dl-brand-desc">{b.description}</span>
               </span>
             </button>
           ))}

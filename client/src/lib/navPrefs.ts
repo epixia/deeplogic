@@ -13,6 +13,7 @@ export interface NavItemDef {
 export const NAV_ITEMS: NavItemDef[] = [
   { key: 'dashboards', label: 'Dashboards', path: '/dashboards/manage' },
   { key: 'reports', label: 'Reports', path: '/studio' },
+  { key: 'innovation', label: 'Innovation', path: '/innovation' },
   { key: 'blocks', label: 'Blocks', path: '/widgets' },
   { key: 'alerts', label: 'Alerts', path: '/alerts' },
   { key: 'agents', label: 'Agents', path: '/agents' },
@@ -22,8 +23,8 @@ export const NAV_ITEMS: NavItemDef[] = [
   { key: 'datavault', label: 'DataVault', path: '/vault' },
   { key: 'company', label: 'Company', path: '/company' },
   { key: 'competitors', label: 'Competitors', path: '/competitors' },
-  { key: 'products', label: 'Products', path: '/products' },
   { key: 'memory', label: 'Memory', path: '/memory' },
+  { key: 'interview', label: 'Interview', path: '/interview' },
 ]
 
 const KEY = 'dl-nav-hidden'

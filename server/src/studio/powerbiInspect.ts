@@ -232,6 +232,13 @@ function refineConnector(type: ConnectorType, a?: string, b?: string): Partial<P
     case 'web_api': case 'odata': return { url: a }
     case 'odbc': return { server: a }
     case 'folder': case 'local_file': return { filePath: a }
+    case 'excel': case 'csv': {
+      // Excel.Workbook(...)/Csv.Document(...) wrap an inner source — pull the
+      // quoted path/URL out of the captured argument so we get the file name.
+      const ref = /"([^"]+)"/.exec(a ?? '')?.[1]
+      if (!ref) return {}
+      return /^https?:/i.test(ref) ? { url: ref } : { filePath: ref }
+    }
     default: return {}
   }
 }
@@ -240,7 +247,13 @@ function connectorDisplayName(c: Partial<PowerBiConnector> & { type: ConnectorTy
   if (c.dataset) return c.dataset
   if (c.database) return `${c.server ?? ''}${c.server ? ' / ' : ''}${c.database}`
   if (c.server) return c.server
-  if (c.url) { try { return new URL(c.url).hostname } catch { return c.url.slice(0, 60) } }
+  if (c.url) {
+    try {
+      const u = new URL(c.url)
+      const last = decodeURIComponent(u.pathname.split('/').filter(Boolean).pop() ?? '')
+      return /\.\w{2,5}$/.test(last) ? last : u.hostname // show the file name if the URL points at a file
+    } catch { return c.url.slice(0, 60) }
+  }
   if (c.filePath) return c.filePath.split(/[\\/]/).pop() ?? c.filePath
   return c.type
 }
@@ -552,9 +565,16 @@ function inspectZip(buf: Buffer, fileName: string, scanMode: 'static' | 'deep', 
     const qParts = mashup ? splitQueries(mashup) : []
     // Connector registry keyed by signature.
     const connBySig = new Map<string, PowerBiConnector>()
-    const registerConnector = (hit: { type: ConnectorType; a?: string; b?: string; raw: string }, queryName?: string): string => {
+    const registerConnector = (hit: { type: ConnectorType; a?: string; b?: string; raw: string }, queryName?: string, mCode = ''): string => {
       const refined = refineConnector(hit.type, hit.a, hit.b)
       const merged = { type: refined.type ?? hit.type, ...refined } as Partial<PowerBiConnector> & { type: ConnectorType }
+      // Excel/CSV often come from a folder/SharePoint step, so the file name isn't
+      // in the Excel.Workbook(...) call — scan the whole query for a file literal
+      // (e.g. [Name="Sales.xlsx"] or File.Contents("…\Sales.csv")).
+      if ((merged.type === 'excel' || merged.type === 'csv') && !merged.filePath && !merged.url) {
+        const fileLit = /["']([^"']+\.(?:xlsx|xlsb|xlsm|xls|csv))["']/i.exec(mCode)?.[1]
+        if (fileLit) { if (/^https?:/i.test(fileLit)) merged.url = fileLit; else merged.filePath = fileLit }
+      }
       const sig = sigOf(merged)
       let c = connBySig.get(sig)
       if (!c) {
@@ -575,7 +595,7 @@ function inspectZip(buf: Buffer, fileName: string, scanMode: 'static' | 'deep', 
 
     for (const part of qParts) {
       const hits = detectInText(part.mCode)
-      const cIds = hits.map((h) => registerConnector(h, part.name))
+      const cIds = hits.map((h) => registerConnector(h, part.name, part.mCode))
       const sourceTables = sourceTablesFrom(part.mCode)
       const q: PowerBiQuery = {
         id: qId(), name: part.name, mCode: part.mCode.slice(0, 4000),
@@ -587,6 +607,24 @@ function inspectZip(buf: Buffer, fileName: string, scanMode: 'static' | 'deep', 
         outputEntityGuess: humanizeEntity(part.name) || undefined,
       }
       queries.push(q)
+    }
+
+    // Backfill Excel/CSV file names from any literal anywhere in the mashup — the
+    // name often lives in a different query (e.g. a SharePoint source query) than
+    // the Excel.Workbook(...) call that produced the connector.
+    const nameless = connectors.filter((c) => (c.type === 'excel' || c.type === 'csv') && !c.filePath && !c.url)
+    if (nameless.length) {
+      const allM = qParts.map((p) => p.mCode).join('\n')
+      const seen = new Set<string>()
+      const lits = [...allM.matchAll(/["']([^"']+\.(?:xlsx|xlsb|xlsm|xls|csv))["']/gi)]
+        .map((m) => m[1]).filter((l) => { const k = l.toLowerCase(); if (seen.has(k)) return false; seen.add(k); return true })
+      nameless.forEach((c, i) => {
+        const lit = lits[i] ?? lits[0]
+        if (lit) {
+          if (/^https?:/i.test(lit)) c.url = lit; else c.filePath = lit
+          c.displayName = connectorDisplayName(c)
+        }
+      })
     }
 
     // Connectors only visible in the binary (deep mode) — no owning query.

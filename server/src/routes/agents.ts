@@ -10,6 +10,7 @@ import { loadAiConfig, executeInternalAgentRun } from './studio.js';
 import { appendEvent, finishRun, ensureExternalRun } from '../agents/runLog.js';
 import { fetchSiteText, normalizeUrl, suggestTeam, type ProposedAgent } from '../studio/aiTeam.js';
 import { provisionExternalAgent } from '../agents/provision.js';
+import { suggestAgentTools } from '../agents/agentSoul.js';
 import { loadOrgoCreds } from './integrations.js';
 import { orgoStop, orgoDestroy } from '../integrations/orgo.js';
 import { AGENT_ELIGIBLE_TOOLS } from '../studio/assistant.js';
@@ -192,6 +193,21 @@ agentsRouter.get('/orgs/:orgId/agent-runs/:runId', requireMember(), async (req, 
   return res.json({ ...mapRun(run as Record<string, unknown>), events: (events ?? []).map(mapRunEvent) });
 });
 
+// POST /api/orgs/:orgId/agents/suggest-tools — AI-pick the tools (skills) an
+// agent needs from the provided catalogue, given its name/description/prompt.
+agentsRouter.post('/orgs/:orgId/agents/suggest-tools', requireMember(), async (req, res) => {
+  const b = (req.body ?? {}) as { name?: string; description?: string; systemPrompt?: string; available?: { name: string; label?: string; description?: string }[] };
+  try {
+    const tools = await suggestAgentTools(req.params.orgId, {
+      name: String(b.name ?? ''), description: String(b.description ?? ''),
+      systemPrompt: String(b.systemPrompt ?? ''), available: Array.isArray(b.available) ? b.available : [],
+    });
+    res.json({ tools });
+  } catch (e) {
+    res.status(500).json({ error: e instanceof Error ? e.message : 'Suggestion failed.' });
+  }
+});
+
 // POST /api/orgs/:orgId/agents
 agentsRouter.post('/orgs/:orgId/agents', requireMember(), async (req, res) => {
   const { orgId } = req.params;
@@ -352,8 +368,44 @@ interface ExternalAgentRow {
   host: string | null; mission: string; reason: string; deployed_via: string;
   mission_status: string; result: unknown; mission_started_at: string | null;
   mission_completed_at: string | null; callback_token: string | null;
-  config: { runtime?: string; orgo?: { computerId?: string } } | null;
+  config: { runtime?: string; orgo?: { computerId?: string }; soul?: AgentSoulView; settings?: AgentSettings } | null;
   created_at: string; updated_at: string;
+}
+interface AgentSoulView { name: string; soul: string; humanMd: string; skills: string[]; goal: string }
+
+// Operator-configurable settings for a deployed agent.
+export interface AgentSettings {
+  budget?: { maxRuntimeMin?: number; maxSteps?: number; maxSpendUsd?: number };
+  cadence?: 'once' | 'hourly' | 'daily' | 'weekly';
+  guardrails?: { requireApproval?: boolean; readOnly?: boolean; allowedDomains?: string[] };
+}
+
+const CADENCES = new Set(['once', 'hourly', 'daily', 'weekly']);
+function clampNum(v: unknown, min: number, max: number): number | undefined {
+  const n = Number(v);
+  if (!Number.isFinite(n) || n <= 0) return undefined;
+  return Math.min(max, Math.max(min, Math.round(n)));
+}
+function sanitizeSettings(s: AgentSettings): AgentSettings {
+  const out: AgentSettings = {};
+  if (s.budget && typeof s.budget === 'object') {
+    out.budget = {
+      maxRuntimeMin: clampNum(s.budget.maxRuntimeMin, 1, 1440),
+      maxSteps: clampNum(s.budget.maxSteps, 1, 1000),
+      maxSpendUsd: clampNum(s.budget.maxSpendUsd, 1, 100000),
+    };
+  }
+  if (typeof s.cadence === 'string' && CADENCES.has(s.cadence)) out.cadence = s.cadence;
+  if (s.guardrails && typeof s.guardrails === 'object') {
+    out.guardrails = {
+      requireApproval: !!s.guardrails.requireApproval,
+      readOnly: !!s.guardrails.readOnly,
+      allowedDomains: Array.isArray(s.guardrails.allowedDomains)
+        ? s.guardrails.allowedDomains.map((d) => String(d).trim().toLowerCase()).filter(Boolean).slice(0, 30)
+        : undefined,
+    };
+  }
+  return out;
 }
 interface AgentEventRow {
   id: string; agent_id: string; kind: string; message: string; data: unknown; created_at: string;
@@ -367,10 +419,15 @@ function mapExternalAgent(r: ExternalAgentRow, events: AgentEventRow[] = []) {
   return {
     id: r.id, orgId: r.org_id, provider: r.provider, name: r.name, status: r.status,
     region: r.region, size: r.size, host: r.host,
-    runtime: r.config?.runtime === 'orgo' ? 'orgo' : 'simulated',
+    runtime: r.config?.runtime === 'orgo' ? 'orgo' : r.config?.runtime === 'self-hosted' ? 'self-hosted' : 'simulated',
+    // The worker needs this token to claim missions & report back. Only exposed
+    // for self-hosted agents (org members are trusted) so you can run a worker.
+    callbackToken: r.config?.runtime === 'self-hosted' ? (r.callback_token ?? null) : undefined,
     mission: r.mission ?? '', reason: r.reason ?? '', deployedVia: r.deployed_via ?? 'ui',
     missionStatus: r.mission_status ?? 'pending', result: r.result ?? null,
     missionStartedAt: r.mission_started_at ?? null, missionCompletedAt: r.mission_completed_at ?? null,
+    soul: r.config?.soul ?? null, // the agent's generated identity (name, soul, human.md, skills, goal)
+    settings: r.config?.settings ?? null, // operator-configurable budget / cadence / guardrails
     events: events.filter((e) => e.agent_id === r.id).map(mapAgentEvent),
     createdAt: r.created_at, updatedAt: r.updated_at,
   };
@@ -399,8 +456,9 @@ const MISSION_MS = 12_000;  // simulated mission run time (stands in for real VM
 // In production these transitions are driven by the VM's real callbacks; here we
 // simulate them on read so the full loop is demoable without live infrastructure.
 async function advanceLifecycle(db: SupabaseClient, orgId: string, r: ExternalAgentRow): Promise<void> {
-  // Orgo-backed agents are driven by their real background task — never simulate.
-  if (r.config?.runtime === 'orgo') return;
+  // Orgo-backed and self-hosted agents are driven by their real runtime
+  // (Orgo task / your machine reporting via callback) — never simulate them.
+  if (r.config?.runtime === 'orgo' || r.config?.runtime === 'self-hosted') return;
   const now = Date.now();
   // 1) provisioning -> running, and kick off the mission.
   if (r.status === 'provisioning' && now - new Date(r.created_at).getTime() > PROVISION_MS) {
@@ -473,8 +531,8 @@ agentsRouter.get('/orgs/:orgId/external-agents', requireMember(), async (req, re
 // POST external-agents/deploy { provider, name, region?, size?, mission?, reason? }
 agentsRouter.post('/orgs/:orgId/external-agents/deploy', requireMember(), async (req, res) => {
   const { orgId } = req.params;
-  const { provider, name, region = 'us-east', size = 'small', mission = '', reason = '' } = (req.body || {}) as {
-    provider?: string; name?: string; region?: string; size?: string; mission?: string; reason?: string;
+  const { provider, name, region = 'us-east', size = 'small', mission = '', reason = '', runtime, settings } = (req.body || {}) as {
+    provider?: string; name?: string; region?: string; size?: string; mission?: string; reason?: string; runtime?: string; settings?: AgentSettings;
   };
   if (!provider || !EA_PROVIDERS.has(provider)) return res.status(400).json({ error: 'Unknown provider' });
   if (!name?.trim()) return res.status(400).json({ error: 'Name is required' });
@@ -485,11 +543,35 @@ agentsRouter.post('/orgs/:orgId/external-agents/deploy', requireMember(), async 
     const { row } = await provisionExternalAgent(req.db!, {
       orgId, userId: req.user!.id, provider: provider as 'hermes' | 'openclaw',
       name, mission, reason, deployedVia: 'ui', region: reg, size: sz,
+      runtime: runtime === 'self-hosted' ? 'self-hosted' : undefined,
+      settings: settings && typeof settings === 'object' ? sanitizeSettings(settings) : undefined,
     });
     return res.status(201).json(mapExternalAgent(row as ExternalAgentRow));
   } catch (err) {
     return res.status(500).json({ error: err instanceof Error ? err.message : 'Deploy failed' });
   }
+});
+
+// PATCH external-agents/:id { mission?, reason?, settings? } — reconfigure a
+// deployed agent (mission, budget caps, cadence, guardrails). Applies to its
+// next run / re-run; settings are also injected into the Orgo mission prompt.
+agentsRouter.patch('/orgs/:orgId/external-agents/:id', requireMember(), async (req, res) => {
+  const { orgId, id } = req.params;
+  const b = (req.body || {}) as { mission?: string; reason?: string; settings?: AgentSettings };
+  const { data: existing } = await req.db!
+    .from('external_agents').select('config').eq('id', id).eq('org_id', orgId).maybeSingle();
+  if (!existing) return res.status(404).json({ error: 'Not found' });
+  const cur = (existing as { config: Record<string, unknown> | null }).config ?? {};
+  const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (typeof b.mission === 'string') patch.mission = b.mission.slice(0, 2000);
+  if (typeof b.reason === 'string') patch.reason = b.reason.slice(0, 1000);
+  if (b.settings && typeof b.settings === 'object') patch.config = { ...cur, settings: sanitizeSettings(b.settings) };
+  const { data, error } = await req.db!
+    .from('external_agents').update(patch).eq('id', id).eq('org_id', orgId).select('*').maybeSingle();
+  if (error) return res.status(500).json({ error: error.message });
+  if (!data) return res.status(404).json({ error: 'Not found' });
+  await logAgentEvent(req.db!, orgId, id, 'message', 'Agent reconfigured by operator.');
+  return res.json(mapExternalAgent(data as ExternalAgentRow));
 });
 
 // POST external-agents/:id/stop
@@ -536,6 +618,43 @@ agentsRouter.delete('/orgs/:orgId/external-agents/:id', requireMember(), async (
 // client (bypasses RLS, since there is no user session on the VM side).
 // ---------------------------------------------------------------------------
 export const agentCallbackRouter = Router();
+
+// POST /agent-poll/:id — a self-hosted worker claims its mission. Auth by the
+// per-agent token (x-agent-token / Bearer). On the first poll of a pending
+// mission it flips to in_progress and returns it; afterward returns the current
+// state. Public (no user session) — the worker runs on the operator's machine.
+agentCallbackRouter.post('/agent-poll/:id', async (req, res) => {
+  const { id } = req.params;
+  const token = (req.headers['x-agent-token']?.toString() ?? '') ||
+    (req.headers.authorization?.toString() ?? '').replace(/^Bearer\s+/i, '');
+  if (!token) return res.status(401).json({ error: 'Missing agent token' });
+
+  const { data: agent } = await serviceClient
+    .from('external_agents')
+    .select('id, org_id, name, provider, mission, mission_status, callback_token, config')
+    .eq('id', id).maybeSingle();
+  const a = agent as {
+    org_id: string; name: string; provider: string; mission: string; mission_status: string;
+    callback_token: string | null; config: { runtime?: string } | null;
+  } | null;
+  if (!a || a.callback_token !== token) return res.status(403).json({ error: 'Invalid agent token' });
+  if (a.config?.runtime !== 'self-hosted') return res.status(409).json({ error: 'Not a self-hosted agent' });
+
+  // Claim a pending mission on first poll.
+  if (a.mission && a.mission_status === 'pending') {
+    const startedAt = new Date().toISOString();
+    await serviceClient.from('external_agents')
+      .update({ mission_status: 'in_progress', mission_started_at: startedAt, updated_at: startedAt })
+      .eq('id', id);
+    await serviceClient.from('external_agent_events')
+      .insert({ agent_id: id, org_id: a.org_id, kind: 'mission_started', message: `Claimed by self-hosted worker: ${a.mission.slice(0, 160)}` });
+    const runId = await ensureExternalRun(serviceClient, a.org_id, id, a.name || a.provider);
+    await appendEvent(serviceClient, a.org_id, runId, 'step', `Mission claimed by self-hosted worker.`, '🖥');
+    return res.json({ status: 'assigned', agentId: id, name: a.name, provider: a.provider, mission: a.mission });
+  }
+  // Nothing new to do — tell the worker the current state.
+  return res.json({ status: a.mission && a.mission_status === 'in_progress' ? 'in_progress' : 'idle', mission: a.mission || '' });
+});
 
 agentCallbackRouter.post('/agent-callback/:id', async (req, res) => {
   const { id } = req.params;

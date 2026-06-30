@@ -687,11 +687,13 @@ export interface VaultDocument {
   ownerEmail: string | null
   url?: string | null
   format?: string | null
+  createdAt?: string | null
+  category?: string | null
 }
 
 export interface PowerBiInspection {
   summary?: Record<string, number>
-  connectors?: { id: string; type: string; displayName: string; server?: string; database?: string; url?: string; workspace?: string; dataset?: string; filePath?: string; queryNames: string[]; confidence: string }[]
+  connectors?: { id: string; type: string; displayName: string; server?: string; database?: string; url?: string; workspace?: string; dataset?: string; filePath?: string; queryNames: string[]; rawExpression?: string; confidence: string }[]
   kpis?: { id: string; name: string; source: string; expression?: string; table?: string; businessMeaningGuess?: string; confidence: string }[]
   entities?: { id: string; name: string; sourceNames: string[]; confidence: string }[]
   sourceSystems?: { name: string; type: string; server?: string; database?: string; connectorId?: string }[]
@@ -714,6 +716,15 @@ export interface VaultPowerBI {
   measureCount: number
   pages: string[]
   inspection?: PowerBiInspection | null
+}
+
+// POST AI description of what a Power BI report portrays (from its structure).
+export function describePowerBi(
+  token: string,
+  orgId: string,
+  body: { name: string; tables: { name: string; columns: string[] }[]; sources: string[]; sourceTypes: string[]; kpis: string[]; entities: string[]; pages: string[] },
+): Promise<{ description: string; usedAI: boolean }> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/studio/powerbi-describe`, { method: 'POST', body: JSON.stringify(body) })
 }
 
 // GET /api/orgs/:orgId/vault/powerbi — parsed Power BI reports (tables/connectors/KPIs)
@@ -837,6 +848,40 @@ export async function* streamConnectorTest(
   }
 }
 
+// SSE: introspect a database connector's schema (tables/fields) live.
+export interface DbColumnInfo { name: string; type: string; isNumeric: boolean; isTemporal: boolean }
+export interface DbTableInfo { name: string; columns: DbColumnInfo[] }
+export interface DbKpiCandidate { table: string; metric: string; type: string; timeSeries: boolean }
+export interface DbSchemaInfo { engine: string; tables: DbTableInfo[]; kpiCandidates: DbKpiCandidate[]; note?: string }
+export async function* streamDbAnalyze(
+  token: string,
+  orgId: string,
+  ref: string,
+  signal?: AbortSignal,
+  force = false,
+): AsyncGenerator<{ type: string; msg?: string; schema?: DbSchemaInfo; error?: string; cached?: boolean; analyzedAt?: string | null }> {
+  const res = await fetch(
+    `${BASE}/orgs/${enc(orgId)}/vault/db-analyze?ref=${encodeURIComponent(ref)}${force ? '&force=true' : ''}`,
+    { headers: { Authorization: `Bearer ${token}` }, signal },
+  )
+  if (!res.ok || !res.body) { yield { type: 'error', error: `Server error: ${res.status}` }; return }
+  const reader = res.body.getReader()
+  const dec = new TextDecoder()
+  let buf = ''
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buf += dec.decode(value, { stream: true })
+    const lines = buf.split('\n')
+    buf = lines.pop() ?? ''
+    for (const line of lines) {
+      if (line.startsWith('data: ')) {
+        try { yield JSON.parse(line.slice(6)) } catch { /* ignore */ }
+      }
+    }
+  }
+}
+
 // PATCH /api/orgs/:orgId/vault/ctx/:ctxId
 export function updateVaultMcp(
   token: string,
@@ -851,17 +896,19 @@ export function updateVaultMcp(
 }
 
 // PATCH /api/orgs/:orgId/studio/projects/:projectId/vault/:itemId
+// Returns the updated project so callers can keep state in sync.
 export function updateVaultProj(
   token: string,
   orgId: string,
   projectId: string,
   itemId: string,
-  patch: { name?: string; meta?: Record<string, string>; enabled?: boolean },
-): Promise<{ ok: boolean }> {
+  patch: { name?: string; content?: string; meta?: Record<string, unknown>; enabled?: boolean },
+): Promise<StudioProject> {
   return jsonFetch(token, `/orgs/${enc(orgId)}/studio/projects/${enc(projectId)}/vault/${enc(itemId)}`, {
     method: 'PATCH',
     body: JSON.stringify({
       ...(patch.name !== undefined ? { name: patch.name } : {}),
+      ...(patch.content !== undefined ? { content: patch.content } : {}),
       ...(patch.meta ? { meta: patch.meta } : {}),
       ...(patch.enabled !== undefined ? { enabled: patch.enabled } : {}),
     }),
@@ -1361,6 +1408,7 @@ export interface DashboardListItem {
   visibility: DashboardVisibility
   description: string | null
   group: string | null
+  position: number
   ownerId: string
   isOwner: boolean
   widgetCount: number
@@ -1410,6 +1458,11 @@ export function updateDashboard(
 // DELETE /api/orgs/:orgId/dashboards/:id
 export function deleteDashboard(token: string, orgId: string, id: string): Promise<void> {
   return jsonFetch(token, `/orgs/${enc(orgId)}/dashboards/${enc(id)}`, { method: 'DELETE' })
+}
+
+// Persist a new dashboard order — `ids` in the desired order (index = position).
+export function reorderDashboards(token: string, orgId: string, ids: string[]): Promise<{ ok: boolean }> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/dashboards/reorder`, { method: 'PATCH', body: JSON.stringify({ ids }) })
 }
 
 // POST /api/orgs/:orgId/dashboards/:id/widgets
@@ -1486,7 +1539,7 @@ export function updateOrgWidget(
   token: string,
   orgId: string,
   widgetId: string,
-  patch: { name?: string; prompt?: string; gridW?: number; gridH?: number; sources?: WidgetSource[] },
+  patch: { name?: string; prompt?: string; html?: string; gridW?: number; gridH?: number; sources?: WidgetSource[] },
 ): Promise<Widget> {
   return jsonFetch(token, `/orgs/${enc(orgId)}/widgets/${enc(widgetId)}`, {
     method: 'PATCH',
@@ -1652,6 +1705,15 @@ export function listAgents(token: string, orgId: string): Promise<Agent[]> {
   return jsonFetch(token, `/orgs/${enc(orgId)}/agents`)
 }
 
+// AI-suggest the tools (skills) an agent needs from the provided catalogue.
+export function suggestAgentTools(
+  token: string,
+  orgId: string,
+  body: { name: string; description: string; systemPrompt: string; available: { name: string; label?: string; description?: string }[] },
+): Promise<{ tools: string[] }> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/agents/suggest-tools`, { method: 'POST', body: JSON.stringify(body) })
+}
+
 export function createAgent(
   token: string,
   orgId: string,
@@ -1692,6 +1754,22 @@ export type MissionStatus = 'pending' | 'in_progress' | 'completed' | 'failed'
 export type AgentEventKind =
   | 'deployed' | 'provisioned' | 'mission_started' | 'progress' | 'completed' | 'failed' | 'message'
 
+// Operator-configurable settings for a deployed agent.
+export interface AgentSettings {
+  budget?: { maxRuntimeMin?: number; maxSteps?: number; maxSpendUsd?: number }
+  cadence?: 'once' | 'hourly' | 'daily' | 'weekly'
+  guardrails?: { requireApproval?: boolean; readOnly?: boolean; allowedDomains?: string[] }
+}
+
+// The generated identity ("soul") of an autonomous agent — created at deploy.
+export interface AgentSoul {
+  name: string
+  soul: string
+  humanMd: string
+  skills: string[]
+  goal: string
+}
+
 // One entry in an external agent's back-channel timeline (what it reported to central).
 export interface ExternalAgentEvent {
   id: string
@@ -1710,10 +1788,13 @@ export interface ExternalAgent {
   region: string | null
   size: string | null
   host: string | null
-  runtime: 'orgo' | 'simulated'
+  runtime: 'orgo' | 'simulated' | 'self-hosted'
+  callbackToken?: string | null // present for self-hosted agents — used by your worker
   mission: string
   reason: string
   deployedVia: 'ui' | 'chat'
+  soul: AgentSoul | null
+  settings: AgentSettings | null
   missionStatus: MissionStatus
   result: unknown
   missionStartedAt: string | null
@@ -1730,7 +1811,7 @@ export function listExternalAgents(token: string, orgId: string): Promise<Extern
 export function deployExternalAgent(
   token: string,
   orgId: string,
-  body: { provider: ExternalAgentProvider; name: string; region?: string; size?: string; mission?: string; reason?: string },
+  body: { provider: ExternalAgentProvider; name: string; region?: string; size?: string; mission?: string; reason?: string; runtime?: 'self-hosted'; settings?: AgentSettings },
 ): Promise<ExternalAgent> {
   return jsonFetch(token, `/orgs/${enc(orgId)}/external-agents/deploy`, {
     method: 'POST',
@@ -1742,13 +1823,23 @@ export function stopExternalAgent(token: string, orgId: string, id: string): Pro
   return jsonFetch(token, `/orgs/${enc(orgId)}/external-agents/${enc(id)}/stop`, { method: 'POST' })
 }
 
+// Reconfigure a deployed agent — mission, budget caps, cadence, guardrails.
+export function updateExternalAgent(
+  token: string,
+  orgId: string,
+  id: string,
+  body: { mission?: string; reason?: string; settings?: AgentSettings },
+): Promise<ExternalAgent> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/external-agents/${enc(id)}`, { method: 'PATCH', body: JSON.stringify(body) })
+}
+
 export function deleteExternalAgent(token: string, orgId: string, id: string): Promise<void> {
   return jsonFetch(token, `/orgs/${enc(orgId)}/external-agents/${enc(id)}`, { method: 'DELETE' })
 }
 
 /* ---------------- memory graph ---------------- */
 
-export interface MemoryEntity { id: string; name: string; type: string; summary: string }
+export interface MemoryEntity { id: string; name: string; type: string; summary: string; mentionCount: number }
 export interface MemoryFact {
   id: string
   subjectId: string
@@ -1774,10 +1865,165 @@ export function recallMemory(token: string, orgId: string, q: string, k = 12): P
   return jsonFetch(token, `/orgs/${enc(orgId)}/memory/recall?q=${encodeURIComponent(q)}&k=${k}`)
 }
 
+// Memory graph curation — merge duplicates, rename/retype, delete bad data.
+export function mergeMemoryEntities(token: string, orgId: string, sourceId: string, targetId: string): Promise<{ ok: boolean; deduped?: number }> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/memory/entities/merge`, {
+    method: 'POST', body: JSON.stringify({ sourceId, targetId }),
+  })
+}
+
+export function updateMemoryEntity(token: string, orgId: string, id: string, patch: { name?: string; type?: string; summary?: string }): Promise<{ ok: boolean }> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/memory/entities/${enc(id)}`, {
+    method: 'PATCH', body: JSON.stringify(patch),
+  })
+}
+
+export function deleteMemoryEntity(token: string, orgId: string, id: string): Promise<{ ok: boolean }> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/memory/entities/${enc(id)}`, { method: 'DELETE' })
+}
+
+export function deleteMemoryFact(token: string, orgId: string, id: string): Promise<{ ok: boolean }> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/memory/facts/${enc(id)}`, { method: 'DELETE' })
+}
+
+/* ---------------- innovation lab ---------------- */
+export interface InnovationProject {
+  id: string
+  name: string
+  brief: string
+  engine: string
+  files: Record<string, string>
+  previewUrl: string | null
+  status: string
+  messages: { role: string; content: string; ts: string }[]
+  published: boolean
+  featured: boolean
+  tagline: string
+  tags: string[]
+  stars: number
+  forkOf: string | null
+  dataSources: string[]
+  isOwner: boolean
+  updatedAt: string
+}
+export interface AgentStep { icon: string; text: string }
+
+export function listInnovationProjects(token: string, orgId: string, scope: 'mine' | 'garden' = 'mine'): Promise<{ projects: InnovationProject[] }> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/innovation/projects?scope=${scope}`)
+}
+
+export function createInnovationProject(token: string, orgId: string, body: { brief: string; engine?: string; name?: string }): Promise<InnovationProject> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/innovation/projects`, { method: 'POST', body: JSON.stringify(body) })
+}
+
+export function getInnovationProject(token: string, orgId: string, id: string): Promise<InnovationProject> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/innovation/projects/${enc(id)}`)
+}
+
+export function chatInnovation(token: string, orgId: string, id: string, message: string): Promise<{ project: InnovationProject; reply: string; steps: AgentStep[]; touched: string[] }> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/innovation/projects/${enc(id)}/chat`, { method: 'POST', body: JSON.stringify({ message }) })
+}
+
+export function resumeInnovationSandbox(token: string, orgId: string, id: string): Promise<{ previewUrl: string; sandboxId: string; status: string }> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/innovation/projects/${enc(id)}/sandbox`, { method: 'POST' })
+}
+
+export function publishInnovation(token: string, orgId: string, id: string, body: { tagline?: string; tags?: string[] }): Promise<InnovationProject> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/innovation/projects/${enc(id)}/publish`, { method: 'POST', body: JSON.stringify(body) })
+}
+
+export function deleteInnovationProject(token: string, orgId: string, id: string): Promise<void> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/innovation/projects/${enc(id)}`, { method: 'DELETE' })
+}
+// Set which Data Vault items ground this project's builds.
+export function setInnovationSources(token: string, orgId: string, id: string, ids: string[]): Promise<InnovationProject> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/innovation/projects/${enc(id)}/sources`, { method: 'POST', body: JSON.stringify({ ids }) })
+}
+
+/* ---------------- AI interview ("mind dump") ---------------- */
+export interface InterviewQA { q: string; a: string }
+
+// Short-lived LiveAvatar session token (server holds the API key + avatar config).
+export function getInterviewToken(token: string, orgId: string): Promise<{ token: string }> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/interview/token`, { method: 'POST' })
+}
+
+// Gap-driven next question given the transcript so far.
+export function interviewNext(token: string, orgId: string, body: { interviewee?: string; role?: string; topic?: string; transcript: InterviewQA[] }): Promise<{ question: string; done: boolean }> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/interview/next`, { method: 'POST', body: JSON.stringify(body) })
+}
+
+// Compile the transcript into a Data Vault knowledge note + grow the memory graph.
+export function interviewFinish(token: string, orgId: string, body: { interviewee?: string; role?: string; date?: string; topics?: string[]; transcript: InterviewQA[]; videoUrl?: string }): Promise<{ docId: string; name: string; entities: number; facts: number }> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/interview/finish`, { method: 'POST', body: JSON.stringify(body) })
+}
+
+// Upload an interview recording (webm). Streams the blob to the server, which
+// stores it in Supabase Storage and returns a viewable signed URL.
+export async function uploadInterviewVideo(token: string, orgId: string, blob: Blob): Promise<{ url: string }> {
+  const r = await fetch(`${BASE}/orgs/${enc(orgId)}/interview/video`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'video/webm' },
+    body: blob,
+  })
+  if (!r.ok) throw new Error(((await r.json().catch(() => ({}))) as { error?: string }).error || 'Video upload failed.')
+  return r.json() as Promise<{ url: string }>
+}
+
+// Start an outbound PHONE interview via Vapi. The transcript is ingested
+// automatically when the call ends (server webhook) — nothing to do client-side.
+export function startPhoneInterview(token: string, orgId: string, body: { phoneNumber: string; interviewee?: string; role?: string; topic?: string }): Promise<{ callId: string | null; status: string; transcriptCaptured: boolean }> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/interview/call`, { method: 'POST', body: JSON.stringify(body) })
+}
+
+// Config for an IN-BROWSER Vapi voice call (public key + assistant). The browser
+// runs the call and saves the transcript via interviewFinish — no phone/URL needed.
+export function getInterviewWebConfig(token: string, orgId: string, body: { interviewee?: string; role?: string; topic?: string }): Promise<{ publicKey: string; assistant: Record<string, unknown> }> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/interview/web-config`, { method: 'POST', body: JSON.stringify(body) })
+}
+
+/* ---------------- employees roster ---------------- */
+export interface Employee {
+  id: string
+  name: string
+  email: string | null
+  phone: string | null
+  title: string | null
+  department: string | null
+  linkedin: string | null
+  source: string
+  notes: string | null
+  status: 'pending' | 'dispatched' | 'interviewed'
+  lastInterviewId: string | null
+  lastInterviewedAt: string | null
+  updatedAt: string
+}
+
+export function listEmployees(token: string, orgId: string): Promise<{ employees: Employee[] }> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/employees`)
+}
+export function createEmployee(token: string, orgId: string, body: Partial<Employee>): Promise<Employee> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/employees`, { method: 'POST', body: JSON.stringify(body) })
+}
+export function importEmployees(token: string, orgId: string, employees: Partial<Employee>[], source = 'csv'): Promise<{ imported: number; employees: Employee[] }> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/employees/import`, { method: 'POST', body: JSON.stringify({ employees, source }) })
+}
+export function updateEmployee(token: string, orgId: string, id: string, patch: Partial<Employee>): Promise<Employee> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/employees/${enc(id)}`, { method: 'PATCH', body: JSON.stringify(patch) })
+}
+export function deleteEmployee(token: string, orgId: string, id: string): Promise<void> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/employees/${enc(id)}`, { method: 'DELETE' })
+}
+// Fetch public employee info for a company (LinkedIn via a people-data provider).
+export interface EmployeeCandidate { name: string; title: string | null; department: string | null; email: string | null; phone: string | null; linkedin: string | null }
+export function fetchEmployees(token: string, orgId: string, body: { domain?: string; company?: string }): Promise<{ candidates: EmployeeCandidate[]; provider: string }> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/employees/fetch`, { method: 'POST', body: JSON.stringify(body) })
+}
+
 /* ---------------- integrations (Orgo.ai) ---------------- */
 
 export interface IntegrationsView {
-  orgo: { enabled: boolean; hasKey: boolean }
+  orgo: { enabled: boolean; hasKey: boolean; workspaceId?: string }
 }
 
 export function getIntegrations(token: string, orgId: string): Promise<IntegrationsView> {
@@ -1787,7 +2033,7 @@ export function getIntegrations(token: string, orgId: string): Promise<Integrati
 export function saveOrgoIntegration(
   token: string,
   orgId: string,
-  body: { enabled?: boolean; apiKey?: string },
+  body: { enabled?: boolean; apiKey?: string; workspaceId?: string },
 ): Promise<IntegrationsView> {
   return jsonFetch(token, `/orgs/${enc(orgId)}/integrations/orgo`, { method: 'PUT', body: JSON.stringify(body) })
 }
@@ -2202,6 +2448,152 @@ export function fetchDomainIntel(token: string, orgId: string, url: string): Pro
   })
 }
 
+/* ---------------- public company (live market data) ---------------- */
+
+export interface PublicCompany {
+  symbol: string
+  yahooSymbol: string
+  tradingViewSymbol: string
+  name?: string
+  exchange?: string
+  currency?: string
+  price?: number
+  changePct?: number
+  marketCap?: number
+  revenue?: number
+  employees?: number
+  industry?: string
+  sector?: string
+  website?: string
+  hq?: string
+  fetchedAt: string
+}
+
+// GET live market data for a listed company. Pass the company name too so the
+// server can resolve the correct current listing (e.g. TSX:LOVE, not a stale or
+// colliding ticker).
+export function getPublicCompany(token: string, orgId: string, symbol: string, name?: string): Promise<{ company: PublicCompany | null }> {
+  const n = name ? `&name=${encodeURIComponent(name)}` : ''
+  return jsonFetch(token, `/orgs/${enc(orgId)}/studio/public-company?symbol=${encodeURIComponent(symbol)}${n}`)
+}
+
+/* ---------------- gallery blocks (admin-built) ---------------- */
+
+export interface GalleryFieldDef {
+  key: string
+  label: string
+  type: 'text' | 'number' | 'select'
+  default?: string
+  placeholder?: string
+  help?: string
+  helpUrl?: string
+  helpLabel?: string
+  options?: { value: string; label: string }[]
+}
+export interface DbGalleryBlock {
+  id: string
+  slug: string
+  name: string
+  icon: string
+  category: string
+  tagline: string
+  description: string
+  size_w: number
+  size_h: number
+  fields: GalleryFieldDef[]
+  html_template: string
+  docs_url: string | null
+  enabled: boolean
+  created_at?: string
+  updated_at?: string
+}
+// Camel-cased draft returned by the admin generator / used when saving.
+export interface GalleryBlockDraft {
+  slug: string
+  name: string
+  icon: string
+  category: string
+  tagline: string
+  description: string
+  sizeW: number
+  sizeH: number
+  fields: GalleryFieldDef[]
+  htmlTemplate: string
+  docsUrl?: string
+  enabled?: boolean
+}
+
+// Member: enabled gallery blocks (populate the Block Gallery).
+export function listGalleryBlocks(token: string, orgId: string): Promise<{ blocks: DbGalleryBlock[] }> {
+  return jsonFetch(token, `/orgs/${enc(orgId)}/gallery-blocks`)
+}
+// Admin CRUD + AI generation.
+export function adminListGalleryBlocks(token: string): Promise<{ blocks: DbGalleryBlock[] }> {
+  return jsonFetch(token, `/admin/gallery-blocks`)
+}
+export function adminGenerateGalleryBlock(token: string, body: { docsUrl: string; hint?: string }): Promise<{ draft: GalleryBlockDraft }> {
+  return jsonFetch(token, `/admin/gallery-blocks/generate`, { method: 'POST', body: JSON.stringify(body) })
+}
+export function adminSaveGalleryBlock(token: string, body: GalleryBlockDraft): Promise<{ block: DbGalleryBlock }> {
+  return jsonFetch(token, `/admin/gallery-blocks`, { method: 'POST', body: JSON.stringify(body) })
+}
+export function adminDeleteGalleryBlock(token: string, id: string): Promise<{ ok: boolean }> {
+  return jsonFetch(token, `/admin/gallery-blocks/${enc(id)}`, { method: 'DELETE' })
+}
+
+/* ---------------- admin: mail (SMTP) settings ---------------- */
+
+export interface MailSettings {
+  host: string
+  port: number
+  secure: boolean
+  username: string
+  password: string
+  fromName: string
+  fromEmail: string
+  hasPassword?: boolean
+}
+export function getMailSettings(token: string): Promise<{ settings: MailSettings }> {
+  return jsonFetch(token, `/admin/mail-settings`)
+}
+export function saveMailSettings(token: string, settings: Partial<MailSettings>): Promise<{ settings: MailSettings }> {
+  return jsonFetch(token, `/admin/mail-settings`, { method: 'PUT', body: JSON.stringify(settings) })
+}
+export function testMailSettings(token: string, body: Partial<MailSettings> & { to: string }): Promise<{ ok: boolean }> {
+  return jsonFetch(token, `/admin/mail-settings/test`, { method: 'POST', body: JSON.stringify(body) })
+}
+
+/* ---------------- Windy webcams ---------------- */
+
+export interface WindyWebcam {
+  id: string
+  title: string
+  image?: string
+  embedUrl?: string
+  city?: string
+  country?: string
+}
+
+// Search webcams near a location. Pass a key to use the block's own key,
+// otherwise the org's stored Windy key (Settings → APIs) is used.
+export function searchWindyWebcams(
+  token: string,
+  orgId: string,
+  q: { lat: number; lon: number; radius?: number; limit?: number; key?: string },
+): Promise<{ webcams: WindyWebcam[] }> {
+  const params = new URLSearchParams({ lat: String(q.lat), lon: String(q.lon) })
+  if (q.radius) params.set('radius', String(q.radius))
+  if (q.limit) params.set('limit', String(q.limit))
+  if (q.key) params.set('key', q.key)
+  return jsonFetch(token, `/orgs/${enc(orgId)}/integrations/windy/webcams?${params.toString()}`)
+}
+
+// Resolve one webcam by id → its official player embed URL (via the Windy API).
+export function getWindyWebcam(token: string, orgId: string, id: string, key?: string): Promise<{ webcam: WindyWebcam }> {
+  const qs = key ? `?key=${encodeURIComponent(key)}` : ''
+  return jsonFetch(token, `/orgs/${enc(orgId)}/integrations/windy/webcams/${enc(id)}${qs}`)
+}
+
 /* ---------------- competitor / domain products ---------------- */
 
 export interface DomainProductsResponse {
@@ -2318,6 +2710,8 @@ export interface AssistantChatResult {
   aiError?: string
   actions?: string[]
   suggestions?: SuggestedAction[]
+  /** Vault documents the assistant read to answer this turn. */
+  readDocs?: string[]
   sources: { title: string; url: string; snippet: string }[]
 }
 
@@ -2470,12 +2864,24 @@ export function onboardingPersist(
 
 /* ---------------- alerts ---------------- */
 
+export type AlertKind = 'ai' | 'keyword' | 'uptime' | 'threshold'
+export interface AlertConfig {
+  url?: string
+  keywords?: string[]
+  path?: string
+  op?: 'gt' | 'lt' | 'eq'
+  value?: number
+  apiKey?: string // for DB/PostgREST column alerts — authenticates the query
+}
 export interface Alert {
   id: string
   orgId: string
   name: string
+  kind: AlertKind
+  config: AlertConfig
   condition: string
   sources: WidgetSource[]
+  widgetId: string | null
   notifyEmail: string | null
   status: 'active' | 'paused'
   lastChecked: string | null
@@ -2483,6 +2889,16 @@ export interface Alert {
   fireCount: number
   createdAt: string
   updatedAt: string
+}
+type AlertBody = {
+  name: string
+  condition?: string
+  kind?: AlertKind
+  config?: AlertConfig
+  sources?: WidgetSource[]
+  widgetId?: string
+  notifyEmail?: string
+  status?: 'active' | 'paused'
 }
 
 export interface AlertEvent {
@@ -2496,20 +2912,11 @@ export function listAlerts(token: string, orgId: string): Promise<Alert[]> {
   return jsonFetch(token, `/orgs/${enc(orgId)}/alerts`)
 }
 
-export function createAlert(
-  token: string,
-  orgId: string,
-  body: { name: string; condition: string; sources?: WidgetSource[]; notifyEmail?: string; status?: 'active' | 'paused' },
-): Promise<Alert> {
+export function createAlert(token: string, orgId: string, body: AlertBody): Promise<Alert> {
   return jsonFetch(token, `/orgs/${enc(orgId)}/alerts`, { method: 'POST', body: JSON.stringify(body) })
 }
 
-export function updateAlert(
-  token: string,
-  orgId: string,
-  alertId: string,
-  body: Partial<{ name: string; condition: string; sources: WidgetSource[]; notifyEmail: string; status: 'active' | 'paused' }>,
-): Promise<Alert> {
+export function updateAlert(token: string, orgId: string, alertId: string, body: Partial<AlertBody>): Promise<Alert> {
   return jsonFetch(token, `/orgs/${enc(orgId)}/alerts/${enc(alertId)}`, { method: 'PATCH', body: JSON.stringify(body) })
 }
 
@@ -2621,4 +3028,33 @@ export interface SearchResult { title: string; url: string; snippet: string }
 
 export function searchWeb(token: string, orgId: string, q: string, count = 5): Promise<{ results: SearchResult[] }> {
   return jsonFetch(token, `/orgs/${enc(orgId)}/search?q=${encodeURIComponent(q)}&count=${count}`)
+}
+
+/* ---------------- global appearance (admin-controlled) ---------------- */
+export interface PlatformAppearance { brand: 'blue' | 'green' | 'grey'; bg: 'none' | 'network' | 'waves' | 'orbs' | 'wavefield' | 'mesh' | 'starfield'; skin: string }
+
+// Public — the homepage reads this pre-login.
+export async function getPlatformAppearance(): Promise<PlatformAppearance> {
+  const r = await fetch(`${BASE}/platform/appearance`)
+  if (!r.ok) throw new Error('Failed to load appearance')
+  return r.json() as Promise<PlatformAppearance>
+}
+export function getAdminAppearance(token: string): Promise<PlatformAppearance> {
+  return jsonFetch(token, `/admin/appearance`)
+}
+export function saveAdminAppearance(token: string, body: PlatformAppearance): Promise<PlatformAppearance> {
+  return jsonFetch(token, `/admin/appearance`, { method: 'PUT', body: JSON.stringify(body) })
+}
+
+/* ---------------- global service integrations (admin) ---------------- */
+// Stored in the server .env; admin sees & edits the actual values.
+export interface AdminIntegrations {
+  heygenApiKey: string; heygenAvatarId: string; heygenVoiceId: string
+  vapiApiKey: string; vapiPublicKey: string; vapiPhoneNumberId: string; vapiVoiceId: string; vapiWebhookSecret: string; publicApiUrl: string
+}
+export function getAdminIntegrations(token: string): Promise<AdminIntegrations> {
+  return jsonFetch(token, `/admin/integrations`)
+}
+export function saveAdminIntegrations(token: string, body: Partial<AdminIntegrations>): Promise<AdminIntegrations> {
+  return jsonFetch(token, `/admin/integrations`, { method: 'PUT', body: JSON.stringify(body) })
 }

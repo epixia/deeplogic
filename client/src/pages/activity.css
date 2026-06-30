@@ -60,7 +60,8 @@
 .act-event { display: flex; align-items: baseline; gap: 9px; font-size: 12.5px; }
 .act-event-ic { flex-shrink: 0; width: 18px; text-align: center; }
 .act-event-msg { flex: 1; min-width: 0; color: var(--ink); line-height: 1.45; word-break: break-word; }
-.act-event--output .act-event-msg { color: var(--mut); }
+.act-event--output { align-items: flex-start; }
+.act-event--output .act-event-msg { color: var(--ink); white-space: pre-wrap; }
 .act-event-time { flex-shrink: 0; font-size: 11px; color: var(--mut2); }
 
 .act-section { display: flex; flex-direction: column; gap: 6px; }
@@ -121,3 +122,60 @@
   border-color: color-mix(in srgb, var(--cyan) 40%, transparent);
 }
 .act-disp-text { font-size: 12.5px; color: var(--mut); }
+
+/* Links anywhere in the activity trace open in a new tab, styled distinctly. */
+.act-event-msg a, .act-result-body a { color: var(--cyan); text-decoration: underline; word-break: break-word; }
+.act-event-msg a:hover, .act-result-body a:hover { text-decoration: none; }
+/* Markdown-rendered findings/outputs */
+.act-md { display: block; }
+.act-md h1, .act-md h2, .act-md h3 { font-size: 13px; font-weight: 700; margin: 8px 0 4px; color: var(--ink); }
+.act-md p { margin: 4px 0; }
+.act-md ul, .act-md ol { margin: 4px 0; padding-left: 18px; }
+.act-md li { margin: 2px 0; }
+.act-md code { font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; background: var(--bg2); padding: 1px 4px; border-radius: 4px; }
+
+/* Orchestration team summary — what was produced across all agents */
+.act-group-body { padding: 4px 0 6px; }
+.act-team { padding: 10px 14px 6px; }
+.act-team-item { padding: 8px 0; border-bottom: 1px solid var(--line); }
+.act-team-item:last-child { border-bottom: 0; }
+.act-team-agent { display: flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 700; color: var(--ink); margin-bottom: 4px; }
+.act-team-status { font-size: 10px; font-weight: 600; }
+.act-team-text { font-size: 12.5px; color: var(--ink); line-height: 1.5; }
+.act-peragent > summary { cursor: pointer; font-size: 12px; color: var(--mut); padding: 8px 14px; list-style: none; }
+.act-peragent > summary::-webkit-details-marker { display: none; }
+.act-peragent > summary::before { content: '▸ '; }
+.act-peragent[open] > summary::before { content: '▾ '; }
+
+/* Activity pagination */
+.act-pager { display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 18px; }
+.act-pager-info { font-size: 12px; color: var(--mut); }
+
+/* Activity search + sort toolbar */
+.act-toolbar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; }
+.act-search { flex: 1; min-width: 220px; max-width: 420px; }
+.act-sortbar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.act-sortbar-label { font-size: 11px; color: var(--mut2); text-transform: uppercase; letter-spacing: .05em; font-weight: 700; }
+.act-sort { background: none; border: 1px solid var(--line); border-radius: 7px; font: inherit; font-size: 12px; color: var(--mut); cursor: pointer; padding: 4px 9px; display: inline-flex; align-items: center; gap: 5px; }
+.act-sort:hover { color: var(--ink); border-color: color-mix(in srgb, var(--cyan) 40%, var(--line)); }
+.act-sort.active { color: var(--cyan); border-color: var(--cyan); }
+.act-type { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; color: var(--cyan); background: rgba(111,227,240,.1); border: 1px solid rgba(111,227,240,.28); border-radius: 99px; padding: 1px 7px; }
+
+/* Activity as a sortable table */
+.act-table { width: 100%; border-collapse: collapse; }
+.act-table thead th { text-align: left; border-bottom: 1px solid var(--line); padding: 0 12px 9px; }
+.act-th { background: none; border: 0; font: inherit; font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--mut2); cursor: pointer; padding: 0; display: inline-flex; align-items: center; gap: 5px; }
+.act-th:hover { color: var(--ink); }
+.act-th.active { color: var(--cyan); }
+.act-th-chev { width: 26px; }
+.act-trow { cursor: pointer; }
+.act-trow > td { padding: 11px 12px; border-bottom: 1px solid var(--line); vertical-align: middle; font-size: 13px; }
+.act-trow:hover > td { background: rgba(111,227,240,.04); }
+.act-trow.is-open > td { background: rgba(111,227,240,.06); }
+.act-td-chev { width: 26px; color: var(--mut); font-size: 11px; }
+.act-td-name { display: flex; align-items: center; gap: 8px; }
+.act-tname { font-weight: 600; color: var(--ink); }
+.act-tsub { font-size: 11px; color: var(--mut2); }
+.act-td-date { white-space: nowrap; color: var(--mut); font-size: 12px; }
+.act-detail-row > td { padding: 0 12px 14px; border-bottom: 1px solid var(--line); background: rgba(111,227,240,.03); }
+.act-detail-row .act-detail { padding-top: 10px; }

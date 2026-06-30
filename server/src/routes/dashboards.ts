@@ -53,6 +53,7 @@ dashboardsRouter.get('/orgs/:orgId/dashboards', requireMember(), async (req: Req
       .from('dashboards')
       .select('*')
       .eq('org_id', orgId)
+      .order('position', { ascending: true })
       .order('updated_at', { ascending: false });
     if (error) throw new Error(error.message);
 
@@ -76,6 +77,7 @@ dashboardsRouter.get('/orgs/:orgId/dashboards', requireMember(), async (req: Req
       visibility: b.visibility,
       description: b.description,
       group: b.group_name ?? null,
+      position: b.position ?? 0,
       ownerId: b.owner_id,
       isOwner: b.owner_id === req.user!.id,
       widgetCount: counts[b.id] ?? 0,
@@ -148,6 +150,24 @@ dashboardsRouter.get('/orgs/:orgId/dashboards/:id', requireMember(), async (req:
 });
 
 // PATCH /orgs/:orgId/dashboards/:id { name?, visibility?, description? }
+// PATCH /orgs/:orgId/dashboards/reorder { ids: [...] } — set sort position from
+// the given order (index = position). Must be registered before /:id.
+dashboardsRouter.patch('/orgs/:orgId/dashboards/reorder', requireMember(), async (req: Request, res: Response) => {
+  const { orgId } = req.params;
+  const ids = Array.isArray(req.body?.ids) ? (req.body.ids as unknown[]).map((x) => String(x)) : [];
+  if (!ids.length) { res.status(400).json({ error: 'ids required' }); return; }
+  try {
+    const now = new Date().toISOString();
+    await Promise.all(ids.map((id, i) =>
+      req.db!.from('dashboards').update({ position: i, updated_at: now }).eq('id', id).eq('org_id', orgId),
+    ));
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('PATCH dashboards/reorder failed', err);
+    res.status(500).json({ error: 'Reorder failed' });
+  }
+});
+
 dashboardsRouter.patch('/orgs/:orgId/dashboards/:id', requireMember(), async (req: Request, res: Response) => {
   const { orgId, id } = req.params;
   const body = req.body ?? {};
@@ -429,6 +449,8 @@ dashboardsRouter.patch('/orgs/:orgId/widgets/:wid', requireMember(), async (req:
     const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
     if (typeof body.name === 'string' && body.name.trim()) patch.name = body.name.trim();
     if (typeof body.prompt === 'string') patch.prompt = body.prompt;
+    // Predefined (gallery) Blocks save their rebuilt HTML directly (no AI gen).
+    if (typeof body.html === 'string') { patch.html = body.html; patch.last_refreshed = new Date().toISOString(); }
     if (typeof body.gridW === 'number') patch.grid_w = Math.min(12, Math.max(1, body.gridW));
     if (typeof body.gridH === 'number') patch.grid_h = Math.min(12, Math.max(1, body.gridH));
     if (Array.isArray(body.sources)) patch.sources = body.sources;

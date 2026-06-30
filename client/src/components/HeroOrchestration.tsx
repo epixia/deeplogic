@@ -54,10 +54,11 @@ export default function HeroOrchestration() {
     <div className="ho" role="img" aria-label={`DeepLogic orchestrator running the ${mission.name} mission with three deployed agents`}>
       <svg viewBox="0 0 520 430" className="ho-svg" preserveAspectRatio="xMidYMid meet">
         <defs>
+          {/* Follows the active brand accent (Settings → Appearance → Branding). */}
           <linearGradient id="ho-grad" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0" stopColor="#7ff0fb" />
-            <stop offset="0.5" stopColor="#49a0e6" />
-            <stop offset="1" stopColor="#5560e8" />
+            <stop offset="0" stopColor="var(--cyan, #7ff0fb)" />
+            <stop offset="0.5" stopColor="var(--blue, #49a0e6)" />
+            <stop offset="1" stopColor="var(--blue, #5560e8)" />
           </linearGradient>
           <filter id="ho-glow" x="-60%" y="-60%" width="220%" height="220%">
             <feGaussianBlur stdDeviation="6" result="b" />

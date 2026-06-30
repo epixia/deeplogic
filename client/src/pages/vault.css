@@ -297,7 +297,7 @@
   gap: 12px;
   border: 1px solid var(--line);
   border-radius: 11px;
-  background: var(--card);
+  background: transparent;
   padding: 12px 14px;
 }
 .vault-row-main {
@@ -675,13 +675,16 @@
 /* ---- Power BI cards ---- */
 .vault-pbi { display: flex; flex-direction: column; gap: 14px; }
 .vault-pbi-card { border: 1px solid var(--line); border-radius: 14px; background: var(--card); padding: 16px 18px; }
-.vault-pbi-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.vault-pbi-name { font-size: 15px; font-weight: 800; }
+.vault-pbi-head { display: flex; align-items: center; gap: 10px; }
+.vault-pbi-name { font-size: 15px; font-weight: 800; flex: 1; min-width: 0; }
+.vault-pbi-analyse { flex: none; }
 .vault-pbi-del { background: none; border: none; color: var(--mut); cursor: pointer; font-size: 13px; }
 .vault-pbi-del:hover { color: var(--bad); }
 .vault-pbi-stats { font-size: 12.5px; color: var(--mut); margin-top: 3px; }
 .vault-pbi-sec { margin-top: 14px; }
 .vault-pbi-sec h4 { font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: var(--mut2); margin-bottom: 8px; }
+.vault-pbi-desc { font-size: 13px; line-height: 1.55; color: var(--ink); }
+.vault-pbi-desc--load { color: var(--mut); font-style: italic; }
 .vault-pbi-chips { display: flex; flex-wrap: wrap; gap: 7px; }
 .vault-pbi-chip {
   display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px;
@@ -739,3 +742,39 @@
 .vault-kpi-expr { font-size: 11.5px; color: var(--mut); background: var(--bg2); border: 1px solid var(--line); border-radius: 7px; padding: 6px 9px; display: block; white-space: pre-wrap; word-break: break-word; line-height: 1.4; }
 .vault-kpi-origins { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
 .vault-kpi-origin { font-size: 11px; color: var(--mut); }
+
+.vault-date { font-size: 11px; color: var(--mut2); white-space: nowrap; flex-shrink: 0; min-width: 72px; text-align: right; }
+
+/* Markdown sortable table */
+.vault-table { width: 100%; border-collapse: collapse; }
+.vault-table thead th { text-align: left; border-bottom: 1px solid var(--line); padding: 0 10px 8px; }
+.vault-th { background: none; border: 0; font: inherit; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--mut2); cursor: pointer; padding: 0; display: inline-flex; align-items: center; gap: 5px; }
+.vault-th:hover { color: var(--ink); }
+.vault-th-arrow { font-size: 9px; opacity: .7; }
+.vault-th-ic { width: 30px; }
+.vault-trow td { padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.vault-trow:last-child td { border-bottom: 0; }
+.vault-td-ic { font-size: 18px; width: 30px; }
+.vault-td-date { font-size: 12px; color: var(--mut); white-space: nowrap; }
+
+/* Markdown multi-select + bulk delete */
+.vault-th-sel, .vault-td-sel { width: 28px; padding-right: 0; }
+.vault-check { width: 16px; height: 16px; border-radius: 4px; accent-color: var(--cyan); cursor: pointer; margin: 0; }
+.vault-trow--sel td { background: rgba(111,227,240,.06); }
+.vault-bulk { display: inline-flex; align-items: center; gap: 8px; margin-left: auto; }
+.vault-bulk-count { font-size: 12px; font-weight: 600; color: var(--mut); }
+.btn-danger {
+  background: var(--bad); color: #fff; border-color: transparent;
+}
+.btn-danger:hover { filter: brightness(1.08); }
+.vault-cat { font-size: 11px; font-weight: 600; color: var(--cyan); background: rgba(111,227,240,.1); border: 1px solid rgba(111,227,240,.25); border-radius: 99px; padding: 2px 9px; white-space: nowrap; }
+
+.vault-row--wrap { flex-direction: column; align-items: stretch; gap: 6px; }
+.vault-row-line { display: flex; align-items: center; gap: 10px; }
+
+/* Power BI card — collapsible */
+.vault-pbi-toggle { display: flex; align-items: center; gap: 8px; background: none; border: none; padding: 0; cursor: pointer; flex: 1; min-width: 0; text-align: left; color: var(--ink); font: inherit; }
+.vault-pbi-chev { color: var(--mut); font-size: 12px; flex: none; width: 12px; }
+.vault-pbi-toggle:hover .vault-pbi-name { color: var(--cyan); }
+.vault-pbi-stats--btn { width: 100%; background: none; border: none; padding: 0; cursor: pointer; text-align: left; }
+.vault-pbi-more { color: var(--cyan); font-weight: 600; }

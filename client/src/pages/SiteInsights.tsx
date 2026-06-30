@@ -3,7 +3,7 @@
 // company overview + facts, and web sources. Traffic/keyword rankings need a
 // paid data provider — surfaced honestly with an upgrade note.
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import {
@@ -13,17 +13,38 @@ import {
   fetchDomainIntel,
   getDomainProducts,
   fetchDomainProductsStream,
+  getPublicCompany,
   type SiteInsights as SI,
   type DomainIntel,
   type ProductSuggestion,
+  type PublicCompany,
 } from '../lib/api'
 import IntelTrafficChart from '../components/vault/IntelTrafficChart'
+import TickerChart from '../components/vault/TickerChart'
 import './site-insights.css'
 
 // Hide a thumbnail that fails to load (broken / hotlink-blocked).
 function hideImg(ev: { currentTarget: HTMLImageElement }) {
   ev.currentTarget.style.display = 'none'
 }
+
+// Detect a stock ticker (EXCHANGE:SYMBOL) from the company facts / overview.
+// Exchange order matters — list more specific codes (TSXV) before substrings (TSX).
+const TICKER_EXCHANGES = ['NASDAQ', 'NYSEAMERICAN', 'NYSE', 'AMEX', 'TSX-V', 'TSXV', 'TSX', 'CSE', 'NEO', 'OTCQB', 'OTCQX', 'OTCMKTS', 'OTC', 'LSE', 'ASX', 'FRA', 'ETR', 'EPA']
+function extractTicker(facts: { label: string; value: string }[], overview: string): string | null {
+  const hay = [...facts.map((f) => `${f.label}: ${f.value}`), overview].join('\n')
+  for (const ex of TICKER_EXCHANGES) {
+    const re = new RegExp(`\\b${ex.replace('-', '\\-?')}\\s*[:\\-]?\\s*\\$?([A-Z][A-Z.]{0,5})\\b`)
+    const m = re.exec(hay)
+    if (m) return `${ex.replace('-', '')}:${m[1]}`
+  }
+  const tf = facts.find((f) => /ticker|symbol/i.test(f.label))
+  if (tf) { const m = /\b([A-Z]{1,6})\b/.exec(tf.value); if (m) return m[1] }
+  return null
+}
+
+// Sortable columns for the "Top organic keywords" table.
+type KwSortKey = 'keyword' | 'position' | 'searchVolume' | 'etv'
 
 // Compact number formatting for SEO metrics (12345 → 12.3K).
 function fmtNum(n: number | null | undefined): string {
@@ -65,6 +86,50 @@ export default function SiteInsights({
   const [intelFetchedAt, setIntelFetchedAt] = useState<string | null>(null)
   const [intelFetching, setIntelFetching] = useState(false)
   const [intelError, setIntelError] = useState<string | null>(null)
+
+  // "Top organic keywords" sort — defaults to estimated traffic, high→low.
+  const [kwSort, setKwSort] = useState<KwSortKey>('etv')
+  const [kwDir, setKwDir] = useState<'asc' | 'desc'>('desc')
+  function sortKw(k: KwSortKey) {
+    if (k === kwSort) setKwDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+    else { setKwSort(k); setKwDir(k === 'keyword' ? 'asc' : 'desc') } // metrics default high→low
+  }
+  // Sort the full keyword set, then take the top 20 by the active column.
+  const sortedKeywords = useMemo(() => {
+    const rows = intel?.topKeywords ?? []
+    const val = (k: typeof rows[number]): string | number | null => {
+      switch (kwSort) {
+        case 'keyword': return k.keyword?.toLowerCase() ?? ''
+        case 'position': return k.position
+        case 'searchVolume': return k.searchVolume
+        case 'etv': return k.etv
+      }
+    }
+    const dir = kwDir === 'asc' ? 1 : -1
+    return [...rows].sort((a, b) => {
+      const va = val(a), vb = val(b)
+      if (va == null && vb == null) return 0
+      if (va == null) return 1 // nulls always last
+      if (vb == null) return -1
+      if (typeof va === 'string' && typeof vb === 'string') return va.localeCompare(vb) * dir
+      return ((va as number) - (vb as number)) * dir
+    }).slice(0, 20)
+  }, [intel, kwSort, kwDir])
+  function renderKwTh(k: KwSortKey, label: string) {
+    const active = kwSort === k
+    return (
+      <th
+        className={`si-kw-th${active ? ' si-kw-th--active' : ''}`}
+        onClick={() => sortKw(k)}
+        role="button"
+        tabIndex={0}
+        aria-sort={active ? (kwDir === 'asc' ? 'ascending' : 'descending') : 'none'}
+        onKeyDown={(ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); sortKw(k) } }}
+      >
+        {label}<span className="si-kw-sort-arrow">{active ? (kwDir === 'asc' ? ' ▲' : ' ▼') : ''}</span>
+      </th>
+    )
+  }
 
   const load = useCallback(async (refresh = false) => {
     setLoading(true); setError(null)
@@ -173,6 +238,23 @@ export default function SiteInsights({
 
   const domain = data?.domain ?? (() => { try { return new URL(url).hostname.replace(/^www\./, '') } catch { return url } })()
   const favicon = `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=64`
+
+  // Detect a public-company ticker from the facts, then fetch live market data.
+  const ticker = useMemo(() => (data ? extractTicker(data.facts, data.overview) : null), [data])
+  const [market, setMarket] = useState<PublicCompany | null>(null)
+  useEffect(() => {
+    if (!ticker) { setMarket(null); return }
+    let cancelled = false
+    void (async () => {
+      try {
+        const t = await getAccessToken()
+        if (!t) return
+        const r = await getPublicCompany(t, orgId, ticker, compName || data?.title)
+        if (!cancelled) setMarket(r.company)
+      } catch { /* live data is best-effort */ }
+    })()
+    return () => { cancelled = true }
+  }, [getAccessToken, orgId, ticker, compName, data?.title])
 
   return (
     <main className="wrap si">
@@ -330,10 +412,15 @@ export default function SiteInsights({
                 <div className="si-matrix-scroll">
                   <table className="si-kw-table">
                     <thead>
-                      <tr><th>Keyword</th><th>Pos.</th><th>Volume</th><th>Est. traffic</th></tr>
+                      <tr>
+                        {renderKwTh('keyword', 'Keyword')}
+                        {renderKwTh('position', 'Pos.')}
+                        {renderKwTh('searchVolume', 'Volume')}
+                        {renderKwTh('etv', 'Est. traffic')}
+                      </tr>
                     </thead>
                     <tbody>
-                      {(intel.topKeywords ?? []).slice(0, 20).map((k, i) => (
+                      {sortedKeywords.map((k, i) => (
                         <tr key={i}>
                           <td>{k.keyword}</td>
                           <td>{k.position ?? '—'}</td>
@@ -402,14 +489,29 @@ export default function SiteInsights({
             )}
           </section>
 
-          {data.facts.length > 0 && (
+          {(data.facts.length > 0 || ticker) && (
             <section className="si-card">
-              <h2>Company facts</h2>
-              <dl className="si-facts">
-                {data.facts.map((f, i) => (
-                  <div className="si-fact" key={i}><dt>{f.label}</dt><dd>{f.value}</dd></div>
-                ))}
-              </dl>
+              <div className="si-intel-head">
+                <h2>Company facts</h2>
+                <div className="si-intel-actions">
+                  {data.cachedAt && <span className="si-intel-stamp">Updated {new Date(data.cachedAt).toLocaleDateString()}</span>}
+                  <button className="btn btn-primary btn-xs" onClick={() => void load(true)} disabled={loading}>
+                    {loading ? 'Fetching…' : '↻ Re-fetch'}
+                  </button>
+                </div>
+              </div>
+              <div className={`si-facts-row${ticker ? ' has-ticker' : ''}`}>
+                <dl className="si-facts">
+                  {data.facts.map((f, i) => (
+                    <div className="si-fact" key={i}><dt>{f.label}</dt><dd>{f.value}</dd></div>
+                  ))}
+                </dl>
+                {ticker && (
+                  <aside className="si-ticker">
+                    <TickerChart symbol={market?.tradingViewSymbol || ticker} />
+                  </aside>
+                )}
+              </div>
             </section>
           )}
 

@@ -21,6 +21,12 @@ import { Router } from 'express';
 import type { Request, Response, NextFunction } from 'express';
 import { serviceClient } from '../supabase.js';
 import { PLAN_LIMITS, getMonthlyTokens } from '../billing.js';
+import { loadAiConfig, serverFallbackAi } from './studio.js';
+import { fetchSiteText } from '../studio/aiTeam.js';
+import { generateGalleryBlock } from '../studio/generateGalleryBlock.js';
+import { loadMailSettings, saveMailSettings, sendTestMail, type MailSettings } from '../integrations/mail.js';
+import { loadAppearance, saveAppearance, BG_KINDS, type AppearanceSettings } from './platform.js';
+import { getIntegrationsView, savePlatformIntegrations, INTEGRATION_FIELDS } from '../platformConfig.js';
 
 export const adminRouter = Router();
 
@@ -61,7 +67,7 @@ adminRouter.use('/admin', requireAdmin);
 async function logAdminAction(
   adminEmail: string,
   action: string,
-  targetType: 'org' | 'user' | 'subscription',
+  targetType: 'org' | 'user' | 'subscription' | 'block' | 'settings',
   targetId: string,
   payload?: Record<string, unknown>
 ): Promise<void> {
@@ -92,6 +98,175 @@ function isSuspended(user: { banned_until?: string | null }): boolean {
 // ---------------------------------------------------------------------------
 adminRouter.get('/admin/me', (req: Request, res: Response) => {
   res.json({ isAdmin: true, email: req.user!.email });
+});
+
+// ---------------------------------------------------------------------------
+// Block Gallery management — admin builds/curates platform-wide Blocks.
+// ---------------------------------------------------------------------------
+
+adminRouter.get('/admin/gallery-blocks', async (_req: Request, res: Response) => {
+  const { data, error } = await serviceClient.from('gallery_blocks').select('*').order('created_at', { ascending: false });
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.json({ blocks: data ?? [] });
+});
+
+// Generate a Block draft from a documentation URL using AI (admin reviews, then saves).
+adminRouter.post('/admin/gallery-blocks/generate', async (req: Request, res: Response) => {
+  const docsUrl = String(req.body?.docsUrl ?? '').trim();
+  const hint = String(req.body?.hint ?? '').trim();
+  if (!/^https?:\/\//i.test(docsUrl)) { res.status(400).json({ error: 'Provide a documentation URL (https://…).' }); return; }
+  let ai = (await loadAiConfig(String(req.body?.orgId ?? '')).catch(() => null)) ?? serverFallbackAi();
+  // No org passed / no server key: use an org the admin belongs to that has AI set up.
+  if (!ai) {
+    const { data: mems } = await serviceClient.from('org_members').select('org_id').eq('user_id', req.user!.id);
+    for (const m of (mems ?? []) as { org_id: string }[]) {
+      ai = await loadAiConfig(m.org_id).catch(() => null);
+      if (ai) break;
+    }
+  }
+  if (!ai) { res.status(400).json({ error: 'No AI provider configured. Add an AI key in any of your orgs (Settings → AI) or set a server key.' }); return; }
+  try {
+    const site = await fetchSiteText(docsUrl);
+    if (!site.text.trim()) { res.status(502).json({ error: 'Could not read that documentation page.' }); return; }
+    const draft = await generateGalleryBlock(ai, { url: docsUrl, docsText: site.text, hint });
+    res.json({ draft });
+  } catch (e) {
+    res.status(502).json({ error: e instanceof Error ? e.message : 'Generation failed.' });
+  }
+});
+
+// Create or update (by slug) a gallery Block.
+adminRouter.post('/admin/gallery-blocks', async (req: Request, res: Response) => {
+  const b = (req.body ?? {}) as Record<string, unknown>;
+  if (!b.name) { res.status(400).json({ error: 'name is required.' }); return; }
+  const slug = String(b.slug || b.name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 48) || 'block';
+  const row = {
+    slug,
+    name: String(b.name).slice(0, 80),
+    icon: String(b.icon || '📦').slice(0, 8),
+    category: ['markets', 'data', 'web', 'utility'].includes(String(b.category)) ? String(b.category) : 'data',
+    tagline: String(b.tagline || '').slice(0, 80),
+    description: String(b.description || '').slice(0, 600),
+    size_w: Math.min(Math.max(Number(b.sizeW) || 3, 1), 6),
+    size_h: Math.min(Math.max(Number(b.sizeH) || 3, 1), 6),
+    fields: Array.isArray(b.fields) ? (b.fields as unknown[]).slice(0, 12) : [],
+    html_template: String(b.htmlTemplate).slice(0, 20000),
+    docs_url: b.docsUrl ? String(b.docsUrl).slice(0, 500) : null,
+    enabled: b.enabled !== false,
+    updated_at: new Date().toISOString(),
+  };
+  const { data, error } = await serviceClient.from('gallery_blocks').upsert(row, { onConflict: 'slug' }).select('*').single();
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  await logAdminAction(req.user!.email, 'gallery_block_save', 'block', (data as { id: string }).id, { slug });
+  res.json({ block: data });
+});
+
+adminRouter.patch('/admin/gallery-blocks/:id', async (req: Request, res: Response) => {
+  const b = (req.body ?? {}) as Record<string, unknown>;
+  const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (typeof b.name === 'string') patch.name = b.name.slice(0, 80);
+  if (typeof b.icon === 'string') patch.icon = b.icon.slice(0, 8);
+  if (typeof b.category === 'string' && ['markets', 'data', 'web', 'utility'].includes(b.category)) patch.category = b.category;
+  if (typeof b.tagline === 'string') patch.tagline = b.tagline.slice(0, 80);
+  if (typeof b.description === 'string') patch.description = b.description.slice(0, 600);
+  if (b.sizeW != null) patch.size_w = Math.min(Math.max(Number(b.sizeW) || 3, 1), 6);
+  if (b.sizeH != null) patch.size_h = Math.min(Math.max(Number(b.sizeH) || 3, 1), 6);
+  if (Array.isArray(b.fields)) patch.fields = (b.fields as unknown[]).slice(0, 12);
+  if (typeof b.htmlTemplate === 'string') patch.html_template = b.htmlTemplate.slice(0, 20000);
+  if (typeof b.enabled === 'boolean') patch.enabled = b.enabled;
+  const { data, error } = await serviceClient.from('gallery_blocks').update(patch).eq('id', req.params.id).select('*').single();
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  await logAdminAction(req.user!.email, 'gallery_block_update', 'block', req.params.id);
+  res.json({ block: data });
+});
+
+adminRouter.delete('/admin/gallery-blocks/:id', async (req: Request, res: Response) => {
+  const { error } = await serviceClient.from('gallery_blocks').delete().eq('id', req.params.id);
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  await logAdminAction(req.user!.email, 'gallery_block_delete', 'block', req.params.id);
+  res.json({ ok: true });
+});
+
+// ---------------------------------------------------------------------------
+// Mail server (SMTP) settings — the password is never returned to the client.
+// ---------------------------------------------------------------------------
+
+function maskMail(m: MailSettings) {
+  return { ...m, password: '', hasPassword: !!m.password };
+}
+
+adminRouter.get('/admin/mail-settings', async (_req: Request, res: Response) => {
+  res.json({ settings: maskMail(await loadMailSettings()) });
+});
+
+adminRouter.put('/admin/mail-settings', async (req: Request, res: Response) => {
+  const b = (req.body ?? {}) as Record<string, unknown>;
+  const cur = await loadMailSettings();
+  const next: MailSettings = {
+    host: String(b.host ?? '').trim(),
+    port: Math.min(Math.max(parseInt(String(b.port ?? '587'), 10) || 587, 1), 65535),
+    secure: !!b.secure,
+    username: String(b.username ?? '').trim(),
+    password: b.password ? String(b.password) : cur.password, // blank = keep existing
+    fromName: String(b.fromName ?? '').trim(),
+    fromEmail: String(b.fromEmail ?? '').trim(),
+  };
+  await saveMailSettings(next);
+  await logAdminAction(req.user!.email, 'mail_settings_save', 'settings', 'mail');
+  res.json({ settings: maskMail(next) });
+});
+
+// Global appearance (brand accent + animated background) — applies to the public
+// homepage and as the platform-wide default.
+adminRouter.get('/admin/appearance', async (_req: Request, res: Response) => {
+  res.json(await loadAppearance());
+});
+adminRouter.put('/admin/appearance', async (req: Request, res: Response) => {
+  const b = (req.body ?? {}) as { brand?: string; bg?: string; skin?: string };
+  const next: AppearanceSettings = {
+    brand: (['blue', 'green', 'grey'] as const).includes(b.brand as 'blue') ? (b.brand as AppearanceSettings['brand']) : 'blue',
+    bg: BG_KINDS.includes(b.bg as typeof BG_KINDS[number]) ? (b.bg as AppearanceSettings['bg']) : 'none',
+    skin: typeof b.skin === 'string' && b.skin ? b.skin.slice(0, 40) : 'aurora',
+  };
+  await saveAppearance(next);
+  await logAdminAction(req.user!.email, 'appearance_save', 'settings', 'appearance', { brand: next.brand, bg: next.bg, skin: next.skin });
+  res.json(next);
+});
+
+// Global service integrations (HeyGen / Vapi) — platform-wide, shared by all orgs.
+adminRouter.get('/admin/integrations', async (_req: Request, res: Response) => {
+  res.json(await getIntegrationsView());
+});
+adminRouter.put('/admin/integrations', async (req: Request, res: Response) => {
+  const b = (req.body ?? {}) as Record<string, string>;
+  const patch: Record<string, string> = {};
+  for (const k of INTEGRATION_FIELDS) if (k in b) patch[k] = String(b[k] ?? '');
+  await savePlatformIntegrations(patch);
+  await logAdminAction(req.user!.email, 'integrations_save', 'settings', 'integrations',
+    { fields: Object.keys(patch) });
+  res.json(await getIntegrationsView());
+});
+
+adminRouter.post('/admin/mail-settings/test', async (req: Request, res: Response) => {
+  const to = String(req.body?.to ?? '').trim();
+  if (!/.+@.+\..+/.test(to)) { res.status(400).json({ error: 'Enter a valid recipient address.' }); return; }
+  const b = (req.body ?? {}) as Record<string, unknown>;
+  const cur = await loadMailSettings();
+  const cfg: MailSettings = {
+    host: String(b.host ?? cur.host).trim(),
+    port: parseInt(String(b.port ?? cur.port), 10) || cur.port,
+    secure: b.secure != null ? !!b.secure : cur.secure,
+    username: String(b.username ?? cur.username).trim(),
+    password: b.password ? String(b.password) : cur.password,
+    fromName: String(b.fromName ?? cur.fromName).trim(),
+    fromEmail: String(b.fromEmail ?? cur.fromEmail).trim(),
+  };
+  try {
+    await sendTestMail(cfg, to);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(502).json({ error: e instanceof Error ? e.message : 'Test send failed.' });
+  }
 });
 
 // ---------------------------------------------------------------------------

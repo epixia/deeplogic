@@ -1,0 +1,40 @@
+.acfg-backdrop {
+  position: fixed; inset: 0; background: rgba(0,0,0,.55); backdrop-filter: blur(3px);
+  display: flex; align-items: flex-start; justify-content: center; padding: 6vh 16px; z-index: 200; overflow-y: auto;
+}
+.acfg-modal {
+  width: 100%; max-width: 560px; background: var(--card); border: 1px solid var(--line);
+  border-radius: 16px; box-shadow: 0 20px 60px rgba(0,0,0,.4); display: flex; flex-direction: column;
+}
+.acfg-head { display: flex; align-items: center; gap: 10px; padding: 16px 18px; border-bottom: 1px solid var(--line); }
+.acfg-head h2 { margin: 0; font-size: 16px; font-weight: 700; color: var(--ink); }
+.acfg-name { color: var(--cyan); }
+.acfg-close { margin-left: auto; background: none; border: none; color: var(--mut); cursor: pointer; font-size: 15px; }
+.acfg-close:hover { color: var(--ink); }
+
+.acfg-body { padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; }
+.acfg-field { display: flex; flex-direction: column; gap: 5px; }
+.acfg-field > span { font-size: 12px; font-weight: 600; color: var(--ink); }
+.acfg-field em { color: var(--mut); font-weight: 400; font-style: normal; font-size: 11px; }
+.acfg-field input, .acfg-field textarea {
+  background: var(--bg2); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px;
+  color: var(--ink); font-size: 13px; font-family: inherit; resize: vertical;
+}
+.acfg-field input:focus, .acfg-field textarea:focus { outline: none; border-color: var(--cyan); }
+
+.acfg-sec { font-size: 12.5px; font-weight: 700; color: var(--ink); margin-top: 4px; }
+.acfg-sec em { color: var(--mut); font-weight: 400; font-style: normal; font-size: 11px; }
+.acfg-row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+
+.acfg-seg { display: flex; gap: 6px; flex-wrap: wrap; }
+.acfg-seg-btn {
+  flex: 1; min-width: 70px; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line);
+  background: var(--bg2); color: var(--mut); font-size: 12.5px; font-weight: 600; cursor: pointer;
+}
+.acfg-seg-btn.active { border-color: var(--cyan); color: var(--cyan); background: rgba(111,227,240,.1); }
+
+.acfg-check { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--ink); cursor: pointer; }
+.acfg-check input { width: 15px; height: 15px; accent-color: var(--cyan); }
+
+.acfg-error { margin: 0 18px; color: var(--bad); font-size: 12.5px; }
+.acfg-foot { display: flex; justify-content: flex-end; gap: 10px; padding: 14px 18px; border-top: 1px solid var(--line); }

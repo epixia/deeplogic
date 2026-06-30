@@ -108,8 +108,8 @@ export default function Competitors({
   const [view, setView] = useStickyTab<CompView>(`vault.competitors.view.${orgId}`, 'cards', COMP_VIEWS)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [analyzing, setAnalyzing] = useState(false)
-  const [sortKey, setSortKey] = useState<SortKey>('name')
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+  const [sortKey, setSortKey] = useState<SortKey>('traffic')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
   const navigate = useNavigate()
 
   function sortBy(k: SortKey) {

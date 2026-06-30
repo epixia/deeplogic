@@ -244,3 +244,23 @@
 
 .ob-done-summary { list-style: none; margin: 4px 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .ob-done-summary li { font-size: 13.5px; }
+
+/* Reveal — what we identified (company, products, competitors, AI ideas) */
+.ob-found { display: flex; flex-direction: column; gap: 10px; margin: 14px 0; text-align: left; max-height: 38vh; overflow-y: auto; padding-right: 4px; }
+.ob-found-card { border: 1px solid var(--line); border-radius: 12px; background: rgba(255,255,255,.03); padding: 11px 13px; }
+.ob-found-h { font-size: 13px; font-weight: 700; color: var(--ink); display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
+.ob-found-n { font-size: 11px; font-weight: 600; color: var(--cyan); background: rgba(111,227,240,.12); border-radius: 99px; padding: 1px 8px; }
+.ob-found-sum { font-size: 12.5px; line-height: 1.5; color: var(--mut); margin: 0 0 7px; }
+.ob-found-facts { display: flex; flex-wrap: wrap; gap: 6px; }
+.ob-found-fact { font-size: 11.5px; color: var(--ink); background: var(--bg2); border: 1px solid var(--line); border-radius: 7px; padding: 2px 8px; }
+.ob-found-fact b { color: var(--mut); font-weight: 600; }
+.ob-found-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.ob-found-chip { font-size: 12px; font-weight: 600; color: var(--ink); background: var(--bg2); border: 1px solid var(--line); border-radius: 99px; padding: 2px 10px; }
+.ob-found-agents { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.ob-found-agents li { font-size: 12.5px; line-height: 1.45; color: var(--mut); padding-left: 14px; position: relative; }
+.ob-found-agents li::before { content: '🤖'; position: absolute; left: 0; font-size: 10px; }
+.ob-found-agents b { color: var(--ink); font-weight: 700; }
+
+/* Inline reveal — no popup; sits below the live feed with a Continue button. */
+.ob-reveal-inline { display: flex; justify-content: center; margin-top: 22px; animation: ob-rise .3s cubic-bezier(.2,.8,.2,1); }
+.ob-reveal--inline { max-width: 780px; border: 1px solid var(--line); background: var(--card); box-shadow: 0 12px 40px rgba(0,0,0,.18); }

@@ -31,10 +31,11 @@ export default function Logo({ size = 30, className, title }: LogoProps) {
     >
       {title ? <title>{title}</title> : null}
       <defs>
+        {/* Follows the active brand accent (Settings → Appearance → Branding). */}
         <linearGradient id={gradId} x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#7ff0fb" />
-          <stop offset="0.5" stopColor="#49a0e6" />
-          <stop offset="1" stopColor="#5560e8" />
+          <stop offset="0" stopColor="var(--cyan, #7ff0fb)" />
+          <stop offset="0.55" stopColor="var(--blue, #49a0e6)" />
+          <stop offset="1" stopColor="var(--blue, #5560e8)" />
         </linearGradient>
         <filter id={glowId} x="-60%" y="-60%" width="220%" height="220%">
           <feGaussianBlur stdDeviation="2.4" result="b" />

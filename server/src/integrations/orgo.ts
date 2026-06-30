@@ -11,7 +11,14 @@
 // Response field names are handled defensively — Orgo's exact shapes aren't all
 // documented, so we probe a few common keys for status/host.
 
+import { Agent } from 'undici';
+
 const ORGO_BASE = 'https://www.orgo.ai/api';
+
+// Missions run for minutes; undici's default 5-min header/body timeouts would
+// kill the request mid-mission ("fetch failed"). This dispatcher disables them —
+// the real cap is the AbortSignal timeout passed to orgoReq.
+const missionDispatcher = new Agent({ headersTimeout: 0, bodyTimeout: 0, connectTimeout: 30_000 });
 
 export interface OrgoComputer {
   id: string;
@@ -20,8 +27,8 @@ export interface OrgoComputer {
   raw: unknown;
 }
 
-async function orgoReq(apiKey: string, path: string, init?: RequestInit, timeoutMs = 20_000): Promise<Response> {
-  return fetch(`${ORGO_BASE}${path}`, {
+async function orgoReq(apiKey: string, path: string, init?: RequestInit, timeoutMs = 20_000, dispatcher?: unknown): Promise<Response> {
+  const reqInit: RequestInit = {
     ...init,
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -29,7 +36,9 @@ async function orgoReq(apiKey: string, path: string, init?: RequestInit, timeout
       ...(init?.headers as Record<string, string> | undefined),
     },
     signal: AbortSignal.timeout(timeoutMs),
-  });
+  };
+  if (dispatcher) (reqInit as { dispatcher?: unknown }).dispatcher = dispatcher;
+  return fetch(`${ORGO_BASE}${path}`, reqInit);
 }
 
 // Validate a key without provisioning anything: a list call that only needs auth.
@@ -52,10 +61,12 @@ export async function orgoEnsureWorkspace(apiKey: string, name: string): Promise
 }
 
 function pickHost(j: Record<string, unknown>): string | undefined {
-  for (const k of ['url', 'host', 'connection_url', 'vnc_url', 'stream_url', 'dashboard_url']) {
-    if (typeof j[k] === 'string' && j[k]) return j[k] as string;
-  }
-  return typeof j.id === 'string' ? `https://www.orgo.ai/computers/${j.id}` : undefined;
+  // Orgo's browser-viewable console for a computer lives at /workspaces/<computerId>
+  // (confirmed working). Its API-returned *_url fields point at /desktops/<shortid>,
+  // which is NOT the right page, and the raw url/host is the auth-gated VM endpoint —
+  // so we always build the /workspaces/ console URL from the computer id.
+  if (typeof j.id === 'string' && j.id) return `https://www.orgo.ai/workspaces/${j.id}`;
+  return undefined;
 }
 function normalizeComputer(j: Record<string, unknown>): OrgoComputer {
   const status = typeof j.status === 'string' ? j.status : (typeof j.state === 'string' ? j.state : undefined);
@@ -73,7 +84,13 @@ export async function orgoCreateComputer(
       cpu: opts.cpu ?? 1, ram: opts.ram ?? 4,
     }),
   }, 30_000);
-  if (!r.ok) throw new Error(`Orgo computer create failed: ${r.status} ${(await r.text()).slice(0, 200)}`);
+  if (!r.ok) {
+    const body = (await r.text()).slice(0, 300);
+    if (r.status === 403 && /upgrade|paid plan/i.test(body)) {
+      throw new Error('Your Orgo plan can\'t launch VMs yet — creating a computer requires a paid Orgo plan. Upgrade at orgo.ai, then re-deploy.');
+    }
+    throw new Error(`Orgo computer create failed: ${r.status} ${body}`);
+  }
   return normalizeComputer((await r.json()) as Record<string, unknown>);
 }
 
@@ -93,12 +110,12 @@ export async function orgoRunMission(
   apiKey: string,
   computerId: string,
   mission: string,
-  model = 'claude-sonnet-4-6',
+  model = 'claude-sonnet-4.6', // Orgo's model id uses a dot (claude-sonnet-4.6 / claude-opus-4.6)
 ): Promise<{ text: string }> {
   const r = await orgoReq(apiKey, '/v1/chat/completions', {
     method: 'POST',
     body: JSON.stringify({ model, computer_id: computerId, messages: [{ role: 'user', content: mission }] }),
-  }, 600_000);
+  }, 600_000, missionDispatcher);
   if (!r.ok) throw new Error(`Orgo mission failed: ${r.status} ${(await r.text()).slice(0, 300)}`);
   const j = (await r.json()) as { choices?: { message?: { content?: string } }[] };
   return { text: j.choices?.[0]?.message?.content ?? '' };

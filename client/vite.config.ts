@@ -13,6 +13,16 @@ export default defineConfig({
         target: 'http://localhost:8787',
         changeOrigin: true,
       },
+      // Proxy Supabase through the dev origin so the browser talks to it
+      // same-origin (no CORS). The local Supabase returns `Access-Control-Allow-
+      // Origin: *` together with `Allow-Credentials: true`, which browsers reject
+      // for credentialed requests (e.g. password reset). Same-origin sidesteps it.
+      '/sb': {
+        target: 'http://127.0.0.1:54740',
+        changeOrigin: true,
+        ws: true,
+        rewrite: (p) => p.replace(/^\/sb/, ''),
+      },
     },
   },
 })

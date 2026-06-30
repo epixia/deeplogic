@@ -270,7 +270,6 @@
   letter-spacing: -0.02em;
   font-weight: 800;
   margin-top: 12px;
-  max-width: 18ch;
 }
 .dlh-lead {
   color: var(--mut);
@@ -354,3 +353,10 @@
   -webkit-text-fill-color: var(--ink);
   color: var(--ink);
 }
+
+/* A section that lost its heading/lead (cards only) — drop the top void. */
+.dlh-how--bare { padding-top: 0; }
+.dlh-how--bare .dlh-steps { margin-top: 0; }
+
+/* Tighten the gap between the "AI agents" cards and the heading-less cards below. */
+.dlh-how:has(+ .dlh-how--bare) { padding-bottom: 16px; }

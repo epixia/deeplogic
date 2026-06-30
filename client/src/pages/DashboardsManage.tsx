@@ -11,6 +11,7 @@ import {
   createDashboard,
   updateDashboard,
   deleteDashboard,
+  reorderDashboards,
   type DashboardListItem,
 } from '../lib/api'
 import '../components/studio/studio.css'
@@ -49,6 +50,7 @@ export default function DashboardsManage() {
   // Drag + new-group UI state
   const [dragId, setDragId] = useState<string | null>(null)
   const [dropGroup, setDropGroup] = useState<string | null>(null)
+  const [overId, setOverId] = useState<string | null>(null) // row we'd insert before
   const [addingGroup, setAddingGroup] = useState(false)
   const [newGroupName, setNewGroupName] = useState('')
 
@@ -91,25 +93,44 @@ export default function DashboardsManage() {
     return [...map.entries()].sort((a, b) => order(a[0]) - order(b[0]) || a[0].localeCompare(b[0]))
   }, [boards, extraGroups])
 
-  // ---- drag & drop ----
-  async function moveToGroup(boardId: string, group: string) {
-    const board = boards.find((b) => b.id === boardId)
-    if (!board || groupOf(board) === group) return
+  // ---- drag & drop: reorder within a group AND move between groups ----
+  // Build the new flat board order with `dragId` inserted before `beforeId`
+  // (or appended to the end of `group` when beforeId is null), re-grouped.
+  function buildOrder(id: string, group: string, beforeId: string | null): DashboardListItem[] | null {
+    const dragged = boards.find((b) => b.id === id)
+    if (!dragged) return null
+    const moved = { ...dragged, group }
+    const rest = boards.filter((b) => b.id !== id)
+    if (beforeId && beforeId !== id) {
+      const idx = rest.findIndex((b) => b.id === beforeId)
+      if (idx >= 0) return [...rest.slice(0, idx), moved, ...rest.slice(idx)]
+    }
+    // Append to the end of the target group.
+    let lastIdx = -1
+    rest.forEach((b, i) => { if (groupOf(b) === group) lastIdx = i })
+    return [...rest.slice(0, lastIdx + 1), moved, ...rest.slice(lastIdx + 1)]
+  }
+
+  async function applyDrop(group: string, beforeId: string | null) {
+    const id = dragId
+    setDragId(null); setDropGroup(null); setOverId(null)
+    if (!id) return
+    const dragged = boards.find((b) => b.id === id)
+    const next = buildOrder(id, group, beforeId)
+    if (!dragged || !next) return
+    // No-op if order + group are unchanged.
+    if (next.map((b) => b.id).join() === boards.map((b) => b.id).join() && groupOf(dragged) === group) return
     const prev = boards
-    setBoards((cur) => cur.map((b) => (b.id === boardId ? { ...b, group } : b))) // optimistic
+    setBoards(next) // optimistic
     try {
       const t = await getAccessToken()
       if (!t) throw new Error('Session expired')
-      await updateDashboard(t, orgId, boardId, { group })
+      if (groupOf(dragged) !== group) await updateDashboard(t, orgId, id, { group })
+      await reorderDashboards(t, orgId, next.map((b) => b.id))
     } catch (e) {
-      setBoards(prev) // roll back
-      setError(e instanceof Error ? e.message : 'Failed to move dashboard.')
+      setBoards(prev)
+      setError(e instanceof Error ? e.message : 'Failed to reorder dashboards.')
     }
-  }
-  function onDrop(group: string) {
-    const id = dragId
-    setDragId(null); setDropGroup(null)
-    if (id) void moveToGroup(id, group)
   }
 
   // ---- new group ----
@@ -165,7 +186,7 @@ export default function DashboardsManage() {
         <div>
           <h1><span className="grad-text">Dashboards</span></h1>
           <p className="studio-lead">
-            Organise dashboards into groups — <strong>drag a dashboard onto a group</strong> to move it. Open one to add Blocks.
+            Organise dashboards — <strong>drag to reorder</strong> within a group, or drop onto another group to move it. Open one to add Blocks.
           </p>
         </div>
         <div className="studio-head-actions">
@@ -198,9 +219,9 @@ export default function DashboardsManage() {
               <section
                 className={`dm-group${dropGroup === group ? ' dm-group--drop' : ''}`}
                 key={group}
-                onDragOver={(e) => { if (dragId) { e.preventDefault(); setDropGroup(group) } }}
+                onDragOver={(e) => { if (dragId) { e.preventDefault(); setDropGroup(group); setOverId(null) } }}
                 onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDropGroup((g) => (g === group ? null : g)) }}
-                onDrop={(e) => { e.preventDefault(); onDrop(group) }}
+                onDrop={(e) => { e.preventDefault(); void applyDrop(group, null) }}
               >
                 <h2 className="dm-group-head">
                   <span className="dm-group-icon" aria-hidden>{groupIcon(group)}</span>
@@ -213,11 +234,13 @@ export default function DashboardsManage() {
                 <div className="dm-list">
                   {items.map((b) => (
                     <div
-                      className={`dm-row${dragId === b.id ? ' dm-row--dragging' : ''}`}
+                      className={`dm-row${dragId === b.id ? ' dm-row--dragging' : ''}${overId === b.id ? ' dm-row--over' : ''}`}
                       key={b.id}
                       draggable
                       onDragStart={(e) => { setDragId(b.id); e.dataTransfer.effectAllowed = 'move' }}
-                      onDragEnd={() => { setDragId(null); setDropGroup(null) }}
+                      onDragEnd={() => { setDragId(null); setDropGroup(null); setOverId(null) }}
+                      onDragOver={(e) => { if (dragId && dragId !== b.id) { e.preventDefault(); e.stopPropagation(); setOverId(b.id); setDropGroup(group) } }}
+                      onDrop={(e) => { if (dragId) { e.preventDefault(); e.stopPropagation(); void applyDrop(group, b.id) } }}
                     >
                       <span className="dm-grip" aria-hidden title="Drag to another group">⋮⋮</span>
                       <Link className="dm-row-main" draggable={false} to={`/app/${orgId}/dashboards/${b.id}`}>

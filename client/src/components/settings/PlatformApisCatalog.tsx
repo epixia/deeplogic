@@ -59,6 +59,29 @@ const PROVIDERS: PlatformApi[] = [
       },
     ],
   },
+  {
+    id: 'windy',
+    name: 'Windy Webcams',
+    icon: '📷',
+    blurb:
+      'Live webcams worldwide. Powers the Windy Webcam Block — find webcams near a location and embed them on dashboards.',
+    docsUrl: 'https://api.windy.com/webcams/docs',
+    fields: [
+      {
+        key: 'apiKey',
+        label: 'API key',
+        type: 'password',
+        placeholder: 'Your Windy Webcams API key',
+        hint: (
+          <>
+            Get a key from{' '}
+            <a href="https://api.windy.com/keys" target="_blank" rel="noreferrer">api.windy.com/keys</a>{' '}
+            (Webcams API).
+          </>
+        ),
+      },
+    ],
+  },
 ]
 
 export default function PlatformApisCatalog({

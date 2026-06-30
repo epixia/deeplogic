@@ -2,7 +2,7 @@
 
 .orgo-card {
   border: 1px solid var(--line); border-radius: 16px; background: transparent;
-  padding: 20px 22px; max-width: 720px; display: flex; flex-direction: column; gap: 16px;
+  padding: 20px 22px; display: flex; flex-direction: column; gap: 16px;
 }
 .orgo-empty { color: var(--mut); font-size: 14px; }
 

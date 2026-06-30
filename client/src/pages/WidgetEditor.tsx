@@ -15,6 +15,7 @@ import {
   type StudioMessage,
 } from '../lib/api'
 import SuggestIdeasModal from '../components/studio/SuggestIdeasModal'
+import { decodeBlockConfig, inferBlockConfig, encodeBlockConfig, type GalleryBlock } from '../lib/blockGallery'
 import { useAppTheme } from '../components/studio/reportTheme'
 import { widgetFrameSrcDoc } from '../lib/genFrame'
 import '../components/studio/studio.css'
@@ -65,6 +66,10 @@ export default function WidgetEditor() {
   const [searching, setSearching] = useState(false)
   const [listening, setListening] = useState(false)
   const [sources, setSources] = useState<WidgetSource[]>([])
+  // Predefined (gallery) Block: edit SETTINGS only, no vibe-coding.
+  const [galleryBlock, setGalleryBlock] = useState<GalleryBlock | null>(null)
+  const [galleryCfg, setGalleryCfg] = useState<Record<string, string>>({})
+  const [applying, setApplying] = useState(false)
   const [showPicker, setShowPicker] = useState(false)
   const [pickerMode, setPickerMode] = useState<'list' | 'add-api'>('list')
   const [pickerItems, setPickerItems] = useState<ContextItem[]>([])
@@ -131,6 +136,33 @@ export default function WidgetEditor() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, generating])
+
+  // Detect a predefined gallery Block (marker stored in prompt) → settings mode.
+  useEffect(() => {
+    if (!widget) return
+    const g = decodeBlockConfig(widget.prompt) ?? inferBlockConfig(widget.html)
+    if (g) { setGalleryBlock(g.block); setGalleryCfg({ ...g.config }) }
+  }, [widget])
+
+  // Re-build a predefined Block's HTML from its settings (no AI) and save it.
+  async function applyGallery() {
+    if (!galleryBlock || applying) return
+    setApplying(true)
+    setGenError(null)
+    try {
+      const built = galleryBlock.build(galleryCfg)
+      setHtml(built.html)
+      const t = await token()
+      await updateOrgWidget(t, orgId, widgetId, {
+        html: built.html,
+        prompt: encodeBlockConfig(galleryBlock.id, galleryCfg),
+      })
+    } catch (e) {
+      setGenError(e instanceof Error ? e.message : 'Failed to apply settings.')
+    } finally {
+      setApplying(false)
+    }
+  }
 
   // Auto-generate when arriving from a "⚡ Generate" suggestion (prompt passed
   // via navigation state). Fires once, then clears the state.
@@ -401,8 +433,18 @@ export default function WidgetEditor() {
 
       {/* Split body */}
       <div className="studio-split">
-        {/* LEFT — chat */}
+        {/* LEFT — chat, or settings form for predefined Blocks */}
         <div className="studio-panel chat-col">
+          {galleryBlock ? (
+            <GallerySettingsPanel
+              block={galleryBlock}
+              cfg={galleryCfg}
+              setCfg={setGalleryCfg}
+              applying={applying}
+              error={genError}
+              onApply={() => void applyGallery()}
+            />
+          ) : (<>
           <div className="studio-chat">
             {messages.length === 0 ? (
               <div className="editor-empty">
@@ -633,6 +675,7 @@ export default function WidgetEditor() {
               </div>
             </div>
           </div>
+          </>)}
         </div>
 
         {/* RIGHT — preview */}
@@ -641,7 +684,7 @@ export default function WidgetEditor() {
             <iframe
               className="wg-iframe"
               srcDoc={widgetFrameSrcDoc(html, theme)}
-              sandbox="allow-scripts allow-popups"
+              sandbox={galleryBlock ? 'allow-scripts allow-popups allow-same-origin' : 'allow-scripts allow-popups'}
               title="Block preview"
               style={{ width: '100%', height: '100%', border: 'none', background: 'transparent' }}
             />
@@ -664,5 +707,50 @@ export default function WidgetEditor() {
         />
       )}
     </main>
+  )
+}
+
+// Settings-only editor for a predefined (gallery) Block — no chat / vibe-coding.
+function GallerySettingsPanel({
+  block, cfg, setCfg, onApply, applying, error,
+}: {
+  block: GalleryBlock
+  cfg: Record<string, string>
+  setCfg: (fn: (c: Record<string, string>) => Record<string, string>) => void
+  onApply: () => void
+  applying: boolean
+  error: string | null
+}) {
+  return (
+    <div className="wg-settings">
+      <div className="wg-settings-head">
+        <span className="wg-settings-ic">{block.icon}</span>
+        <div>
+          <h3>{block.name}</h3>
+          <p className="wg-settings-tag">{block.tagline}</p>
+        </div>
+      </div>
+      <p className="wg-settings-desc">{block.description}</p>
+      <div className="wg-settings-form">
+        {block.fields.map((f) => (
+          <label className="studio-field" key={f.key}>
+            <span>{f.label}</span>
+            {f.type === 'select' ? (
+              <select className="studio-select" value={cfg[f.key] ?? f.default ?? ''} onChange={(e) => setCfg((c) => ({ ...c, [f.key]: e.target.value }))}>
+                {f.options?.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            ) : (
+              <input className="studio-input" type={f.type === 'number' ? 'number' : 'text'} value={cfg[f.key] ?? ''} placeholder={f.placeholder} onChange={(e) => setCfg((c) => ({ ...c, [f.key]: e.target.value }))} />
+            )}
+            {(f.help || f.helpUrl) && <small className="wg-settings-help">{f.help} {f.helpUrl && <a href={f.helpUrl} target="_blank" rel="noopener noreferrer" className="blk-gal-link">{f.helpLabel ?? 'Get a key →'}</a>}</small>}
+          </label>
+        ))}
+        {block.fields.length === 0 && <p className="wg-settings-help">This Block has no settings — it's ready to use.</p>}
+        {error && <div className="studio-error">{error}</div>}
+        <button type="button" className="btn btn-primary" onClick={onApply} disabled={applying}>
+          {applying ? 'Applying…' : 'Apply & save'}
+        </button>
+      </div>
+    </div>
   )
 }

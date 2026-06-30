@@ -72,6 +72,7 @@ export default function Onboarding() {
   // claim (end) form
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
+  const [phone, setPhone] = useState('')
   const [orgId, setOrgId] = useState<string | null>(null)
   const [pwNote, setPwNote] = useState(false)
 
@@ -121,7 +122,7 @@ export default function Onboarding() {
         else if (ev.type === 'competitor') setCompetitors((c) => [...c, { name: ev.name, website: ev.website, reason: ev.reason }])
         else if (ev.type === 'product') setProducts((p) => [...p, { name: ev.name, description: ev.description }])
         else if (ev.type === 'agent') setAgents((a) => [...a, { name: ev.name, description: ev.description, model: ev.model, systemPrompt: ev.systemPrompt, schedule: ev.schedule }])
-        else if (ev.type === 'done') { setSummary(ev.summary); setPhase('powerbi') }
+        else if (ev.type === 'done') { setSummary(ev.summary); setPhase('review') }
         else if (ev.type === 'error') setError(ev.error)
       }
     } catch (err) {
@@ -130,6 +131,16 @@ export default function Onboarding() {
   }
 
   // Claim the workspace: create the account (instant), persist what we gathered.
+  // On the claim step, prefill the email with the company's @domain so the user
+  // just types their local part (e.g. "@cannara.ca").
+  useEffect(() => {
+    if (phase !== 'claim' || email) return
+    try {
+      const h = new URL(website.startsWith('http') ? website : `https://${website}`).hostname.replace(/^www\./, '')
+      if (h) setEmail(`@${h}`)
+    } catch { /* ignore */ }
+  }, [phase, website, email])
+
   async function claim(e: FormEvent) {
     e.preventDefault()
     const nm = name.trim(), em = email.trim()
@@ -138,7 +149,7 @@ export default function Onboarding() {
     try {
       // 1) Create the account unless already signed in.
       if (!session) {
-        const { error: suErr } = await signUp(em, randomPassword(), nm)
+        const { error: suErr } = await signUp(em, randomPassword(), nm, phone.trim() || undefined)
         if (suErr) throw new Error(suErr)
         void resetPassword(em).catch(() => undefined) // "set your password" email (best-effort)
         setPwNote(true)
@@ -240,16 +251,16 @@ export default function Onboarding() {
         <div>
           <h1>
             {phase === 'running' ? 'Analysing your business…'
-              : phase === 'review' ? 'Your intelligence is ready'
+              : phase === 'review' ? 'We are priming your Data Vault'
               : phase === 'powerbi' ? 'Show us how you run'
-              : phase === 'claim' ? 'Activate your workspace'
+              : phase === 'claim' ? 'Activate your account'
               : 'Your workspace is ready'}
           </h1>
           <p>
             {phase === 'running' ? 'Watch the AI reason through your business, live — this is where it gets good.'
               : phase === 'review' ? 'We’ve built your picture. Activate your workspace to see it all.'
               : phase === 'powerbi' ? 'Optional — a Power BI report, a financials PDF, a strategy deck… the more you share, the sharper we get.'
-              : phase === 'claim' ? 'Last step — just your name and email.'
+              : phase === 'claim' ? 'Last step — your name, email & phone.'
               : (summary ? `${summary.company} · ${summary.competitors} competitor${summary.competitors === 1 ? '' : 's'} — open your dashboard to dive in` : 'All set up for you.')}
           </p>
         </div>
@@ -264,7 +275,7 @@ export default function Onboarding() {
         <div className="ob-welcome">
           <span className="ob-welcome-emoji" aria-hidden>👋</span>
           <div className="ob-welcome-body">
-            <div className="ob-welcome-title">So great to meet you, {company.name} 🎉</div>
+            <div className="ob-welcome-title">So great to meet the {company.name} team 🎉</div>
             <p className="ob-welcome-text">
               {industryFact(company) && <><strong>{industryFact(company)}</strong> — honestly one of the more exciting spaces to build for right now. </>}
               {firstSentence(company.summary)} We're genuinely getting into it — and the more we read, the more we think you're going to love what comes next.
@@ -294,29 +305,71 @@ export default function Onboarding() {
         </div>
       )}
 
-      {/* review → mystery reveal: a glassmorphism modal over the blurred feed */}
+      {/* review → inline reveal: the live feed stays visible above; no popup. */}
       {phase === 'review' && (
-        <div className="ob-reveal-backdrop">
-          <section className="ob-reveal ob-glass" role="dialog" aria-modal="true" aria-label="Analysis complete">
-            <div className="ob-reveal-ic">🔒</div>
-            <h2>{company?.name ? `We're all in on ${company.name}.` : "We've built your intelligence picture"}</h2>
+        <div className="ob-reveal-inline">
+          <section className="ob-reveal ob-reveal--inline" aria-label="Analysis complete">
+            <div className="ob-reveal-ic">🎉</div>
+            <h2>{company?.name ? `Welcoming ${company.name}` : "We've built your intelligence picture"}</h2>
             <p className="ob-reveal-lead">
               This is the part that gets really fun. Everything you just watched us learn is built and
               waiting for you — agents drafted, competitors mapped, your numbers understood. It's already
               yours; claim it in 20 seconds and let's see what it can really do together.
             </p>
+            <div className="ob-found">
+              {company && (
+                <div className="ob-found-card">
+                  <div className="ob-found-h">🏢 Company</div>
+                  {company.summary && <p className="ob-found-sum">{firstSentence(company.summary)}</p>}
+                  {company.facts?.length > 0 && (
+                    <div className="ob-found-facts">
+                      {company.facts.slice(0, 6).map((f, i) => (
+                        <span key={i} className="ob-found-fact"><b>{f.label}:</b> {f.value}</span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {products.length > 0 && (
+                <div className="ob-found-card">
+                  <div className="ob-found-h">🛍 Products <span className="ob-found-n">{products.length}</span></div>
+                  <div className="ob-found-chips">
+                    {products.slice(0, 12).map((p, i) => <span key={i} className="ob-found-chip" title={p.description}>{p.name}</span>)}
+                  </div>
+                </div>
+              )}
+
+              {competitors.length > 0 && (
+                <div className="ob-found-card">
+                  <div className="ob-found-h">⚔ Competitors <span className="ob-found-n">{competitors.length}</span></div>
+                  <div className="ob-found-chips">
+                    {competitors.slice(0, 12).map((c, i) => <span key={i} className="ob-found-chip" title={c.reason}>{c.name}</span>)}
+                  </div>
+                </div>
+              )}
+
+              {agents.length > 0 && (
+                <div className="ob-found-card">
+                  <div className="ob-found-h">🤖 Ways to grow with AI <span className="ob-found-n">{agents.length} agents</span></div>
+                  <ul className="ob-found-agents">
+                    {agents.slice(0, 6).map((a, i) => (
+                      <li key={i}><b>{a.name}</b>{a.description ? ` — ${a.description}` : ''}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+
             <ul className="ob-reveal-list">
-              {company && <li>✓ Company profile &amp; positioning</li>}
-              {products.length > 0 && <li>✓ {products.length} product{products.length === 1 ? '' : 's'} catalogued</li>}
               {stats && <li>✓ Website &amp; domain intelligence</li>}
-              {summary && summary.competitors > 0 && <li>✓ {summary.competitors} competitors mapped</li>}
-              {agents.length > 0 && <li>✓ {agents.length} AI agent{agents.length === 1 ? '' : 's'} drafted &amp; ready to deploy</li>}
               {(pbiFiles.length - otherDocs.length) > 0 && <li>✓ {pbiFiles.length - otherDocs.length} Power BI report{(pbiFiles.length - otherDocs.length) === 1 ? '' : 's'} — connectors &amp; KPIs detected</li>}
               {otherDocs.length > 0 && <li>✓ {otherDocs.length} document{otherDocs.length === 1 ? '' : 's'} queued for deep reading</li>}
-              <li>✓ Memory graph + a starter dashboard, built for you</li>
+              <li>✓ Goals &amp; a starter plan, agents drafted, memory graph + a dashboard — built for you</li>
             </ul>
             <p className="ob-reveal-nudge">No credit card. No setup. Just open the door and it's all here waiting.</p>
-            <button className="btn btn-primary ob-reveal-cta" onClick={() => setPhase('claim')}>Let's do this — claim my workspace →</button>
+            <button className="btn btn-primary ob-reveal-cta" onClick={() => setPhase('claim')}>Give my business superpowers →</button>
+            <button type="button" className="ob-skiplink" onClick={() => { setPbiIntro(true); setPhase('powerbi') }}>📊 Add a Power BI report or documents first (optional)</button>
           </section>
         </div>
       )}
@@ -422,7 +475,7 @@ export default function Onboarding() {
                                       <div className="ob-table-cols">{t.columns.slice(0, 14).join(', ')}{t.columns.length > 14 ? ` +${t.columns.length - 14} more` : ''}</div>
                                     )}
                                     {t.measures.length > 0 && (
-                                      <div className="ob-table-measures">ƒ {t.measures.slice(0, 8).join(', ')}{t.measures.length > 8 ? '…' : ''}</div>
+                                      <div className="ob-table-measures"><span className="kpi-fx">fx</span>{t.measures.slice(0, 8).join(', ')}{t.measures.length > 8 ? '…' : ''}</div>
                                     )}
                                   </li>
                                 ))}
@@ -450,13 +503,14 @@ export default function Onboarding() {
       {phase === 'claim' && (
         <section className="ob-step">
           <p className="ob-step-lead">
-            Just your name and email — set a password later. We'll save everything we found
+            Just your name, email and phone — set a password later. We'll save everything we found
             {pbiFiles.length ? ` and import your ${pbiFiles.length} Power BI file${pbiFiles.length === 1 ? '' : 's'}` : ''}.
           </p>
           <form className="ob-claim-form" onSubmit={claim}>
             <input className="ob-input" type="text" placeholder="Your name" autoFocus value={name} onChange={(e) => setName(e.target.value)} />
             <input className="ob-input" type="email" placeholder="you@company.com" value={email} onChange={(e) => setEmail(e.target.value)} />
-            <button className="btn btn-primary" type="submit" disabled={busy}>{busy ? 'Setting up…' : 'Create my workspace →'}</button>
+            <input className="ob-input" type="tel" placeholder="Phone number" value={phone} onChange={(e) => setPhone(e.target.value)} />
+            <button className="btn btn-primary" type="submit" disabled={busy}>{busy ? 'Setting up…' : 'Create my account →'}</button>
           </form>
           <button type="button" className="ob-skiplink" onClick={() => setPhase('review')}>← Back</button>
         </section>

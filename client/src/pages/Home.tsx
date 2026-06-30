@@ -1,64 +1,13 @@
 // Home — condensed landing hero (§9) + a working, no-login DEMO section: pick a
 // sample report or upload your own, and jump straight into a live demo.
 
-import { useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import DropZone from '../components/ingest/DropZone'
+import { Link } from 'react-router-dom'
 import HeroOrchestration from '../components/HeroOrchestration'
 import Footer from '../components/Footer'
-import { demoIngestSample, demoIngestUpload, demoSamples } from '../lib/api'
 import './home.css'
 import './ingest.css'
 
-const BLURBS: Record<string, string> = {
-  'Atlas Retail':
-    'Omnichannel retail — orders, revenue, margin and returns across regions and channels.',
-  'Northwind SaaS':
-    'B2B subscription — MRR, active seats, churn and NPS by plan and segment.',
-}
-
 export default function Home() {
-  const navigate = useNavigate()
-  const [samples, setSamples] = useState<{ id: string; name: string }[]>([])
-  const [busy, setBusy] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    let alive = true
-    demoSamples()
-      .then((s) => alive && setSamples(s))
-      .catch(() => undefined)
-    return () => {
-      alive = false
-    }
-  }, [])
-
-  async function startSample(sampleId: string) {
-    if (busy) return
-    setBusy(sampleId)
-    setError(null)
-    try {
-      const { demoId } = await demoIngestSample(sampleId)
-      navigate(`/demo/${demoId}`)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not start the demo.')
-      setBusy(null)
-    }
-  }
-
-  async function startUpload(file: File) {
-    if (busy) return
-    setBusy('upload')
-    setError(null)
-    try {
-      const { demoId } = await demoIngestUpload(file)
-      navigate(`/demo/${demoId}`)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not start the demo.')
-      setBusy(null)
-    }
-  }
-
   return (
     <main className="wrap dl-home">
       {/* ---------------- hero ---------------- */}
@@ -116,10 +65,10 @@ export default function Home() {
 
       {/* ---------------- why / reassurance ---------------- */}
       <section className="dlh-how">
-        <h2 className="dlh-h2">AI agents, without the risk or the rocket science.</h2>
+        <h2 className="dlh-h2">Agentic Mission Control for Business Intelligence</h2>
         <p className="dlh-lead">
-          You don't need to be technical. DeepLogic is the simple, secure way for
-          business owners to put the new wave of AI agents to work.
+          Turn your reports and data into AI agents that work 24/7 — understanding your
+          numbers, watching for risk, and acting on opportunity.
         </p>
         <div className="dlh-steps">
           <div className="dlh-step">
@@ -140,73 +89,8 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ---------------- live demo ---------------- */}
-      <section id="demo" className="dlh-demo">
-        <h2 className="dlh-h2">See it for yourself.</h2>
-        <p className="dlh-lead">
-          Pick an example or add your own file. In a few seconds you'll get
-          charts you can click around. No account needed.
-        </p>
-
-        {error && (
-          <div className="dli-error" style={{ marginTop: 14 }}>
-            {error}
-          </div>
-        )}
-
-        <div className="dlh-demo-grid">
-          {/* sample chooser */}
-          <div className="dli-samples">
-            <div className="dli-section-head">
-              <p className="dli-section-sub">
-                Ready-made examples — open one in a click.
-              </p>
-            </div>
-            <div className="dli-sample-grid">
-              {samples.length === 0 ? (
-                <>
-                  <div className="dli-sample-card dli-skel" />
-                  <div className="dli-sample-card dli-skel" />
-                </>
-              ) : (
-                samples.map((m) => (
-                  <button
-                    key={m.id}
-                    type="button"
-                    className="dli-sample-card"
-                    disabled={!!busy}
-                    onClick={() => startSample(m.id)}
-                  >
-                    <div className="dli-sample-top">
-                      <span className="dli-sample-badge">Report</span>
-                      <span className="dli-sample-src">sample</span>
-                    </div>
-                    <h3 className="dli-sample-name">{m.name}</h3>
-                    <p className="dli-sample-blurb">
-                      {BLURBS[m.name] ?? 'Bundled semantic model.'}
-                    </p>
-                    <span className="dli-sample-cta">
-                      {busy === m.id ? 'Generating…' : 'See the demo →'}
-                    </span>
-                  </button>
-                ))
-              )}
-            </div>
-          </div>
-
-          {/* upload */}
-          <DropZone onFile={startUpload} disabled={!!busy} busy={busy === 'upload'} />
-        </div>
-      </section>
-
       {/* ---------------- how it works ---------------- */}
-      <section id="how" className="dlh-how">
-        <h2 className="dlh-h2">
-          How it works
-        </h2>
-        <p className="dlh-lead">
-          Three easy steps. No setup headaches — start with what you already have.
-        </p>
+      <section id="how" className="dlh-how dlh-how--bare">
         <div className="dlh-steps">
           <div className="dlh-step">
             <div className="n">1</div>

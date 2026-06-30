@@ -13,6 +13,10 @@ import {
   deleteContext,
   getMemoryGraph,
   rebuildMemory,
+  mergeMemoryEntities,
+  updateMemoryEntity,
+  deleteMemoryEntity,
+  deleteMemoryFact,
   type ContextItem,
   type MemoryGraphData,
 } from '../lib/api'
@@ -84,12 +88,13 @@ export default function Memory() {
     )
   }, [notes, search, tagFilter])
 
-  const backlinks = useMemo(() => {
-    if (!active) return []
-    return notes.filter((n) => n.id !== active.id && extractWikiLinks(n.content).some((l) => l.toLowerCase() === active.title.toLowerCase()))
-  }, [notes, active])
-
-  const outgoing = useMemo(() => (active ? extractWikiLinks(active.content) : []), [active])
+  // Paginate the sidebar list so long note sets stay scannable.
+  const PAGE_SIZE = 20
+  const [notePage, setNotePage] = useState(0)
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  const page = Math.min(notePage, pageCount - 1)
+  const pagedNotes = useMemo(() => filtered.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE), [filtered, page])
+  useEffect(() => { setNotePage(0) }, [search, tagFilter])
 
   function select(id: string) { setActiveId(id); setEditing(false); setView('notes') }
 
@@ -223,7 +228,7 @@ export default function Memory() {
           {kgLoading && !kg ? (
             <div className="studio-empty">Loading knowledge graph…</div>
           ) : kg && kg.entities.length > 0 ? (
-            <KnowledgeGraph data={kg} />
+            <KnowledgeGraph data={kg} orgId={orgId} token={token} onMutated={() => void loadKg(includeStale)} />
           ) : (
             <div className="studio-empty">
               No knowledge graph yet — click <strong>⚙ Build from vault</strong> to extract entities &amp; facts from your Data Vault (company profile, competitors, notes).
@@ -247,13 +252,20 @@ export default function Memory() {
               <button className="mem-tagclear" onClick={() => setTagFilter(null)}>#{tagFilter} ✕</button>
             )}
             <div className="mem-list-items">
-              {filtered.map((n) => (
+              {pagedNotes.map((n) => (
                 <button key={n.id} className={`mem-list-item${n.id === activeId ? ' active' : ''}`} onClick={() => select(n.id)}>
                   📝 {n.title}
                 </button>
               ))}
               {filtered.length === 0 && <div className="mem-empty">No matches.</div>}
             </div>
+            {pageCount > 1 && (
+              <div className="mem-pager">
+                <button className="mem-pager-btn" disabled={page === 0} onClick={() => setNotePage((p) => Math.max(0, p - 1))}>‹</button>
+                <span className="mem-pager-info">{page + 1} / {pageCount}</span>
+                <button className="mem-pager-btn" disabled={page >= pageCount - 1} onClick={() => setNotePage((p) => Math.min(pageCount - 1, p + 1))}>›</button>
+              </div>
+            )}
           </aside>
 
           {/* editor / preview */}
@@ -283,7 +295,7 @@ export default function Memory() {
                 {editing ? (
                   <textarea className="mem-editor" value={draft} onChange={(e) => setDraft(e.target.value)} spellCheck={false} />
                 ) : (
-                  <div className="mem-preview" onClick={onPreviewClick} dangerouslySetInnerHTML={{ __html: renderMarkdown(active.content) }} />
+                  <div className="mem-preview" onClick={onPreviewClick} dangerouslySetInnerHTML={{ __html: renderMarkdown(active.content.replace(/^\s*#\s+.*\r?\n+/, '')) }} />
                 )}
               </>
             ) : (
@@ -291,20 +303,8 @@ export default function Memory() {
             )}
           </section>
 
-          {/* rail: links + backlinks + tags */}
+          {/* rail: tags */}
           <aside className="mem-rail">
-            <div className="mem-rail-sec">
-              <h4>Links</h4>
-              {outgoing.length === 0 ? <p className="mem-rail-empty">No links. Use [[Note name]].</p> : outgoing.map((t) => (
-                <button key={t} className="mem-rail-link" onClick={() => void openWiki(t)}>{t}{byTitle(t) ? '' : ' (new)'}</button>
-              ))}
-            </div>
-            <div className="mem-rail-sec">
-              <h4>Backlinks</h4>
-              {backlinks.length === 0 ? <p className="mem-rail-empty">Nothing links here yet.</p> : backlinks.map((n) => (
-                <button key={n.id} className="mem-rail-link" onClick={() => select(n.id)}>{n.title}</button>
-              ))}
-            </div>
             {allTags.length > 0 && (
               <div className="mem-rail-sec">
                 <h4>Tags</h4>
@@ -497,17 +497,82 @@ const TYPE_COLOR: Record<string, string> = {
   event: '#facc15', metric: '#fb923c', concept: '#94a3b8',
 }
 
-function KnowledgeGraph({ data }: { data: MemoryGraphData }) {
+const ENTITY_TYPES = ['person', 'company', 'product', 'place', 'concept', 'event', 'metric']
+
+function KnowledgeGraph({ data, orgId, token, onMutated }: {
+  data: MemoryGraphData
+  orgId: string
+  token: () => Promise<string>
+  onMutated: () => void
+}) {
   const W = 860, H = 560
   const simRef = useRef<{ nodes: SimNode[]; edges: [number, number, string][]; deg: number[] } | null>(null)
-  const rafRef = useRef(0)
   const svgRef = useRef<SVGSVGElement | null>(null)
   const drag = useRef<{ id: string; moved: boolean } | null>(null)
   const [pts, setPts] = useState<SimNode[]>([])
   const [hover, setHover] = useState<string | null>(null)
   const [selected, setSelected] = useState<string | null>(null)
 
+  // View controls: search, type filters, focus (ego-network) mode, edge hover
+  const [search, setSearch] = useState('')
+  const [hiddenTypes, setHiddenTypes] = useState<Set<string>>(new Set())
+  const [focusRoot, setFocusRoot] = useState<string | null>(null)
+  const [hoverEdge, setHoverEdge] = useState<number | null>(null)
+
+  // Curation state
+  const [editing, setEditing] = useState(false)
+  const [eName, setEName] = useState('')
+  const [eType, setEType] = useState('concept')
+  const [eSummary, setESummary] = useState('')
+  const [mergeTarget, setMergeTarget] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+
+  const run = async (fn: (t: string) => Promise<unknown>, keepSelection = false) => {
+    setBusy(true); setErr(null)
+    try {
+      await fn(await token())
+      setEditing(false); setMergeTarget('')
+      if (!keepSelection) setSelected(null)
+      onMutated()
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Action failed.')
+    } finally { setBusy(false) }
+  }
+  useEffect(() => { setEditing(false); setErr(null); setMergeTarget('') }, [selected])
+  // Zoom/pan via the SVG viewBox. Smaller w/h = zoomed in.
+  const [view, setView] = useState({ x: 0, y: 0, w: W, h: H })
+  const pan = useRef<{ sx: number; sy: number; ox: number; oy: number } | null>(null)
+
   const entityById = useMemo(() => new Map(data.entities.map((e) => [e.id, e])), [data.entities])
+
+  // Drop focus/selection if the entity was deleted/merged away on reload.
+  useEffect(() => {
+    if (focusRoot && !entityById.has(focusRoot)) setFocusRoot(null)
+    if (selected && !entityById.has(selected)) setSelected(null)
+  }, [entityById, focusRoot, selected])
+
+  function zoomAround(factor: number, fx = 0.5, fy = 0.5) {
+    setView((v) => {
+      const nw = Math.min(W * 3, Math.max(W * 0.12, v.w * factor))
+      const nh = nw * (H / W)
+      return { x: v.x + fx * v.w - fx * nw, y: v.y + fy * v.h - fy * nh, w: nw, h: nh }
+    })
+  }
+  const resetView = () => setView({ x: 0, y: 0, w: W, h: H })
+
+  // Native non-passive wheel listener so we can zoom toward the cursor.
+  useEffect(() => {
+    const svg = svgRef.current
+    if (!svg) return
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault()
+      const r = svg.getBoundingClientRect()
+      zoomAround(e.deltaY < 0 ? 0.85 : 1 / 0.85, (e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height)
+    }
+    svg.addEventListener('wheel', onWheel, { passive: false })
+    return () => svg.removeEventListener('wheel', onWheel)
+  }, [])
 
   useEffect(() => {
     const idx = new Map(data.entities.map((e, i) => [e.id, i]))
@@ -524,64 +589,78 @@ function KnowledgeGraph({ data }: { data: MemoryGraphData }) {
       if (a != null && b != null && a !== b) edges.push([a, b, f.predicate])
     }
     const deg = nodes.map((_, i) => edges.filter(([a, b]) => a === i || b === i).length)
-    simRef.current = { nodes, edges, deg }
 
-    const tick = () => {
-      const sim = simRef.current!
-      const ns = sim.nodes
-      for (let a = 0; a < ns.length; a++) {
-        for (let b = a + 1; b < ns.length; b++) {
-          let dx = ns[a].x - ns[b].x, dy = ns[a].y - ns[b].y
+    // Settle the layout synchronously (no on-screen "dancing"): run the force
+    // simulation to convergence in one pass, then render the final positions.
+    const N = nodes.length
+    const iters = Math.min(700, 300 + N * 6)
+    for (let it = 0; it < iters; it++) {
+      const cool = 1 - it / iters
+      for (let a = 0; a < N; a++) {
+        for (let b = a + 1; b < N; b++) {
+          let dx = nodes[a].x - nodes[b].x, dy = nodes[a].y - nodes[b].y
           const d2 = dx * dx + dy * dy + 0.01
           const d = Math.sqrt(d2)
           const f = 2600 / d2
           dx /= d; dy /= d
-          ns[a].vx += dx * f; ns[a].vy += dy * f
-          ns[b].vx -= dx * f; ns[b].vy -= dy * f
+          nodes[a].vx += dx * f; nodes[a].vy += dy * f
+          nodes[b].vx -= dx * f; nodes[b].vy -= dy * f
         }
       }
-      for (const [a, b] of sim.edges) {
-        let dx = ns[b].x - ns[a].x, dy = ns[b].y - ns[a].y
+      for (const [a, b] of edges) {
+        let dx = nodes[b].x - nodes[a].x, dy = nodes[b].y - nodes[a].y
         const d = Math.sqrt(dx * dx + dy * dy) || 1
         const f = (d - 110) * 0.016
         dx /= d; dy /= d
-        ns[a].vx += dx * f; ns[a].vy += dy * f
-        ns[b].vx -= dx * f; ns[b].vy -= dy * f
+        nodes[a].vx += dx * f; nodes[a].vy += dy * f
+        nodes[b].vx -= dx * f; nodes[b].vy -= dy * f
       }
-      for (const n of ns) {
-        if (n.fixed) { n.vx = 0; n.vy = 0; continue }
+      for (const n of nodes) {
         n.vx += (W / 2 - n.x) * 0.012
         n.vy += (H / 2 - n.y) * 0.012
-        n.vx *= 0.86; n.vy *= 0.86
-        n.x += n.vx; n.y += n.vy
+        n.vx *= 0.82; n.vy *= 0.82
+        n.x += n.vx * cool; n.y += n.vy * cool
       }
-      setPts(ns.map((n) => ({ ...n })))
-      rafRef.current = requestAnimationFrame(tick)
     }
-    rafRef.current = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(rafRef.current)
+    for (const n of nodes) { n.vx = 0; n.vy = 0 }
+    simRef.current = { nodes, edges, deg }
+    setPts(nodes.map((n) => ({ ...n })))
+    setView({ x: 0, y: 0, w: W, h: H })
   }, [data])
 
   const toSvg = (clientX: number, clientY: number) => {
     const svg = svgRef.current
     if (!svg) return { x: 0, y: 0 }
     const r = svg.getBoundingClientRect()
-    return { x: ((clientX - r.left) / r.width) * W, y: ((clientY - r.top) / r.height) * H }
+    return { x: view.x + ((clientX - r.left) / r.width) * view.w, y: view.y + ((clientY - r.top) / r.height) * view.h }
   }
   function onDown(e: React.PointerEvent, id: string) {
-    e.preventDefault()
+    e.preventDefault(); e.stopPropagation() // don't also start a background pan
     drag.current = { id, moved: false }
     const n = simRef.current?.nodes.find((x) => x.id === id)
     if (n) n.fixed = true
   }
+  function onBgDown(e: React.PointerEvent) {
+    pan.current = { sx: e.clientX, sy: e.clientY, ox: view.x, oy: view.y }
+  }
   function onMove(e: React.PointerEvent) {
+    if (pan.current) {
+      const svg = svgRef.current; if (!svg) return
+      const r = svg.getBoundingClientRect()
+      const dx = ((e.clientX - pan.current.sx) / r.width) * view.w
+      const dy = ((e.clientY - pan.current.sy) / r.height) * view.h
+      setView((v) => ({ ...v, x: pan.current!.ox - dx, y: pan.current!.oy - dy }))
+      return
+    }
     if (!drag.current || !simRef.current) return
     drag.current.moved = true
     const p = toSvg(e.clientX, e.clientY)
     const n = simRef.current.nodes.find((x) => x.id === drag.current!.id)
     if (n) { n.x = p.x; n.y = p.y; n.vx = 0; n.vy = 0 }
+    setPts(simRef.current.nodes.map((x) => ({ ...x }))) // no rAF loop — repaint on drag
   }
   function onUp() {
+    pan.current = null
     if (!drag.current) return
     const { id, moved } = drag.current
     const n = simRef.current?.nodes.find((x) => x.id === id)
@@ -593,6 +672,29 @@ function KnowledgeGraph({ data }: { data: MemoryGraphData }) {
   const sim = simRef.current
   const pos = new Map(pts.map((p) => [p.id, p]))
   const focus = hover ?? selected
+  const q = search.trim().toLowerCase()
+  const matchIds = q ? new Set(data.entities.filter((e) => e.name.toLowerCase().includes(q)).map((e) => e.id)) : null
+
+  const neighborIdsOf = (id: string): string[] => {
+    const out: string[] = []
+    if (!sim) return out
+    sim.edges.forEach(([a, b]) => {
+      if (sim.nodes[a].id === id) out.push(sim.nodes[b].id)
+      else if (sim.nodes[b].id === id) out.push(sim.nodes[a].id)
+    })
+    return out
+  }
+
+  // Focus mode isolates a node's 1-hop ego-network; type filters hide whole types.
+  const focusSet = focusRoot ? new Set([focusRoot, ...neighborIdsOf(focusRoot)]) : null
+  const isVisible = (id: string): boolean => {
+    const e = entityById.get(id)
+    if (!e) return false
+    if (hiddenTypes.has(e.type)) return false
+    if (focusSet && !focusSet.has(id)) return false
+    return true
+  }
+
   const neighbours = new Set<string>()
   if (focus && sim) {
     sim.edges.forEach(([a, b]) => {
@@ -600,14 +702,47 @@ function KnowledgeGraph({ data }: { data: MemoryGraphData }) {
       if (sim.nodes[b].id === focus) neighbours.add(sim.nodes[a].id)
     })
   }
-  const dim = (id: string) => focus && id !== focus && !neighbours.has(id)
+  const dim = (id: string): boolean => {
+    if (matchIds && !matchIds.has(id)) return true
+    if (!focusRoot && focus && id !== focus && !neighbours.has(id)) return true
+    return false
+  }
 
-  const edgePath = (p: SimNode, q: SimNode) => {
-    const mx = (p.x + q.x) / 2, my = (p.y + q.y) / 2
-    const dx = q.x - p.x, dy = q.y - p.y
+  // Node radius blends graph connectivity (degree) and importance (mentions).
+  const nodeRadius = (i: number): number => {
+    const id = sim?.nodes[i]?.id
+    const e = id ? entityById.get(id) : undefined
+    const deg = sim?.deg[i] ?? 0
+    return Math.max(6, Math.min(26, 6 + deg * 1.7 + Math.sqrt(e?.mentionCount ?? 1) * 2))
+  }
+
+  // Declutter: only label hovered/selected/matched/big nodes unless zoomed in.
+  const zoomK = W / view.w
+  const showLabel = (id: string, r: number): boolean =>
+    id === hover || id === selected || !!matchIds?.has(id) || zoomK >= 1.1 || r >= 12
+
+  const fitTo = (ids: string[]) => {
+    const ps = ids.map((id) => pos.get(id)).filter(Boolean) as SimNode[]
+    if (!ps.length) { resetView(); return }
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+    for (const p of ps) { minX = Math.min(minX, p.x); minY = Math.min(minY, p.y); maxX = Math.max(maxX, p.x); maxY = Math.max(maxY, p.y) }
+    const pad = 70
+    let w = Math.max(maxX - minX + pad * 2, W * 0.18)
+    let h = Math.max(maxY - minY + pad * 2, H * 0.18)
+    if (w / h < W / H) w = h * (W / H); else h = w * (H / W)
+    setView({ x: (minX + maxX) / 2 - w / 2, y: (minY + maxY) / 2 - h / 2, w, h })
+  }
+  const fitAll = () => fitTo(data.entities.filter((e) => isVisible(e.id)).map((e) => e.id))
+  const enterFocus = (id: string) => { setFocusRoot(id); fitTo([id, ...neighborIdsOf(id)]) }
+  const exitFocus = () => { setFocusRoot(null); resetView() }
+  const toggleType = (t: string) => setHiddenTypes((s) => { const n = new Set(s); n.has(t) ? n.delete(t) : n.add(t); return n })
+
+  const edgePath = (p: { x: number; y: number }, qn: { x: number; y: number }) => {
+    const mx = (p.x + qn.x) / 2, my = (p.y + qn.y) / 2
+    const dx = qn.x - p.x, dy = qn.y - p.y
     const d = Math.hypot(dx, dy) || 1
     const cx = mx + (-dy / d) * d * 0.14, cy = my + (dx / d) * d * 0.14
-    return `M ${p.x} ${p.y} Q ${cx} ${cy} ${q.x} ${q.y}`
+    return `M ${p.x} ${p.y} Q ${cx} ${cy} ${qn.x} ${qn.y}`
   }
 
   // Facts to list for the selected entity (entity-edges + literal-valued).
@@ -616,42 +751,92 @@ function KnowledgeGraph({ data }: { data: MemoryGraphData }) {
 
   return (
     <div className="mem-kg">
-      <div className="mem-kg-legend">
-        {Object.entries(TYPE_COLOR).map(([t, c]) => (
-          <span key={t} className="mem-kg-leg"><span className="mem-kg-dot" style={{ background: c }} />{t}</span>
-        ))}
+      <div className="mem-kg-controls">
+        <div className="mem-kg-searchbox">
+          <span className="mem-kg-search-ic">⌕</span>
+          <input
+            className="mem-kg-search"
+            placeholder="Search entities…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter' && matchIds?.size) fitTo([...matchIds]) }}
+          />
+          {search && <button type="button" className="mem-kg-search-clear" onClick={() => setSearch('')}>✕</button>}
+        </div>
+        <div className="mem-kg-legend">
+          {Object.entries(TYPE_COLOR).map(([t, c]) => {
+            const off = hiddenTypes.has(t)
+            return (
+              <button key={t} type="button" className={`mem-kg-leg${off ? ' is-off' : ''}`}
+                onClick={() => toggleType(t)} title={off ? `Show ${t}` : `Hide ${t}`}>
+                <span className="mem-kg-dot" style={{ background: c }} />{t}
+              </button>
+            )
+          })}
+        </div>
+        {focusRoot && (
+          <button type="button" className="mem-kg-focus-exit" onClick={exitFocus} title="Exit focus mode">
+            ⊙ {entityById.get(focusRoot)?.name?.slice(0, 22) ?? 'focus'} ✕
+          </button>
+        )}
       </div>
       <div className="mem-kg-stage">
+        <div className="mem-kg-zoom">
+          <button type="button" title="Zoom in" onClick={() => zoomAround(0.8)}>+</button>
+          <button type="button" title="Zoom out" onClick={() => zoomAround(1.25)}>−</button>
+          <button type="button" title="Fit to view" onClick={fitAll}>⤢</button>
+        </div>
         <svg
-          ref={svgRef} viewBox={`0 0 ${W} ${H}`} className="mem-graph-svg" style={{ touchAction: 'none' }}
-          onPointerMove={onMove} onPointerUp={onUp} onPointerLeave={onUp}
+          ref={svgRef} viewBox={`${view.x} ${view.y} ${view.w} ${view.h}`} className="mem-graph-svg"
+          style={{ touchAction: 'none', cursor: pan.current ? 'grabbing' : 'grab' }}
+          onPointerDown={onBgDown} onPointerMove={onMove} onPointerUp={onUp} onPointerLeave={onUp}
         >
+          <defs>
+            <marker id="kg-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 1 L 9 5 L 0 9 z" className="mem-arrow" />
+            </marker>
+            <marker id="kg-arrow-lit" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+              <path d="M 0 1 L 9 5 L 0 9 z" className="mem-arrow-lit" />
+            </marker>
+          </defs>
           {sim?.edges.map(([a, b, label], i) => {
-            const p = pos.get(sim.nodes[a].id), q = pos.get(sim.nodes[b].id)
-            if (!p || !q) return null
-            const lit = !!focus && (sim.nodes[a].id === focus || sim.nodes[b].id === focus)
+            const aId = sim.nodes[a].id, bId = sim.nodes[b].id
+            if (!isVisible(aId) || !isVisible(bId)) return null
+            const p = pos.get(aId), qn = pos.get(bId)
+            if (!p || !qn) return null
+            const lit = (!!focus && (aId === focus || bId === focus)) || hoverEdge === i
+            const ra = nodeRadius(a), rb = nodeRadius(b)
+            const dx = qn.x - p.x, dy = qn.y - p.y, d = Math.hypot(dx, dy) || 1
+            const ux = dx / d, uy = dy / d
+            const p2 = { x: p.x + ux * ra, y: p.y + uy * ra }
+            const q2 = { x: qn.x - ux * (rb + 5), y: qn.y - uy * (rb + 5) }
+            const faded = !focusRoot && focus && !lit
             return (
-              <g key={i}>
-                <path d={edgePath(p, q)} fill="none" className={`mem-edge${lit ? ' lit' : ''}`} opacity={focus && !lit ? 0.1 : undefined} />
-                {lit && <text className="mem-kg-edgelabel" x={(p.x + q.x) / 2} y={(p.y + q.y) / 2}>{label}</text>}
+              <g key={i} opacity={faded ? 0.12 : 1}>
+                <path d={edgePath(p2, q2)} fill="none" className="mem-edge-hit"
+                  onMouseEnter={() => setHoverEdge(i)} onMouseLeave={() => setHoverEdge((h) => (h === i ? null : h))} />
+                <path d={edgePath(p2, q2)} fill="none" className={`mem-edge${lit ? ' lit' : ''}`}
+                  markerEnd={`url(#${lit ? 'kg-arrow-lit' : 'kg-arrow'})`} />
+                {lit && <text className="mem-kg-edgelabel" x={(p2.x + q2.x) / 2} y={(p2.y + q2.y) / 2}>{label}</text>}
               </g>
             )
           })}
           {pts.map((p, i) => {
+            if (!isVisible(p.id)) return null
             const e = entityById.get(p.id)
-            const r = Math.min(20, 7 + (sim?.deg[i] ?? 0) * 2.4)
+            const r = nodeRadius(i)
             const color = TYPE_COLOR[e?.type ?? 'concept'] ?? TYPE_COLOR.concept
             return (
               <g
                 key={p.id}
-                className={`mem-node${p.id === selected ? ' active' : ''}${p.id === hover ? ' hover' : ''}`}
-                opacity={dim(p.id) ? 0.2 : 1}
+                className={`mem-node${p.id === selected ? ' active' : ''}${p.id === hover ? ' hover' : ''}${matchIds?.has(p.id) ? ' match' : ''}`}
+                opacity={dim(p.id) ? 0.18 : 1}
                 onPointerDown={(ev) => onDown(ev, p.id)}
                 onMouseEnter={() => setHover(p.id)}
                 onMouseLeave={() => setHover(null)}
               >
                 <circle cx={p.x} cy={p.y} r={r} style={{ fill: color }} />
-                <text x={p.x} y={p.y + r + 13} textAnchor="middle">{(e?.name ?? '').slice(0, 24)}</text>
+                {showLabel(p.id, r) && <text x={p.x} y={p.y + r + 13} textAnchor="middle">{(e?.name ?? '').slice(0, 24)}</text>}
               </g>
             )
           })}
@@ -665,12 +850,69 @@ function KnowledgeGraph({ data }: { data: MemoryGraphData }) {
               <span className="mem-kg-type">{selEntity.type}</span>
               <button className="mem-kg-close" onClick={() => setSelected(null)}>✕</button>
             </div>
-            {selEntity.summary && <p className="mem-kg-summary">{selEntity.summary}</p>}
+
+            {!editing ? (<>
+              {selEntity.summary && <p className="mem-kg-summary">{selEntity.summary}</p>}
+
+              {/* curation toolbar */}
+              <div className="mem-kg-tools">
+                <button type="button" className="btn btn-ghost btn-xs"
+                  onClick={() => (focusRoot === selEntity.id ? exitFocus() : enterFocus(selEntity.id))}>
+                  {focusRoot === selEntity.id ? '⊙ Unfocus' : '⊙ Focus'}
+                </button>
+                <button type="button" className="btn btn-ghost btn-xs" disabled={busy}
+                  onClick={() => { setEName(selEntity.name); setEType(selEntity.type); setESummary(selEntity.summary ?? ''); setEditing(true) }}>✎ Edit</button>
+                <button type="button" className="btn btn-ghost btn-xs mem-kg-danger" disabled={busy}
+                  onClick={() => { if (confirm(`Delete "${selEntity.name}" and its ${selFacts.length} fact(s)? This cannot be undone.`)) void run((t) => deleteMemoryEntity(t, orgId, selEntity.id)) }}>🗑 Delete</button>
+              </div>
+
+              {/* merge into another entity */}
+              <div className="mem-kg-merge">
+                <label>Merge into</label>
+                <div className="mem-kg-merge-row">
+                  <select value={mergeTarget} onChange={(e) => setMergeTarget(e.target.value)} disabled={busy}>
+                    <option value="">Choose entity…</option>
+                    {data.entities.filter((e) => e.id !== selEntity.id).map((e) => (
+                      <option key={e.id} value={e.id}>{e.name} ({e.type})</option>
+                    ))}
+                  </select>
+                  <button type="button" className="btn btn-primary btn-xs" disabled={busy || !mergeTarget}
+                    onClick={() => {
+                      const tgt = data.entities.find((e) => e.id === mergeTarget)
+                      if (tgt && confirm(`Merge "${selEntity.name}" into "${tgt.name}"? All facts move to "${tgt.name}" and "${selEntity.name}" is removed.`)) {
+                        void run((t) => mergeMemoryEntities(t, orgId, selEntity.id, mergeTarget))
+                      }
+                    }}>Merge</button>
+                </div>
+              </div>
+            </>) : (
+              <div className="mem-kg-edit">
+                <label>Name<input value={eName} onChange={(e) => setEName(e.target.value)} disabled={busy} /></label>
+                <label>Type
+                  <select value={eType} onChange={(e) => setEType(e.target.value)} disabled={busy}>
+                    {ENTITY_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </label>
+                <label>Summary<textarea rows={3} value={eSummary} onChange={(e) => setESummary(e.target.value)} disabled={busy} /></label>
+                <div className="mem-kg-edit-actions">
+                  <button type="button" className="btn btn-ghost btn-xs" disabled={busy} onClick={() => setEditing(false)}>Cancel</button>
+                  <button type="button" className="btn btn-primary btn-xs" disabled={busy || !eName.trim()}
+                    onClick={() => void run((t) => updateMemoryEntity(t, orgId, selEntity.id, { name: eName.trim(), type: eType, summary: eSummary }), true)}>
+                    {busy ? 'Saving…' : 'Save'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {err && <div className="mem-kg-err">{err}</div>}
+
             <h5>Facts ({selFacts.length})</h5>
             <ul className="mem-kg-facts">
               {selFacts.map((f) => (
                 <li key={f.id} className={f.validTo ? 'is-stale' : ''}>
-                  {f.statement}{f.validTo && <em> (superseded)</em>}
+                  <span className="mem-kg-fact-txt">{f.statement}{f.validTo && <em> (superseded)</em>}</span>
+                  <button type="button" className="mem-kg-fact-del" title="Delete this fact" disabled={busy}
+                    onClick={() => void run((t) => deleteMemoryFact(t, orgId, f.id), true)}>✕</button>
                 </li>
               ))}
               {selFacts.length === 0 && <li className="mem-kg-empty">No facts recorded.</li>}

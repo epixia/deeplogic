@@ -1,0 +1,36 @@
+.bam-backdrop {
+  position: fixed; inset: 0; background: rgba(0,0,0,.55); backdrop-filter: blur(3px);
+  display: flex; align-items: flex-start; justify-content: center; padding: 7vh 16px; z-index: 200; overflow-y: auto;
+}
+.bam-modal {
+  width: 100%; max-width: 480px; background: var(--card); border: 1px solid var(--line);
+  border-radius: 16px; box-shadow: 0 20px 60px rgba(0,0,0,.4);
+}
+.bam-head { display: flex; align-items: center; gap: 10px; padding: 14px 18px; border-bottom: 1px solid var(--line); }
+.bam-head h2 { margin: 0; font-size: 15px; font-weight: 700; color: var(--ink); }
+.bam-block { color: var(--cyan); }
+.bam-close { margin-left: auto; background: none; border: none; color: var(--mut); cursor: pointer; font-size: 15px; }
+.bam-close:hover { color: var(--ink); }
+
+.bam-body { padding: 14px 18px; display: flex; flex-direction: column; gap: 10px; }
+.bam-sec-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--mut); margin-top: 4px; }
+.bam-empty { font-size: 12.5px; color: var(--mut); }
+
+.bam-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.bam-item { display: flex; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 9px; padding: 7px 10px; }
+.bam-item-kind { font-size: 11px; font-weight: 600; flex-shrink: 0; }
+.bam-item-name { font-size: 12.5px; color: var(--ink); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bam-item-status { font-size: 10px; text-transform: uppercase; letter-spacing: .04em; padding: 1px 6px; border-radius: 99px; }
+.bam-active { color: var(--good); background: color-mix(in srgb, var(--good) 12%, transparent); }
+.bam-paused { color: var(--mut); background: var(--bg2); }
+.bam-item-del { background: none; border: none; color: var(--mut); cursor: pointer; font-size: 12px; }
+.bam-item-del:hover { color: var(--bad); }
+
+.bam-form { display: flex; flex-direction: column; gap: 9px; border: 1px solid var(--line); border-radius: 12px; padding: 12px; background: var(--bg2); }
+.bam-field { display: flex; flex-direction: column; gap: 4px; }
+.bam-field > span { font-size: 12px; font-weight: 600; color: var(--ink); }
+.bam-field em { font-weight: 400; color: var(--mut); font-style: normal; font-size: 11px; }
+.bam-input { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; color: var(--ink); font-size: 13px; }
+.bam-input:focus { outline: none; border-color: var(--cyan); }
+.bam-row3 { display: grid; grid-template-columns: 1.4fr .8fr 1fr; gap: 8px; }
+.bam-error { color: var(--bad); font-size: 12px; }

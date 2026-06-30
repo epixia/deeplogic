@@ -1,5 +1,61 @@
 /* Signal Dashboards — themed with CSS variables from theme.css */
 
+/* ── Predefined Block settings editor (no vibe-coding) ─── */
+.wg-settings { padding: 18px 18px 24px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
+.wg-settings-head { display: flex; align-items: center; gap: 12px; }
+.wg-settings-ic { font-size: 30px; line-height: 1; }
+.wg-settings-head h3 { font-size: 18px; font-weight: 800; letter-spacing: -.01em; }
+.wg-settings-tag { font-size: 12.5px; font-weight: 700; color: var(--cyan); }
+.wg-settings-desc { font-size: 13px; color: var(--mut); line-height: 1.5; }
+.wg-settings-form { display: flex; flex-direction: column; gap: 12px; margin-top: 4px; }
+.wg-settings-help { font-size: 11.5px; color: var(--mut2); margin-top: 4px; line-height: 1.4; }
+
+/* ── Windy webcam finder (in the gallery edit popup) ─── */
+.gw-finder { border-top: 1px solid var(--line); margin-top: 6px; padding-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+.gw-finder-head { font-size: 12.5px; font-weight: 700; color: var(--ink); }
+.gw-finder-row { display: flex; gap: 8px; }
+.gw-finder-row .studio-input { flex: 1; min-width: 0; }
+.gw-results { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; max-height: 240px; overflow-y: auto; }
+.gw-cam { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--bg2); cursor: pointer; padding: 0; text-align: left; display: flex; flex-direction: column; }
+.gw-cam.sel { border-color: var(--cyan); box-shadow: 0 0 0 1px var(--cyan); }
+.gw-cam img { width: 100%; height: 72px; object-fit: cover; display: block; }
+.gw-cam-noimg { height: 72px; display: flex; align-items: center; justify-content: center; font-size: 24px; color: var(--mut2); }
+.gw-cam-title { font-size: 11px; color: var(--ink); padding: 5px 7px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ── Block Gallery (predefined "Smart Blocks") ─── */
+.blk-gallery-lead { font-size: 14px; color: var(--mut); margin: 4px 0 18px; line-height: 1.5; }
+.blk-gal-sec { margin-bottom: 26px; }
+.blk-gal-cat {
+  font-size: 12px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
+  color: var(--mut); margin-bottom: 12px;
+}
+.blk-gal-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+.blk-gal-card {
+  border: 1px solid var(--line); border-radius: 14px; padding: 16px 16px 18px;
+  display: flex; flex-direction: column; gap: 6px; transition: border-color .15s, transform .15s;
+}
+.blk-gal-card:hover { border-color: color-mix(in srgb, var(--cyan) 45%, var(--line)); transform: translateY(-2px); }
+.blk-gal-icon { font-size: 30px; line-height: 1; margin-bottom: 4px; }
+.blk-gal-card h3 { font-size: 16px; font-weight: 800; letter-spacing: -.01em; }
+.blk-gal-tag { font-size: 12.5px; font-weight: 700; color: var(--cyan); }
+.blk-gal-desc { font-size: 13px; color: var(--mut); line-height: 1.5; flex: 1; }
+.blk-gal-add { align-self: flex-start; margin-top: 8px; }
+.blk-gal-help { font-size: 11.5px; color: var(--mut2); margin-top: 4px; line-height: 1.4; }
+
+/* ── Add-Block picker: tabs + gallery ─── */
+.dpicker-tabs { display: flex; gap: 6px; margin: 14px 24px 0; border-bottom: 1px solid var(--line); }
+.dpicker-tab {
+  background: none; border: none; border-bottom: 2px solid transparent; cursor: pointer;
+  padding: 8px 12px; font: inherit; font-size: 13.5px; font-weight: 700; color: var(--mut);
+}
+.dpicker-tab:hover { color: var(--ink); }
+.dpicker-tab.active { color: var(--cyan); border-bottom-color: var(--cyan); }
+.dpicker-gal-sec { margin-bottom: 16px; }
+.dpicker-gal-cat { font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--mut); margin: 0 0 8px; }
+.dpicker-card-btn { cursor: pointer; text-align: left; background: none; border: 1px solid var(--line); font: inherit; }
+.dpicker-card-btn:hover { border-color: color-mix(in srgb, var(--cyan) 45%, var(--line)); }
+.dpicker-config { display: flex; flex-direction: column; gap: 12px; padding: 16px 24px 24px; overflow-y: auto; }
+
 /* ── Widget editor composer (matches studio.css chat-composer pattern) ─── */
 .wg-composer-wrap {
   padding: 6px 10px 10px;
@@ -288,13 +344,14 @@
   display: flex;
   flex-direction: row;
   align-items: stretch;
-  min-height: calc(100vh - 56px);
+  /* Fill the viewport at minimum, but let the PAGE scroll (sticky nav + sidebar)
+     — no inner fixed-height scroll, so there's a single scrollbar. */
+  min-height: calc(100vh - 76px);
 }
 
 .dbe-main {
   flex: 1;
   min-width: 0;
-  overflow: auto;
   padding: 32px 40px;
   max-width: 1200px;
   width: 100%;
@@ -302,7 +359,7 @@
 }
 
 @media (max-width: 760px) {
-  .dbe-layout { flex-direction: column; }
+  .dbe-layout { flex-direction: column; height: auto; overflow: visible; }
 }
 
 .dbe-header {
@@ -313,7 +370,7 @@
   margin-bottom: 28px;
   flex-wrap: wrap;
 }
-.dbe-header-left { display: flex; flex-direction: column; gap: 2px; }
+.dbe-header-left { display: flex; flex-direction: column; gap: 2px; flex: 1 1 auto; min-width: 0; }
 .dbe-header-actions { display: flex; gap: 10px; align-items: center; }
 .dbe-group { display: inline-flex; align-items: center; gap: 6px; }
 .dbe-group-label {
@@ -336,6 +393,10 @@
   background-clip: text;
   letter-spacing: -0.02em;
 }
+/* Inline-editable dashboard title */
+.dbe-title-input { border: 1px solid transparent; border-radius: 8px; padding: 2px 8px; margin-left: -8px; width: 100%; max-width: 100%; cursor: text; }
+.dbe-title-input:hover { border-color: var(--line); }
+.dbe-title-input:focus { outline: none; border-color: var(--cyan); background: var(--bg2); -webkit-text-fill-color: var(--ink); color: var(--ink); }
 .dbe-subtitle {
   font-size: 12px;
   color: var(--mut2);
@@ -361,8 +422,8 @@
   border: 1px solid var(--line);
   border-radius: 16px;
   width: 100%;
-  max-width: 680px;
-  max-height: 80vh;
+  max-width: 880px;
+  max-height: 84vh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -405,6 +466,22 @@
   flex-direction: column;
   gap: 10px;
 }
+/* search box */
+.dpicker-search { margin: 12px 24px 0; width: auto; }
+/* gallery as a card grid (better use of space) */
+.dpicker-gallery { overflow-y: auto; padding: 12px 24px 24px; }
+.dpicker-gal-sec .dpicker-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 10px; overflow: visible; padding: 0;
+}
+.dpicker-card-btn {
+  flex-direction: column; align-items: stretch; gap: 8px; padding: 14px;
+  transition: border-color .15s, transform .15s;
+}
+.dpicker-card-btn:hover { transform: translateY(-2px); }
+.dpicker-card-btn .dpicker-thumb { width: 100%; height: 54px; }
+.dpicker-card-btn .dpicker-thumb-icon { font-size: 28px; opacity: 1; }
+.dpicker-card-btn .dpicker-type { white-space: normal; line-height: 1.4; }
 .dpicker-card {
   display: flex;
   align-items: center;
@@ -482,6 +559,9 @@
 /* react-grid-layout wrapper */
 .dbe-grid-wrap { width: 100%; }
 .dbe-rgl { position: relative; }
+/* First paint: place cards instantly (no "expanding" animation). */
+.dbe-rgl--noanim .react-grid-item { transition: none !important; animation: none !important; }
+.dbe-rgl--noanim .react-grid-item.react-grid-placeholder { transition: none !important; }
 
 /* individual cells */
 .wg-cell {
@@ -512,7 +592,11 @@
 .wg-drag-handle:active { cursor: grabbing; }
 .wg-drag-dots { color: var(--mut); font-size: 12px; letter-spacing: -1px; user-select: none; }
 .wg-drag-name { flex: 1; font-size: 11px; font-weight: 600; color: var(--mut2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.wg-db-badge { font-size: 9px; font-weight: 700; font-family: monospace; color: #f0c040; background: rgba(240, 192, 64, 0.12); border: 1px solid rgba(240, 192, 64, 0.3); border-radius: 3px; padding: 1px 4px; white-space: nowrap; flex-shrink: 0; }
+.wg-name-input { flex: 1; min-width: 0; font: inherit; font-size: 11px; font-weight: 600; color: var(--mut2); background: transparent; border: 1px solid transparent; border-radius: 5px; padding: 2px 5px; cursor: text; }
+.wg-name-input:hover { border-color: var(--line); }
+.wg-name-input:focus { outline: none; border-color: var(--cyan); background: var(--bg2); color: var(--ink); }
+.wg-db-badge { font-size: 9px; font-weight: 700; font-family: monospace; color: #f0c040; background: rgba(240, 192, 64, 0.12); border: 1px solid rgba(240, 192, 64, 0.3); border-radius: 3px; padding: 1px 4px; white-space: nowrap; flex-shrink: 0; opacity: 0; transition: opacity 0.12s; }
+.wg-cell:hover .wg-db-badge { opacity: 1; }
 
 .wg-content { flex: 1; overflow: hidden; position: relative; }
 
@@ -898,3 +982,11 @@
   background: rgba(250, 249, 248, 0.92);
   border-color: rgba(15, 108, 189, 0.4);
 }
+
+.blk-gal-link { color: var(--cyan); text-decoration: underline; white-space: nowrap; }
+.blk-gal-link:hover { text-decoration: none; }
+
+/* Website-embed uptime monitor toggle (GalleryEditModal) */
+.gal-monitor { margin-top: 4px; }
+.gal-monitor-row { display: flex; align-items: center; gap: 8px; font-weight: 600; color: var(--ink); }
+.gal-monitor-row input { width: 15px; height: 15px; accent-color: var(--cyan); }

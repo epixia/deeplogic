@@ -1,16 +1,16 @@
 # Graph Report - deeplogic  (2026-06-20)
 
 ## Corpus Check
-- 282 files · ~246,135 words
+- 288 files · ~253,293 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 2006 nodes · 3878 edges · 126 communities (108 shown, 18 thin omitted)
-- Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 47 edges (avg confidence: 0.85)
+- 2053 nodes · 3972 edges · 133 communities (115 shown, 18 thin omitted)
+- Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 48 edges (avg confidence: 0.85)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `f56547a9`
+- Built from commit: `7da5e8ae`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -94,8 +94,8 @@
 - [[_COMMUNITY_Community 78|Community 78]]
 - [[_COMMUNITY_Community 79|Community 79]]
 - [[_COMMUNITY_Community 80|Community 80]]
-- [[_COMMUNITY_Community 82|Community 82]]
-- [[_COMMUNITY_Community 85|Community 85]]
+- [[_COMMUNITY_Community 81|Community 81]]
+- [[_COMMUNITY_Community 83|Community 83]]
 - [[_COMMUNITY_Community 86|Community 86]]
 - [[_COMMUNITY_Community 87|Community 87]]
 - [[_COMMUNITY_Community 88|Community 88]]
@@ -113,20 +113,27 @@
 - [[_COMMUNITY_Community 101|Community 101]]
 - [[_COMMUNITY_Community 102|Community 102]]
 - [[_COMMUNITY_Community 103|Community 103]]
+- [[_COMMUNITY_Community 105|Community 105]]
 - [[_COMMUNITY_Community 111|Community 111]]
-- [[_COMMUNITY_Community 122|Community 122]]
+- [[_COMMUNITY_Community 121|Community 121]]
 - [[_COMMUNITY_Community 123|Community 123]]
 - [[_COMMUNITY_Community 124|Community 124]]
+- [[_COMMUNITY_Community 125|Community 125]]
 - [[_COMMUNITY_Community 126|Community 126]]
 - [[_COMMUNITY_Community 127|Community 127]]
 - [[_COMMUNITY_Community 128|Community 128]]
-- [[_COMMUNITY_Community 129|Community 129]]
 - [[_COMMUNITY_Community 130|Community 130]]
-- [[_COMMUNITY_Community 133|Community 133]]
+- [[_COMMUNITY_Community 131|Community 131]]
+- [[_COMMUNITY_Community 135|Community 135]]
+- [[_COMMUNITY_Community 136|Community 136]]
+- [[_COMMUNITY_Community 137|Community 137]]
+- [[_COMMUNITY_Community 140|Community 140]]
+- [[_COMMUNITY_Community 141|Community 141]]
+- [[_COMMUNITY_Community 142|Community 142]]
 
 ## God Nodes (most connected - your core abstractions)
-1. `jsonFetch()` - 137 edges
-2. `useAuth()` - 103 edges
+1. `jsonFetch()` - 138 edges
+2. `useAuth()` - 105 edges
 3. `SemanticModel Interface` - 28 edges
 4. `cx()` - 27 edges
 5. `inspectZip()` - 25 edges
@@ -134,7 +141,7 @@
 7. `serviceClient` - 19 edges
 8. `compilerOptions` - 18 edges
 9. `generateReport()` - 16 edges
-10. `requireMember()` - 15 edges
+10. `useAppTheme()` - 15 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `Studio E2E Smoke Test` --conceptually_related_to--> `writeBrief()`  [INFERRED]
@@ -176,7 +183,7 @@
 - **DeepLogic Sample Data Contract** — prd_atlas_retail, prd_northwind_saas, prd_semantic_model [EXTRACTED 1.00]
 - **Graphify Skill Documentation Subsystem** — graphify_skill_graphify_skill, references_extraction_spec_extraction_prompt, references_query_graph_query, references_update_incremental_update [INFERRED 0.95]
 
-## Communities (126 total, 18 thin omitted)
+## Communities (133 total, 18 thin omitted)
 
 ### Community 0 - "Server API & Database Layer"
 Cohesion: 0.10
@@ -196,15 +203,15 @@ Nodes (22): callJson(), DEFAULT_MODEL, ENTITY_TYPES, EntityRow, ExtractedEntity,
 
 ### Community 4 - "Dashboard UI Components"
 Cohesion: 0.20
-Nodes (21): detectAnomalies(), detectAnomaliesSync(), detectInSeries(), Flag, severityFromZ(), buildPrompt(), templateBrief(), writeBrief() (+13 more)
+Nodes (20): detectAnomalies(), detectAnomaliesSync(), detectInSeries(), Flag, severityFromZ(), buildPrompt(), templateBrief(), writeBrief() (+12 more)
 
 ### Community 5 - "Server Dependencies"
 Cohesion: 0.07
 Nodes (28): dependencies, adm-zip, cors, dotenv, e2b, express, stripe, @supabase/supabase-js (+20 more)
 
 ### Community 6 - "Mission Control Components"
-Cohesion: 0.05
-Nodes (53): getMemoryGraph(), MemoryGraphData, rebuildMemory(), attr(), esc(), extractTags(), extractWikiLinks(), inline() (+45 more)
+Cohesion: 0.13
+Nodes (23): autoTags(), CATEGORY_KIND, classify(), ColType, decodeBase64(), decodeBase64ToBuffer(), DOMAIN_KEYWORDS, EXT_CATEGORY (+15 more)
 
 ### Community 7 - "Client Dependencies"
 Cohesion: 0.09
@@ -223,40 +230,40 @@ Cohesion: 0.10
 Nodes (20): devDependencies, concurrently, playwright, name, private, scripts, build, db:reset (+12 more)
 
 ### Community 11 - "Connector & PBIX Parser"
-Cohesion: 0.05
-Nodes (57): AGG_FNS, asciiStrings(), BusinessKeyCandidate, Confidence, CONNECTOR_PATTERNS, DataVaultAttributeCandidate, DataVaultEntityCandidate, DataVaultExtraction (+49 more)
+Cohesion: 0.06
+Nodes (35): AGG_FNS, BusinessKeyCandidate, Confidence, CONNECTOR_PATTERNS, DataVaultAttributeCandidate, DataVaultEntityCandidate, DataVaultExtraction, EvidenceSnippet (+27 more)
 
 ### Community 12 - "API Client HTTP Functions"
-Cohesion: 0.06
-Nodes (38): addMemberByEmail(), cancelInvitation(), createCheckoutSession(), createOrg(), createPortalSession(), deletePlatformApi(), getIntegrations(), getPlatformApis() (+30 more)
+Cohesion: 0.05
+Nodes (44): addMemberByEmail(), adminListUsers(), adminMe(), cancelInvitation(), createCheckoutSession(), createPortalSession(), deletePlatformApi(), generateOrgWidget() (+36 more)
 
 ### Community 13 - "Product Docs & Landing"
 Cohesion: 0.17
 Nodes (16): Client SPA Entry Point, Landing Page Design System, DeepLogic Brand Mark, Agent Engine, Anomaly Detection Engine, Ask DeepLogic Feature, Atlas Retail Sample Model, Mission Control (+8 more)
 
 ### Community 14 - "Community 14"
-Cohesion: 0.12
-Nodes (22): DB: studio_projects table, ContextRow, ProjectListRow, ProjectRow, AgentEvent, AgentStage, Anomaly, AskAnswer (+14 more)
+Cohesion: 0.14
+Nodes (14): ProjectListRow, ProjectRow, AgentEvent, AgentStage, Anomaly, AskAnswer, AuditEntry, Connector (+6 more)
 
 ### Community 15 - "Community 15"
-Cohesion: 0.11
-Nodes (18): Shared Domain Types (client copy of server/src/types.ts), useDashboardScope(), createStudioProject(), deleteStudioProject(), listStudioProjects(), StudioProjectListItem, useStickyTab(), Alerts() (+10 more)
+Cohesion: 0.17
+Nodes (13): draftPlan(), GoalAgent, goalsRouter, normalize(), STARTER_GOALS, assistantContext(), executeInternalAgentRun(), harvestAgentFinding() (+5 more)
 
 ### Community 16 - "Auth Pages & Logo"
-Cohesion: 0.11
-Nodes (21): AgentEvent, AgentStage, Anomaly, AskAnswer, AuditEntry, Connector, Dimension, KPI (+13 more)
+Cohesion: 0.10
+Nodes (22): AgentEvent, AgentStage, Anomaly, AskAnswer, AuditEntry, Connector, Dimension, KPI (+14 more)
 
 ### Community 17 - "Vault & Studio API"
-Cohesion: 0.03
-Nodes (74): addVaultItem(), AdminUserAction, AgentEventKind, AgentRunStreamEvent, AiKeyTestResult, AiProvider, AiProviderState, AiSettings (+66 more)
+Cohesion: 0.04
+Nodes (68): addVaultItem(), AdminUser, AdminUserAction, AgentEventKind, AgentRunStreamEvent, AiKeyTestResult, AiProvider, AiProviderState (+60 more)
 
 ### Community 18 - "Base TypeScript Config"
 Cohesion: 0.15
 Nodes (12): compilerOptions, esModuleInterop, forceConsistentCasingInFileNames, isolatedModules, lib, noFallthroughCasesInSwitch, noUnusedLocals, noUnusedParameters (+4 more)
 
 ### Community 19 - "Studio Project CRUD"
-Cohesion: 0.34
-Nodes (10): inferKind(), kindLabel(), mapConnectors(), ev(), ingestEvents(), missionEvents(), Engine Public API Barrel, extractKpis() (+2 more)
+Cohesion: 0.10
+Nodes (18): Alert, AlertEvent, checkAlert(), createAlert(), deleteAlert(), listAlertEvents(), listAlerts(), updateAlert() (+10 more)
 
 ### Community 20 - "Studio Chat Interface"
 Cohesion: 0.08
@@ -267,24 +274,24 @@ Cohesion: 0.20
 Nodes (11): Graphify Skill Trigger, Graphify Project Rules, Graphify Skill, Graphify Add URL and Watch Reference, Graphify Graph Exports Reference, Graphify Extraction Subagent Spec, Graphify GitHub Clone and Cross-Repo Merge Reference, Graphify Commit Hook and CLAUDE.md Integration Reference (+3 more)
 
 ### Community 22 - "Client Domain Types"
-Cohesion: 0.06
-Nodes (56): Graphify-First PreToolUse Hook, AskPanel(), formatValue(), SUGGESTIONS, ConnectorsStrip(), KIND_LABEL, DimensionBreakdown(), DimensionBreakdownProps (+48 more)
+Cohesion: 0.19
+Nodes (18): DimensionBreakdown(), DimensionBreakdownProps, FiltersProps, computeDelta(), DeltaInfo, Fmt, formatCompactNumber(), formatCurrency() (+10 more)
 
 ### Community 23 - "Vault Browser UI"
 Cohesion: 0.07
-Nodes (29): createContext(), deleteVaultEntry(), deleteVaultKpi(), getOrgVault(), getVaultDocContent(), listVaultKpis(), listVaultPowerBI(), testConnectorUrl() (+21 more)
+Nodes (28): deleteVaultEntry(), deleteVaultKpi(), getOrgVault(), getVaultDocContent(), listVaultKpis(), listVaultPowerBI(), testConnectorUrl(), updateVaultMcp() (+20 more)
 
 ### Community 24 - "Context Library CRUD"
-Cohesion: 0.11
-Nodes (24): useAuth(), RequireAdmin(), State, acceptInviteToken(), adminMe(), API Client, Supabase Client, AcceptInvite() (+16 more)
+Cohesion: 0.12
+Nodes (17): AuthContext, AuthContextValue, AuthProvider(), AuthUser, PipelineConsole(), Props, STAGES, BLURBS (+9 more)
 
 ### Community 25 - "Server TypeScript Config"
 Cohesion: 0.18
 Nodes (10): compilerOptions, module, moduleResolution, outDir, rootDir, sourceMap, strict, types (+2 more)
 
 ### Community 26 - "Auth Context & User Model"
-Cohesion: 0.13
-Nodes (14): AuthContext, AuthContextValue, AuthUser, RequireAuth(), OrgSwitcher(), getMe(), OrgMembership, anonKey (+6 more)
+Cohesion: 0.10
+Nodes (21): alertsRouter, billingRouter, inviteRouter, meRouter, openDataRouter, sandboxRouter, webhookIngestRouter, checkMemberLimit() (+13 more)
 
 ### Community 27 - "Vite Node TypeScript Config"
 Cohesion: 0.20
@@ -292,27 +299,27 @@ Nodes (9): compilerOptions, allowSyntheticDefaultImports, composite, module, mod
 
 ### Community 28 - "Navigation & Theme"
 Cohesion: 0.12
-Nodes (19): ADMIN_EMAILS, initials(), Nav(), TrialBadge(), TrialBadgeProps, trialCache, UserMenu(), Theme (+11 more)
+Nodes (18): ADMIN_EMAILS, initials(), TrialBadge(), TrialBadgeProps, trialCache, UserMenu(), Theme, ThemeToggle() (+10 more)
 
 ### Community 29 - "Community 29"
 Cohesion: 0.07
 Nodes (20): Footer(), YEAR, A, B, D, DATA, iA, iB (+12 more)
 
 ### Community 30 - "Community 30"
-Cohesion: 0.12
-Nodes (12): DashboardScopeBar(), DashboardSidebar(), GROUP_ICON, createDashboard(), Dashboard, DashboardListItem, deleteDashboard(), listDashboards() (+4 more)
+Cohesion: 0.21
+Nodes (14): DB: audit_entries table, DB: context_items table, DB: models table, DB: org_ai_settings table, DB: organizations table, DB: studio_projects table, AuditLogProps, DemoSession (+6 more)
 
 ### Community 31 - "Community 31"
-Cohesion: 0.20
-Nodes (9): PipelineConsole(), Props, STAGES, BLURBS, Props, SamplePicker(), ingestSample(), listModels() (+1 more)
+Cohesion: 0.09
+Nodes (19): Shared Domain Types (client copy of server/src/types.ts), createStudioProject(), deleteStudioProject(), generateStudioReport(), getCompiledContext(), getStudioProject(), listModels(), listStudioProjects() (+11 more)
 
 ### Community 32 - "BYOK Studio Smoke Test"
 Cohesion: 0.25
 Nodes (3): mineCard, sharedCard, ts
 
 ### Community 33 - "App Bootstrap"
-Cohesion: 0.13
-Nodes (13): Alert, AlertEvent, checkAlert(), createAlert(), deleteAlert(), listAlertEvents(), listAlerts(), updateAlert() (+5 more)
+Cohesion: 0.16
+Nodes (17): AnomalyCard(), AnomalyCardProps, AuditLog(), deltaPct(), formatCurrency(), formatDate(), formatNumber(), formatTs() (+9 more)
 
 ### Community 45 - "Community 45"
 Cohesion: 0.13
@@ -323,36 +330,36 @@ Cohesion: 0.08
 Nodes (23): For /graphify add and --watch, For /graphify query, For the commit hook and native CLAUDE.md integration, For --update and --cluster-only, /graphify, Honesty Rules, Interpreter guard for subcommands, Part A - Structural extraction for code files (+15 more)
 
 ### Community 47 - "Community 47"
-Cohesion: 0.19
-Nodes (8): SAMPLES, store, DemoSession, evictStale(), put(), store, ModelListItem, SemanticModel Interface
+Cohesion: 0.36
+Nodes (9): ContextRow, ModelListItem, ContextItem, SemanticModel Interface, VaultItem, compileContext(), fetchUrlContent(), formatKpiValue() (+1 more)
 
 ### Community 48 - "Community 48"
 Cohesion: 0.07
 Nodes (19): ALL_PROVIDERS, esc(), gatherSiteInsights(), insightWidgetHtml(), KpiAgg, onboardingPublicRouter, ProviderEntry, ProviderMap (+11 more)
 
 ### Community 49 - "Community 49"
-Cohesion: 0.25
-Nodes (17): demoRouter, ingestRouter, missionRouter, studioRouter, app, buildModelFromUpload(), parseMultipartFile(), resolveSample() (+9 more)
+Cohesion: 0.15
+Nodes (21): SAMPLES, store, demoRouter, evictStale(), put(), store, ingestRouter, missionRouter (+13 more)
 
 ### Community 50 - "Community 50"
-Cohesion: 0.13
-Nodes (11): AuthProvider(), AppShell(), CompetitorsPage(), Cycle, Tier, TIERS, ProductsPage(), App() (+3 more)
+Cohesion: 0.28
+Nodes (8): callAI(), DEFAULT_MODEL, parseJsonObject(), ProductsResult, ProductSuggestion, suggestProducts(), SYSTEM_PROFILE, SYSTEM_SITE
 
 ### Community 51 - "Community 51"
-Cohesion: 0.22
-Nodes (7): AdminUserDetailPage(), fmtDateTime(), adminDeleteUser(), adminGetUser(), adminResetUserEmail(), adminUpdateUser(), AdminUserDetail
+Cohesion: 0.09
+Nodes (11): AdminDashboard(), PLAN_ORDER, RestartPhase, NAV, Props, AdminOrgs(), AdminUsers(), adminListOrgs() (+3 more)
 
 ### Community 52 - "Community 52"
 Cohesion: 0.06
-Nodes (32): CAT_TONE, Category, Skill, Skills, AGENT_DEFAULT_TOOLS, AGENT_TOOLS, AgentTool, Agent (+24 more)
+Nodes (33): CAT_TONE, Category, Skill, Skills, AGENT_DEFAULT_TOOLS, AGENT_TOOLS, AgentTool, Agent (+25 more)
 
 ### Community 53 - "Community 53"
-Cohesion: 0.27
-Nodes (8): checkReportLimit(), readToken(), requireAuth(), requireFeature(), Express.Request Augmentation (user/token/db), getUserFromToken(), mintPgToken(), userClientFor()
+Cohesion: 0.23
+Nodes (17): ALIASES, answerQuestion(), isWhy(), resolveKpi(), tokenScore(), inferKind(), kindLabel(), mapConnectors() (+9 more)
 
 ### Community 54 - "Community 54"
-Cohesion: 0.11
-Nodes (13): analyzeCompetitors(), CompetitorSeo, CompetitorSuggestion, CompetitorTrends, getCompetitorTrends(), suggestCompetitors(), COMP_VIEWS, CompView (+5 more)
+Cohesion: 0.22
+Nodes (7): AdminUserDetailPage(), fmtDateTime(), adminDeleteUser(), adminGetUser(), adminResetUserEmail(), adminUpdateUser(), AdminUserDetail
 
 ### Community 55 - "Community 55"
 Cohesion: 0.15
@@ -387,8 +394,8 @@ Cohesion: 0.08
 Nodes (39): actionLabel(), AGENT_DEFAULT_TOOLS, AGENT_ELIGIBLE_TOOLS, AgentContext, ASSISTANT_TOOLS, AssistantReply, AssistantStep, buildSystem() (+31 more)
 
 ### Community 63 - "Community 63"
-Cohesion: 0.08
-Nodes (48): AgentProvider, AgentRuntime, failAgent(), logEvent(), provisionExternalAgent(), ProvisionParams, runOrgoAgent(), authHeader() (+40 more)
+Cohesion: 0.18
+Nodes (22): authHeader(), BacklinksSummary, CompetingDomain, dataforseoBacklinksSummary(), dataforseoCompetitors(), DataForSeoCreds, dataforseoDomainIntel(), dataforseoDomainOverview() (+14 more)
 
 ### Community 64 - "Community 64"
 Cohesion: 0.14
@@ -431,64 +438,64 @@ Cohesion: 0.17
 Nodes (10): AdminOrgDetailPage(), fmtDate(), PLAN_PRICE, PLANS, STATUSES, adminGetOrg(), AdminOrgDetail, AdminOrgMember (+2 more)
 
 ### Community 80 - "Community 80"
-Cohesion: 0.46
-Nodes (7): ALIASES, answerQuestion(), isWhy(), resolveKpi(), tokenScore(), pctChange(), trendPhrase()
+Cohesion: 0.09
+Nodes (30): useAuth(), RequireAdmin(), State, RequireAuth(), Nav(), OrgSwitcher(), SuggestGoalsModal(), acceptInviteToken() (+22 more)
 
-### Community 82 - "Community 82"
-Cohesion: 0.11
-Nodes (14): alertsRouter, billingRouter, draftPlan(), GoalAgent, goalsRouter, normalize(), STARTER_GOALS, inviteRouter (+6 more)
+### Community 81 - "Community 81"
+Cohesion: 0.10
+Nodes (14): analyzeCompetitors(), CompetitorSeo, CompetitorSuggestion, CompetitorTrends, createWidget(), getCompetitorTrends(), suggestCompetitors(), COMP_VIEWS (+6 more)
 
-### Community 85 - "Community 85"
-Cohesion: 0.14
-Nodes (14): SuggestGoalsModal(), createGoal(), deleteGoal(), draftGoal(), Goal, GoalAgent, GoalSuggestion, listGoals() (+6 more)
+### Community 83 - "Community 83"
+Cohesion: 0.12
+Nodes (22): asciiStrings(), decode(), dedupeAttrs(), dedupeKeys(), detectInText(), entry(), entryText(), extractMashup() (+14 more)
 
 ### Community 86 - "Community 86"
-Cohesion: 0.05
-Nodes (57): ThemeManager(), LibraryItem, Props, TYPES, createWidget(), deleteOrgWidget(), deleteWidget(), generateOrgWidget() (+49 more)
+Cohesion: 0.23
+Nodes (15): Connector Interface, decodeEntry(), dedupeSources(), extractMashupM(), KIND_LABEL, kindFromSignal(), parseConnectors(), parseModel() (+7 more)
 
 ### Community 87 - "Community 87"
 Cohesion: 0.12
-Nodes (12): ingestToVault(), OnboardingEvent, onboardingPersist(), PowerBIScan, ProposedAgentLite, scanPowerBI(), Company, Competitor (+4 more)
+Nodes (13): createOrg(), ingestToVault(), OnboardingEvent, onboardingPersist(), PowerBIScan, ProposedAgentLite, scanPowerBI(), Company (+5 more)
 
 ### Community 88 - "Community 88"
-Cohesion: 0.08
-Nodes (30): appendEvent(), beginRun(), BeginRunOpts, ensureExternalRun(), EventKind, finishRun(), RunStatus, RunTrigger (+22 more)
+Cohesion: 0.06
+Nodes (50): AgentProvider, AgentRuntime, failAgent(), logEvent(), provisionExternalAgent(), ProvisionParams, runOrgoAgent(), appendEvent() (+42 more)
 
 ### Community 89 - "Community 89"
 Cohesion: 0.33
 Nodes (5): Context, Converter config (`.design-sync/config.json`), design-sync notes — DeepLogic, Re-sync risks / watch-list, The library (`packages/ui`)
 
 ### Community 90 - "Community 90"
-Cohesion: 0.20
-Nodes (10): Role, ROLES, callerRole(), checkMemberLimit(), requireRole(), inviteEmailHtml(), sendEmail(), SendOptions (+2 more)
+Cohesion: 0.13
+Nodes (15): Graphify-First PreToolUse Hook, AppShell(), ContextItem, listContext(), CompanyPage(), CompetitorsPage(), ProductsPage(), ChatMessage (+7 more)
 
 ### Community 91 - "Community 91"
 Cohesion: 0.40
 Nodes (4): IntelTrafficChart(), niceNum(), PAD, Point
 
 ### Community 92 - "Community 92"
-Cohesion: 0.27
-Nodes (10): searchRouter, braveSearch(), ddgInstantAnswer(), decodeEntities(), duckDuckGoSearch(), stripTags(), unwrapDdgUrl(), webSearch() (+2 more)
+Cohesion: 0.21
+Nodes (13): searchRouter, assistantToolExecutor(), braveSearch(), ddgInstantAnswer(), decodeEntities(), duckDuckGoSearch(), stripTags(), unwrapDdgUrl() (+5 more)
 
 ### Community 93 - "Community 93"
-Cohesion: 0.09
-Nodes (21): AgentActivityToasts(), ChatTurn, GlobalChat(), QUICK_POOL, render(), activities, Activity, ActivityStep (+13 more)
+Cohesion: 0.15
+Nodes (10): ChatTurn, GlobalChat(), QUICK_POOL, render(), assistantChat(), AssistantMessage, AssistantStep, generateMdTitle() (+2 more)
 
 ### Community 94 - "Community 94"
 Cohesion: 0.12
-Nodes (10): AdminDashboard(), PLAN_ORDER, RestartPhase, NAV, Props, AdminUsers(), adminListUsers(), adminRestart() (+2 more)
+Nodes (20): LibraryItem, Props, TYPES, deleteWidget(), generateWidget(), getDashboard(), listOrgWidgets(), updateWidget() (+12 more)
 
 ### Community 95 - "Community 95"
 Cohesion: 0.40
 Nodes (3): out, root, srcDir
 
 ### Community 99 - "Community 99"
-Cohesion: 0.12
-Nodes (26): DB: audit_entries table, DB: context_items table, DB: models table, DB: org_ai_settings table, DB: org_members table, DB: organizations table, modelsRouter, orgsRouter (+18 more)
+Cohesion: 0.13
+Nodes (24): DB: org_members table, orgsRouter, Role, ROLES, callerRole(), requireRole(), inviteEmailHtml(), sendEmail() (+16 more)
 
 ### Community 100 - "Community 100"
-Cohesion: 0.18
-Nodes (10): DomainIntel, fetchDomainIntel(), getDomainIntel(), getDomainProducts(), getSiteInsights(), persistSiteInsights(), ProductSuggestion, SiteInsights (+2 more)
+Cohesion: 0.24
+Nodes (5): buildWidgetContext(), dashboardsRouter, fetchConnectorData(), parseConnectorUrl(), checkTokenBudget()
 
 ### Community 101 - "Community 101"
 Cohesion: 0.17
@@ -502,58 +509,86 @@ Nodes (14): ALLOWED_MODELS, ALLOWED_SCHEDULES, callAnthropic(), callOpenAICompat
 Cohesion: 0.29
 Nodes (6): Components, DeepLogic UI — how to build with it, Idiomatic snippet, Setup, The styling idiom — use these tokens for your own layout glue, Where the truth lives
 
-### Community 122 - "Community 122"
-Cohesion: 0.33
-Nodes (4): CAPABILITIES, Capability, COORDINATES, FLOW
+### Community 105 - "Community 105"
+Cohesion: 0.10
+Nodes (22): AgentActivityToasts(), activities, Activity, ActivityStep, emit(), endActivity(), listeners, startActivity() (+14 more)
+
+### Community 121 - "Community 121"
+Cohesion: 0.12
+Nodes (12): DashboardScopeBar(), DashboardSidebar(), GROUP_ICON, createDashboard(), Dashboard, DashboardListItem, deleteDashboard(), listDashboards() (+4 more)
 
 ### Community 123 - "Community 123"
-Cohesion: 0.17
-Nodes (23): assistantContext(), discoverProducts(), gatherSiteProducts(), loadAiConfig(), loadAiRow(), loadContextItems(), collectProducts(), dedupe() (+15 more)
+Cohesion: 0.21
+Nodes (19): discoverProducts(), gatherSiteProducts(), collectProducts(), dedupe(), fetchHtml(), fetchPageImage(), fetchText(), firstImage() (+11 more)
 
 ### Community 124 - "Community 124"
-Cohesion: 0.29
-Nodes (3): AdminOrgs(), adminListOrgs(), AdminOrg
+Cohesion: 0.14
+Nodes (15): getMemoryGraph(), MemoryGraphData, rebuildMemory(), attr(), esc(), extractTags(), extractWikiLinks(), inline() (+7 more)
+
+### Community 125 - "Community 125"
+Cohesion: 0.18
+Nodes (16): ensureCrumb(), EXCH_RANK, fetchPublicCompany(), num(), pickListing(), PublicCompany, searchSymbols(), SUFFIX (+8 more)
 
 ### Community 126 - "Community 126"
-Cohesion: 0.32
-Nodes (8): Vite Dev Server + API Proxy Config, Root Monorepo Workspace (server + client), Multi-Tenant E2E Smoke Test, Studio BYOK + Ownership Smoke Test, Studio E2E Smoke Test, requireAuth middleware, requireMember middleware, requireRole middleware
+Cohesion: 0.11
+Nodes (25): ThemeManager(), createSandbox(), killSandbox(), updateSandbox(), widgetFrameSrcDoc(), DashboardEditor(), WidgetFrame(), WidgetThumb() (+17 more)
 
 ### Community 127 - "Community 127"
 Cohesion: 0.07
-Nodes (20): ContextItem, ContextKind, ContextScope, deleteContext(), hostImage(), listContext(), suggestProducts(), summarizeDocument() (+12 more)
+Nodes (20): ContextKind, ContextScope, createContext(), deleteContext(), hostImage(), ProductSuggestion, suggestProducts(), summarizeDocument() (+12 more)
 
 ### Community 128 - "Community 128"
 Cohesion: 0.13
 Nodes (21): adminEmails(), adminRouter, PLAN_PRICE, requireAdmin(), handleStripeEvent(), orgIdForCustomer(), priceToplan(), stripe() (+13 more)
 
-### Community 129 - "Community 129"
+### Community 130 - "Community 130"
+Cohesion: 0.14
+Nodes (12): DomainIntel, fetchDomainIntel(), getDomainIntel(), getDomainProducts(), getPublicCompany(), getSiteInsights(), persistSiteInsights(), PublicCompany (+4 more)
+
+### Community 131 - "Community 131"
+Cohesion: 0.12
+Nodes (18): useDashboardScope(), deleteOrgWidget(), Idea, IdeasResult, IdeaTarget, suggestIdeas(), Dashboards(), fmtDate() (+10 more)
+
+### Community 135 - "Community 135"
+Cohesion: 0.33
+Nodes (8): BASE, headers, main(), poll(), POLL_MS, report(), runMission(), sleep()
+
+### Community 136 - "Community 136"
+Cohesion: 0.19
+Nodes (14): AskPanel(), formatValue(), SUGGESTIONS, ConnectorsStrip(), KIND_LABEL, DateRange, Filters(), ask() (+6 more)
+
+### Community 137 - "Community 137"
+Cohesion: 0.32
+Nodes (8): Vite Dev Server + API Proxy Config, Root Monorepo Workspace (server + client), Multi-Tenant E2E Smoke Test, Studio BYOK + Ownership Smoke Test, Studio E2E Smoke Test, requireAuth middleware, requireMember middleware, requireRole middleware
+
+### Community 140 - "Community 140"
 Cohesion: 0.40
 Nodes (5): FEATURE_LABELS, FEATURE_PLAN, PlanGate(), Props, BillingSubscription
 
-### Community 130 - "Community 130"
-Cohesion: 0.28
-Nodes (8): callAI(), DEFAULT_MODEL, parseJsonObject(), ProductsResult, ProductSuggestion, suggestProducts(), SYSTEM_PROFILE, SYSTEM_SITE
+### Community 141 - "Community 141"
+Cohesion: 0.33
+Nodes (4): CAPABILITIES, Capability, COORDINATES, FLOW
 
-### Community 133 - "Community 133"
-Cohesion: 0.24
-Nodes (5): buildWidgetContext(), dashboardsRouter, fetchConnectorData(), parseConnectorUrl(), checkTokenBudget()
+### Community 142 - "Community 142"
+Cohesion: 0.33
+Nodes (3): Cycle, Tier, TIERS
 
 ## Knowledge Gaps
-- **691 isolated node(s):** `meta`, `meta`, `meta`, `items`, `name` (+686 more)
+- **704 isolated node(s):** `meta`, `meta`, `meta`, `items`, `name` (+699 more)
   These have ≤1 connection - possible missing edges or undocumented components.
 - **18 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `SemanticModel Interface` connect `Community 47` to `Demo Data & Sample Models`, `Community 99`, `Dashboard UI Components`, `Frontend API Client`, `Community 14`, `Community 80`, `Vault & Studio API`, `Community 49`, `Studio Project CRUD`, `Client Domain Types`?**
-  _High betweenness centrality (0.289) - this node is a cross-community bridge._
-- **Why does `useAuth()` connect `Context Library CRUD` to `Community 129`, `Studio AI Config & Context Store`, `Mission Control Components`, `API Client HTTP Functions`, `Community 15`, `Auth Pages & Logo`, `Vault & Studio API`, `Client Domain Types`, `Vault Browser UI`, `Auth Context & User Model`, `Navigation & Theme`, `Community 30`, `Community 31`, `App Bootstrap`, `Community 45`, `Community 50`, `Community 51`, `Community 52`, `Community 79`, `Community 85`, `Community 86`, `Community 87`, `Community 93`, `Community 94`, `Community 100`, `Community 124`, `Community 127`?**
-  _High betweenness centrality (0.036) - this node is a cross-community bridge._
-- **Why does `AuditEntry Interface` connect `Client Domain Types` to `Vault & Studio API`, `Community 99`, `Community 47`?**
-  _High betweenness centrality (0.029) - this node is a cross-community bridge._
+- **Why does `SemanticModel Interface` connect `Community 47` to `Demo Data & Sample Models`, `Community 99`, `Dashboard UI Components`, `Community 136`, `Frontend API Client`, `Community 49`, `Vault & Studio API`, `Community 53`, `Community 30`?**
+  _High betweenness centrality (0.255) - this node is a cross-community bridge._
+- **Why does `AuditEntry Interface` connect `Community 30` to `Community 136`, `Vault & Studio API`, `Community 99`, `Community 49`?**
+  _High betweenness centrality (0.026) - this node is a cross-community bridge._
+- **Why does `useAuth()` connect `Community 80` to `Studio AI Config & Context Store`, `Community 130`, `Community 131`, `Community 136`, `Community 140`, `API Client HTTP Functions`, `Auth Pages & Logo`, `Vault & Studio API`, `Studio Project CRUD`, `Vault Browser UI`, `Context Library CRUD`, `Navigation & Theme`, `Community 31`, `Community 45`, `Community 51`, `Community 52`, `Community 54`, `Community 79`, `Community 87`, `Community 90`, `Community 93`, `Community 94`, `Community 105`, `Community 121`, `Community 124`, `Community 126`, `Community 127`?**
+  _High betweenness centrality (0.025) - this node is a cross-community bridge._
 - **What connects `meta`, `meta`, `meta` to the rest of the system?**
-  _692 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _705 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Server API & Database Layer` be split into smaller, more focused modules?**
   _Cohesion score 0.09714285714285714 - nodes in this community are weakly interconnected._
 - **Should `Demo Data & Sample Models` be split into smaller, more focused modules?**

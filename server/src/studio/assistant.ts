@@ -36,6 +36,8 @@ export interface AssistantReply {
   usedAI: boolean;
   actions?: string[];
   suggestions?: SuggestedAction[];
+  /** Vault documents the assistant read (via read_section) to answer — shown to the user. */
+  readDocs?: string[];
   aiError?: string;
 }
 
@@ -185,10 +187,42 @@ export const ASSISTANT_TOOLS = [
       properties: {
         provider: { type: 'string', enum: ['hermes', 'openclaw'], description: 'hermes = outreach/messaging; openclaw = scraping/data-extraction.' },
         name: { type: 'string', description: 'Short instance name, e.g. "Lead outreach — Q3".' },
-        mission: { type: 'string', description: 'The concrete objective the agent must accomplish.' },
+        mission: { type: 'string', description: 'The concrete objective the agent must accomplish. Scope it WELL so a deployed agent will actually run it: state the specific outcome AND its legitimate business purpose, and prefer the org\'s OWN data and authoritative/owned sources (the Data Vault, connectors, CRM, internal directory/HRIS, records the company has rights to) over scraping personal data off the open web. Do NOT frame a mission as mass-collecting named individuals\' personal contact data for unsolicited outreach — agents will (correctly) refuse that. For a people/employee roster, source it from the company\'s own directory/HR/CSV, not by scraping the web.' },
         reason: { type: 'string', description: 'Why this is being outsourced to a VM agent (1-2 sentences).' },
+        confirmed: { type: 'boolean', description: 'Must be true to actually deploy. Call FIRST without confirmed (or false) to get an approval preview; only set true after the user has explicitly approved.' },
       },
       required: ['provider', 'mission'],
+    },
+  },
+  {
+    name: 'create_open_canada_block',
+    description: 'Create a LIVE data Block (widget) that renders a Government of Canada open dataset as a table via the CKAN Datastore Search API. Use this — NOT create_widget — whenever the user wants an "Open Canada" / open-data / Health Canada / cannabis-market data Block. It produces a real, populated table immediately (no AI generation step). Defaults to Health Canada cannabis market data (production, inventory, medical & non-medical sales by product type), which is ideal cannabis-industry market intel. Pass "dashboard" to place the Block on a named dashboard (matched loosely, created if it does not exist) — use this whenever the user says "add it to <dashboard>".',
+    input_schema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'Block name, e.g. "Canada Cannabis Market".' },
+        resourceId: { type: 'string', description: 'CKAN resource_id from open.canada.ca. Omit to use Health Canada cannabis market data (2f960711-2447-472d-81b0-731fdfbf59a1).' },
+        q: { type: 'string', description: 'Optional keyword filter (e.g. "dried", "edible").' },
+        limit: { type: 'number', description: 'Rows to show (default 25, max 100).' },
+        dashboard: { type: 'string', description: 'Optional dashboard name to add the Block to (e.g. "Cannara Lab"). Matched case-insensitively; created if it does not exist.' },
+      },
+      required: ['name'],
+    },
+  },
+  {
+    name: 'read_section',
+    description: 'Read the LIVE data behind any page in this workspace so you can answer from it. You CAN see every section — use this before saying you cannot access something. Sections: "company" (our own site: overview, gathered facts like employees/revenue/ticker, SEO/traffic intel, our products), "competitor" (a tracked competitor\'s detail — pass query=competitor name; omit query to list all), "documents" (Data Vault documents/files/markdown — omit query to list them; pass query=a document name OR a TOPIC/QUESTION and it returns the most relevant document by meaning, with a `related` list of other relevant docs you can read next), "blocks" (dashboard Blocks/widgets), "reports", "dashboards", "alerts", "activity" (recent agent runs), "connectors", "goals", "agents". For any uploaded file, PDF, deck or markdown — OR any question that the user\'s own notes/research might answer — call read_section("documents", query=its name or the topic); if it returns `related` docs, read those too before answering so you draw on everything relevant. Call it whenever the user asks about what\'s on a page or about their data.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        section: {
+          type: 'string',
+          enum: ['company', 'competitor', 'documents', 'blocks', 'reports', 'dashboards', 'alerts', 'activity', 'connectors', 'goals', 'agents'],
+          description: 'Which page/section to read.',
+        },
+        query: { type: 'string', description: 'Optional filter — e.g. a competitor name, or a document name for section "documents".' },
+      },
+      required: ['section'],
     },
   },
 ] as const;
@@ -209,8 +243,21 @@ function stepFor(name: string, input: Record<string, unknown>): AssistantStep {
     case 'run_agent': return { icon: '▶️', text: `Running agent “${String(input.name ?? 'agent').slice(0, 60)}”` }
     case 'create_widget': return { icon: '📊', text: `Building widget “${String(input.name ?? 'widget').slice(0, 60)}”` }
     case 'deploy_agent': return { icon: '🚀', text: `Deploying ${String(input.provider ?? 'external')} agent for mission: ${String(input.mission ?? '').slice(0, 70)}` }
+    case 'read_section': return { icon: '🧭', text: `Reading ${String(input.section ?? 'section')}${input.query ? `: ${String(input.query).slice(0, 40)}` : ''}` }
+    case 'create_open_canada_block': return { icon: '🇨🇦', text: `Building Open Canada Block “${String(input.name ?? 'dataset').slice(0, 60)}”` }
     default: return { icon: '⚙', text: name }
   }
+}
+
+// When the assistant reads a specific Data Vault document (read_section on the
+// "documents" section with a query match), return that document's name so the
+// UI can tell the user which file the answer drew from.
+function docReadFrom(name: string, input: Record<string, unknown>, out: unknown): string | null {
+  if (name !== 'read_section' || input.section !== 'documents') return null;
+  if (out && typeof out === 'object' && typeof (out as { name?: unknown }).name === 'string') {
+    return (out as { name: string }).name;
+  }
+  return null;
 }
 
 function actionLabel(name: string, input: Record<string, unknown>): string | null {
@@ -221,6 +268,8 @@ function actionLabel(name: string, input: Record<string, unknown>): string | nul
     case 'run_agent': return `Ran the “${String(input.name ?? 'agent')}” agent`;
     case 'create_widget': return `Created the “${String(input.name ?? 'widget')}” widget`;
     case 'deploy_agent': return `Deployed a ${String(input.provider ?? 'external')} agent on a mission`;
+    case 'read_section': return `Read the ${String(input.section ?? 'section')} section`;
+    case 'create_open_canada_block': return `Created the “${String(input.name ?? 'Open Canada')}” live data Block`;
     case 'web_research': return `Researched: ${String(input.query ?? '').slice(0, 60)}`;
     case 'wikipedia_lookup': return `Looked up: ${String(input.query ?? '').slice(0, 60)}`;
     case 'fetch_url': return `Read ${String(input.url ?? '')}`;
@@ -234,8 +283,9 @@ function actionLabel(name: string, input: Record<string, unknown>): string | nul
 
 export interface GoalContext { title: string; plan: string[]; agents: { name: string; role: string }[]; status: string }
 export interface AgentContext { name: string; description: string; schedule: string | null }
+export interface ExternalAgentContext { name: string; provider: string; status: string; mission_status: string }
 
-function buildSystem(inventory: VaultInventoryItem[], orgName?: string, companyProfile?: string, memoryFacts?: string[], goals?: GoalContext[], agents?: AgentContext[]): string {
+function buildSystem(inventory: VaultInventoryItem[], orgName?: string, companyProfile?: string, memoryFacts?: string[], goals?: GoalContext[], agents?: AgentContext[], externalAgents?: ExternalAgentContext[]): string {
   const parts = [
     `You are the DeepLogic assistant — an AI orchestrator inside ${orgName ? `the "${orgName}" workspace` : 'a business-intelligence workspace'}.`,
     'You DO tasks, you do not hand the user a to-do list. When the user asks you to add something, research something, or set something up, USE YOUR TOOLS to actually do it, then confirm what you did in 1-3 sentences. Never reply with manual step-by-step instructions for things your tools can do.',
@@ -243,7 +293,9 @@ function buildSystem(inventory: VaultInventoryItem[], orgName?: string, companyP
     'Be RESOURCEFUL and do not give up after one empty search. If web_research returns nothing: (a) call wikipedia_lookup for the company — it reliably states whether a firm is publicly traded, its ticker/exchange, founding, HQ, revenue and headcount; (b) guess the company domain from its name and fetch_url their homepage, /about, and /investors or /investor-relations pages; (c) try a more specific web_research query. Only say you could not find something after genuinely trying these.',
     'For competitor research: for each competitor, report whether they are public (and ticker/exchange), what they do, size/financials if available, and a source link. Use wikipedia_lookup + fetch_url, which are free.',
     'PICK THE RIGHT TOOL FOR "make/create/build…": a WIDGET (a visual card — news feed, KPI, chart, table) → create_widget; this is what shows on the Widgets page and goes on dashboards. A scheduled background AI worker (e.g. "a weekly research agent") → create_agent. An autonomous remote agent to OUTSOURCE a multi-step mission to its own VM (Hermes/OpenClaw) → deploy_agent. If the user says "widget", you MUST use create_widget — never create_agent. Do not rename a widget request into an agent.',
+    'OPEN-DATA BLOCKS: when the user asks for an "Open Canada", open-data, Health Canada, or cannabis-market data Block/widget, call create_open_canada_block — it builds a LIVE, populated table immediately. Never use create_widget (an empty AI scaffold) for open-data requests. For cannabis-industry intel, the default Health Canada cannabis market dataset is exactly right.',
     'ADDING AN API / ENDPOINT / DATA SOURCE: when the user gives you an API URL, endpoint, or asks to add a "connector"/"data source" they want to QUERY (e.g. an open-data API), call add_connector (type "rest" for HTTP APIs) — NOT add_to_vault. add_to_vault is only for documents, notes, and tracked websites. Put example query URLs in the connector description.',
+    'YOU CAN SEE EVERY PAGE. Each header section (Company, Competitors, Documents, Blocks, Reports, Dashboards, Alerts, Activity, Connectors, Goals, Agents) is readable via read_section — call it to pull that page\'s live data instead of ever saying you cannot access a page. For "tell me about our company / our SEO / our stock / our products" call read_section("company"); for a specific competitor call read_section("competitor", query=name); for any uploaded file/PDF/deck/markdown in the Data Vault call read_section("documents", query=document name) — never say you cannot access a document before trying this.',
     'USE WHAT YOU ALREADY KNOW BEFORE ASKING. The company profile and Data Vault below are your standing intelligence. Derive context from them first — for a request like "add an agent to generate leads", infer the ideal-customer profile / target audience, industry, and lead criteria from the company profile and tracked competitors, then act (e.g. create_agent with a concrete, tailored system prompt). Only ask the user a clarifying question if a critical detail is genuinely absent from the company profile and vault — and never ask for something the profile already answers. Default to acting over asking.',
     'Be concise. Use short markdown. Link sources as [label](url).',
     // Make listed options one-click actionable.
@@ -257,6 +309,16 @@ function buildSystem(inventory: VaultInventoryItem[], orgName?: string, companyP
   if (agents && agents.length) {
     parts.push('When the user refers to an existing agent by name, call run_agent with its exact name — never claim it doesn\'t exist, and don\'t create a duplicate.');
   }
+  // Human-in-the-loop: deploying an autonomous VM agent is high-impact (real cost
+  // + real outreach) and MUST be approved by the user first.
+  parts.push(
+    'HUMAN-IN-THE-LOOP — deploy_agent: Deploying an autonomous agent to a VM is a high-impact action (it spends real compute and can take real-world actions). NEVER deploy without explicit user approval. STEP 1: call deploy_agent WITHOUT confirmed (or confirmed:false) — this returns a PREVIEW and deploys nothing. STEP 2: show the user the proposed agent (provider, mission, why) and append an <<ACTIONS>> block with ONE action: label "✅ Approve & deploy", prompt "Approved — deploy the agent now with confirmed:true." Then STOP and wait. STEP 3: only when the user approves do you call deploy_agent again with confirmed:true. If the user declines, do not deploy.',
+    'MISSION SCOPING — deploy_agent: A goal you assign to an agent is only worth deploying if the agent will actually run it — and agents keep their own judgment, so a vague or privacy-risky mission gets refused no matter how it is labelled ("it is now your goal" does not override that). So write missions that are specific + legitimate: a concrete outcome, its business purpose, and a lawful basis, sourced from the org\'s OWN data/connectors/internal directory rather than open-web personal-data collection. Never phrase a mission as "collect/aggregate all of <company>\'s employees\' personal data" for outreach — for a roster, pull from the company\'s own HR/directory/CSV (the Employees tab) instead, and for outreach use official channels and consented contacts. If the user\'s underlying need is internal (e.g. knowledge capture of their own staff), say so in the mission and point the agent at owned data.',
+  );
+  // Live external-agent (Hermes/OpenClaw) state — authoritative over conversation memory.
+  parts.push(externalAgents && externalAgents.length
+    ? `Deployed external agents (Hermes/OpenClaw) RIGHT NOW: ${externalAgents.map((a) => `${a.name} (${a.provider} · ${a.status}/${a.mission_status})`).join('; ')}. This is the AUTHORITATIVE live list — only treat an external agent as deployed if it appears here, even if earlier in this conversation you said you deployed one (it may since have been deleted).`
+    : 'No external agents (Hermes/OpenClaw) are currently deployed. Do NOT claim one is deployed or running based on anything earlier in this conversation — if the user asks, deploy a fresh one with deploy_agent or state plainly that none are running.')
   parts.push(...contextBlocks({ inventory, companyProfile, memoryFacts, goals, agents }));
   return parts.join('\n\n');
 }
@@ -378,13 +440,14 @@ async function runWithTools(
   onStep?: StepCb,
   tools: readonly unknown[] = ASSISTANT_TOOLS,
   signal?: AbortSignal,
-): Promise<{ text: string; actions: string[] }> {
+): Promise<{ text: string; actions: string[]; readDocs: string[] }> {
   const mod = await import('@anthropic-ai/sdk');
   const client = new mod.default({ apiKey: ai.apiKey });
   const model = ai.model || DEFAULT_MODEL.anthropic;
 
   const messages: any[] = history.map((m) => ({ role: m.role, content: m.content }));
   const actions: string[] = [];
+  const readDocs: string[] = [];
 
   for (let i = 0; i < MAX_TOOL_ITERATIONS; i++) {
     if (signal?.aborted) throw new Error('Stopped by user.');
@@ -403,7 +466,7 @@ async function runWithTools(
         .map((b: any) => b.text)
         .join('')
         .trim();
-      return { text: text || '(done)', actions };
+      return { text: text || '(done)', actions, readDocs };
     }
 
     // Surface any interim reasoning the model wrote before its tool calls.
@@ -421,6 +484,8 @@ async function runWithTools(
         const out = await executeTool(tu.name, input);
         const label = actionLabel(tu.name, input);
         if (label && (tu.name === 'add_to_vault' || tu.name === 'add_connector' || tu.name === 'create_agent' || tu.name === 'create_widget' || tu.name === 'deploy_agent' || tu.name === 'run_agent')) actions.push(label);
+        const rd = docReadFrom(tu.name, input, out);
+        if (rd && !readDocs.includes(rd)) { readDocs.push(rd); onStep?.({ icon: '📄', text: `Read “${rd}” from your Data Vault` }); }
         resultStr = typeof out === 'string' ? out : JSON.stringify(out).slice(0, 8000);
       } catch (e) {
         resultStr = `ERROR: ${e instanceof Error ? e.message : 'tool failed'}`;
@@ -430,7 +495,7 @@ async function runWithTools(
     messages.push({ role: 'user', content: toolResults });
   }
 
-  return { text: 'I ran out of steps before finishing — please narrow the request or try again.', actions };
+  return { text: 'I ran out of steps before finishing — please narrow the request or try again.', actions, readDocs };
 }
 
 // OpenAI-compatible function-calling loop (OpenAI + OpenRouter).
@@ -443,7 +508,7 @@ async function runWithToolsOpenAI(
   onStep?: StepCb,
   toolDefs: readonly { name: string; description: string; input_schema: unknown }[] = ASSISTANT_TOOLS,
   signal?: AbortSignal,
-): Promise<{ text: string; actions: string[] }> {
+): Promise<{ text: string; actions: string[]; readDocs: string[] }> {
   const model = ai.model || DEFAULT_MODEL[ai.provider];
   const tools = toolDefs.map((t) => ({
     type: 'function',
@@ -452,6 +517,7 @@ async function runWithToolsOpenAI(
 
   const messages: any[] = [{ role: 'system', content: system }, ...history.map((m) => ({ role: m.role, content: m.content }))];
   const actions: string[] = [];
+  const readDocs: string[] = [];
 
   for (let i = 0; i < MAX_TOOL_ITERATIONS; i++) {
     if (signal?.aborted) throw new Error('Stopped by user.');
@@ -470,7 +536,7 @@ async function runWithToolsOpenAI(
     const toolCalls = msg?.tool_calls as { id: string; function: { name: string; arguments: string } }[] | undefined;
 
     if (!msg || !toolCalls || toolCalls.length === 0) {
-      return { text: (msg?.content ?? '').trim() || '(done)', actions };
+      return { text: (msg?.content ?? '').trim() || '(done)', actions, readDocs };
     }
 
     const interim = (msg.content ?? '').toString().trim();
@@ -486,6 +552,8 @@ async function runWithToolsOpenAI(
         const out = await executeTool(tc.function.name, input);
         const label = actionLabel(tc.function.name, input);
         if (label && (tc.function.name === 'add_to_vault' || tc.function.name === 'add_connector' || tc.function.name === 'create_agent' || tc.function.name === 'create_widget' || tc.function.name === 'deploy_agent' || tc.function.name === 'run_agent')) actions.push(label);
+        const rd = docReadFrom(tc.function.name, input, out);
+        if (rd && !readDocs.includes(rd)) { readDocs.push(rd); onStep?.({ icon: '📄', text: `Read “${rd}” from your Data Vault` }); }
         resultStr = typeof out === 'string' ? out : JSON.stringify(out).slice(0, 8000);
       } catch (e) {
         resultStr = `ERROR: ${e instanceof Error ? e.message : 'tool failed'}`;
@@ -494,7 +562,7 @@ async function runWithToolsOpenAI(
     }
   }
 
-  return { text: 'I ran out of steps before finishing — please narrow the request or try again.', actions };
+  return { text: 'I ran out of steps before finishing — please narrow the request or try again.', actions, readDocs };
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
@@ -513,9 +581,10 @@ export async function runAssistant(opts: {
   memory?: string[];
   goals?: GoalContext[];
   agents?: AgentContext[];
+  externalAgents?: ExternalAgentContext[];
   onStep?: StepCb;
 }): Promise<AssistantReply> {
-  const { ai, inventory, orgName, executeTool, companyProfile, memory, goals, agents, onStep } = opts;
+  const { ai, inventory, orgName, executeTool, companyProfile, memory, goals, agents, externalAgents, onStep } = opts;
   const history = trim(opts.messages);
 
   if (!ai) {
@@ -525,12 +594,12 @@ export async function runAssistant(opts: {
     };
   }
 
-  const system = buildSystem(inventory, orgName, companyProfile, memory, goals, agents);
+  const system = buildSystem(inventory, orgName, companyProfile, memory, goals, agents, externalAgents);
 
   // Agentic tool-use path. Anthropic uses its native tool format; OpenAI and
   // OpenRouter use OpenAI-style function calling.
   try {
-    let result: { text: string; actions: string[] };
+    let result: { text: string; actions: string[]; readDocs: string[] };
     if (ai.provider === 'anthropic') {
       result = await runWithTools(ai, system, history, executeTool, onStep);
     } else {
@@ -538,7 +607,7 @@ export async function runAssistant(opts: {
       result = await runWithToolsOpenAI(base, ai, system, history, executeTool, onStep);
     }
     const { text, suggestions } = extractSuggestions(result.text);
-    return { text, usedAI: true, actions: result.actions, suggestions };
+    return { text, usedAI: true, actions: result.actions, suggestions, readDocs: result.readDocs };
   } catch (err) {
     console.error('runAssistant (tools) failed', err);
     // Last-ditch for OpenAI-compatible providers: a plain reply so the user

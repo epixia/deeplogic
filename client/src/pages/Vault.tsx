@@ -5,12 +5,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useStickyTab } from '../lib/useStickyTab'
 
-type VTab = 'connectors' | 'databases' | 'websites' | 'data' | 'documents' | 'markdown' | 'powerbi' | 'kpis' | 'company' | 'competitors'
-const VTABS: readonly VTab[] = ['connectors', 'databases', 'websites', 'data', 'documents', 'markdown', 'powerbi', 'kpis', 'company', 'competitors']
+type VTab = 'connectors' | 'mcp' | 'databases' | 'websites' | 'data' | 'documents' | 'markdown' | 'powerbi' | 'employees' | 'kpis'
+// 'kpis' intentionally omitted — tab hidden for now (falls back if it was sticky)
+const VTABS: readonly VTab[] = ['connectors', 'mcp', 'databases', 'websites', 'data', 'documents', 'markdown', 'employees', 'powerbi']
 
 // Connector kinds that represent a connected database / warehouse — these get
 // their own "Databases" tab; everything else stays under "Connectors".
-const DB_KINDS = new Set(['snowflake', 'sqlserver', 'sap', 'postgres', 'postgresql', 'mysql', 'redshift', 'bigquery', 'oracle', 'databricks', 'mongodb', 'mssql', 'db2'])
+const DB_KINDS = new Set(['snowflake', 'sqlserver', 'sap', 'postgres', 'postgresql', 'mysql', 'mariadb', 'supabase', 'redshift', 'bigquery', 'oracle', 'databricks', 'mongodb', 'mssql', 'db2'])
 import { Link, useParams } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import {
@@ -27,14 +28,17 @@ import {
   listVaultPowerBI,
   listVaultKpis,
   deleteVaultKpi,
+  describePowerBi,
   type VaultConnector,
   type VaultDocument,
   type VaultPowerBI,
   type VaultKpi,
 } from '../lib/api'
 import AnalyzeUrlModal from '../components/vault/AnalyzeUrlModal'
-import CompanyProfile, { COMPANY_PROFILE_NAME } from '../components/vault/CompanyProfile'
-import Competitors, { COMPETITOR_PREFIX } from '../components/vault/Competitors'
+import PowerBiScanModal from '../components/vault/PowerBiScanModal'
+import DbAnalyzeModal from '../components/vault/DbAnalyzeModal'
+import Employees from '../components/vault/Employees'
+import { COMPANY_PROFILE_NAME } from '../components/vault/CompanyProfile'
 import './vault.css'
 
 type FieldDef = { key: string; label: string; type: 'text' | 'password' | 'url'; placeholder?: string }
@@ -72,6 +76,57 @@ const CONNECTOR_FIELDS: Record<string, FieldDef[]> = {
     { key: 'database', label: 'Database', type: 'text' },
     { key: 'username', label: 'Username', type: 'text' },
     { key: 'password', label: 'Password', type: 'password' },
+  ],
+  postgres: [
+    { key: 'host',     label: 'Host', type: 'text', placeholder: 'db.example.com' },
+    { key: 'port',     label: 'Port', type: 'text', placeholder: '5432' },
+    { key: 'database', label: 'Database', type: 'text' },
+    { key: 'username', label: 'Username', type: 'text' },
+    { key: 'password', label: 'Password', type: 'password' },
+    { key: 'ssl',      label: 'SSL mode (optional)', type: 'text', placeholder: 'require' },
+  ],
+  mysql: [
+    { key: 'host',     label: 'Host', type: 'text', placeholder: 'db.example.com' },
+    { key: 'port',     label: 'Port', type: 'text', placeholder: '3306' },
+    { key: 'database', label: 'Database', type: 'text' },
+    { key: 'username', label: 'Username', type: 'text' },
+    { key: 'password', label: 'Password', type: 'password' },
+  ],
+  mariadb: [
+    { key: 'host',     label: 'Host', type: 'text', placeholder: 'db.example.com' },
+    { key: 'port',     label: 'Port', type: 'text', placeholder: '3306' },
+    { key: 'database', label: 'Database', type: 'text' },
+    { key: 'username', label: 'Username', type: 'text' },
+    { key: 'password', label: 'Password', type: 'password' },
+  ],
+  supabase: [
+    { key: 'url',            label: 'Project URL (SUPABASE_URL)', type: 'url', placeholder: 'https://xxxx.supabase.co' },
+    { key: 'publishableKey', label: 'Publishable key (SUPABASE_PUBLISHABLE_KEY)', type: 'password', placeholder: 'sb_publishable_…' },
+    { key: 'secretKey',      label: 'Secret key (SUPABASE_SECRET_KEY)', type: 'password', placeholder: 'sb_secret_…' },
+    { key: 'jwksUrl',        label: 'JWKS URL (SUPABASE_JWKS_URL)', type: 'url', placeholder: 'https://xxxx.supabase.co/auth/v1/.well-known/jwks.json' },
+  ],
+  bigquery: [
+    { key: 'projectId',      label: 'Project ID', type: 'text' },
+    { key: 'dataset',        label: 'Dataset', type: 'text' },
+    { key: 'serviceAccount', label: 'Service account JSON', type: 'password', placeholder: 'paste the JSON key' },
+  ],
+  redshift: [
+    { key: 'host',     label: 'Host / Endpoint', type: 'text', placeholder: 'cluster.xxxx.redshift.amazonaws.com' },
+    { key: 'port',     label: 'Port', type: 'text', placeholder: '5439' },
+    { key: 'database', label: 'Database', type: 'text' },
+    { key: 'username', label: 'Username', type: 'text' },
+    { key: 'password', label: 'Password', type: 'password' },
+  ],
+  oracle: [
+    { key: 'host',        label: 'Host', type: 'text' },
+    { key: 'port',        label: 'Port', type: 'text', placeholder: '1521' },
+    { key: 'serviceName', label: 'Service name / SID', type: 'text' },
+    { key: 'username',    label: 'Username', type: 'text' },
+    { key: 'password',    label: 'Password', type: 'password' },
+  ],
+  mongodb: [
+    { key: 'url',      label: 'Connection string', type: 'password', placeholder: 'mongodb+srv://user:pass@cluster/db' },
+    { key: 'database', label: 'Database', type: 'text' },
   ],
   sheets: [
     { key: 'spreadsheetId', label: 'Spreadsheet ID', type: 'text' },
@@ -116,13 +171,24 @@ const CONNECTOR_TYPES = [
   { id: 'mcp',        label: 'MCP Server',    icon: '🔌' },
   { id: 'salesforce', label: 'Salesforce',    icon: '☁' },
   { id: 'hubspot',    label: 'HubSpot',       icon: '◎' },
-  { id: 'snowflake',  label: 'Snowflake',     icon: '❄' },
   { id: 'sheets',     label: 'Google Sheets', icon: '▤' },
   { id: 'powerbi',    label: 'Power BI',      icon: '▦' },
-  { id: 'sqlserver',  label: 'SQL Server',    icon: '🗄' },
   { id: 'excel',      label: 'Excel',         icon: '▦' },
   { id: 'sap',        label: 'SAP',           icon: '◆' },
+  // Databases (shown in the Databases tab's "+ Add database" picker)
+  { id: 'postgres',   label: 'PostgreSQL',    icon: '🐘' },
+  { id: 'mysql',      label: 'MySQL',         icon: '🐬' },
+  { id: 'mariadb',    label: 'MariaDB',       icon: '🦭' },
+  { id: 'sqlserver',  label: 'SQL Server',    icon: '🗄' },
+  { id: 'supabase',   label: 'Supabase',      icon: '⚡' },
+  { id: 'snowflake',  label: 'Snowflake',     icon: '❄' },
+  { id: 'bigquery',   label: 'BigQuery',      icon: '🔷' },
+  { id: 'redshift',   label: 'Redshift',      icon: '🟥' },
+  { id: 'oracle',     label: 'Oracle',        icon: '🅾' },
+  { id: 'mongodb',    label: 'MongoDB',       icon: '🍃' },
 ]
+// Which connector types are databases (for the per-tab "+ Add" picker).
+const DB_TYPE_IDS = new Set(['postgres', 'mysql', 'mariadb', 'sqlserver', 'supabase', 'snowflake', 'bigquery', 'redshift', 'oracle', 'mongodb'])
 
 const KIND_ICON: Record<string, string> = {
   powerbi: '▦',
@@ -133,6 +199,17 @@ const KIND_ICON: Record<string, string> = {
   sheets: '▤',
   sap: '◆',
   excel: '▦',
+  postgres: '🐘',
+  postgresql: '🐘',
+  mysql: '🐬',
+  mariadb: '🦭',
+  supabase: '⚡',
+  bigquery: '🔷',
+  redshift: '🟥',
+  oracle: '🅾',
+  mongodb: '🍃',
+  mssql: '🗄',
+  databricks: '🧱',
   rest: '⚡',
   mcp: '🔌',
   api: '⚡',
@@ -163,6 +240,43 @@ function OwnerBadge({ email }: { email: string | null }) {
   )
 }
 
+// AI "what this report portrays" summary for a Power BI card. Fetched once per
+// report and cached for the session so the Power BI tab doesn't re-spend tokens.
+const pbiDescCache = new Map<string, string>()
+function PowerBiDescription({ orgId, report }: { orgId: string; report: VaultPowerBI }) {
+  const { getAccessToken } = useAuth()
+  const [desc, setDesc] = useState<string | null>(() => pbiDescCache.get(report.id) ?? null)
+  useEffect(() => {
+    if (pbiDescCache.has(report.id)) { setDesc(pbiDescCache.get(report.id)!); return }
+    let cancelled = false
+    void (async () => {
+      try {
+        const t = await getAccessToken()
+        if (!t) return
+        const insp = report.inspection
+        const r = await describePowerBi(t, orgId, {
+          name: report.name,
+          tables: (report.tables ?? []).map((tb) => ({ name: tb.name, columns: tb.columns ?? [] })),
+          sources: [...new Set((insp?.sourceSystems ?? []).map((s) => s.database || s.server || s.name).filter(Boolean) as string[])],
+          sourceTypes: [...new Set((insp?.connectors ?? []).map((c) => c.type).filter(Boolean))],
+          kpis: insp?.kpis?.length ? insp.kpis.map((k) => k.name) : (report.kpis ?? []),
+          entities: (insp?.entities ?? []).map((e) => e.name),
+          pages: report.pages ?? [],
+        })
+        if (!cancelled) { pbiDescCache.set(report.id, r.description); setDesc(r.description) }
+      } catch { /* description is best-effort */ }
+    })()
+    return () => { cancelled = true }
+  }, [orgId, report, getAccessToken])
+
+  return (
+    <div className="vault-pbi-sec">
+      <h4>📝 What this report portrays</h4>
+      {desc ? <p className="vault-pbi-desc">{desc}</p> : <p className="vault-pbi-desc vault-pbi-desc--load">Generating description…</p>}
+    </div>
+  )
+}
+
 export default function Vault() {
   const { orgId = '' } = useParams<{ orgId: string }>()
   const { getAccessToken } = useAuth()
@@ -170,6 +284,7 @@ export default function Vault() {
   const [connectors, setConnectors] = useState<VaultConnector[]>([])
   const [documents, setDocuments] = useState<VaultDocument[]>([])
   const [powerbi, setPowerbi] = useState<VaultPowerBI[]>([])
+  const [pbiOpen, setPbiOpen] = useState<Record<string, boolean>>({}) // expanded Power BI cards
   const [kpis, setKpis] = useState<VaultKpi[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -263,6 +378,16 @@ export default function Vault() {
     await ingestAny({ filename: file.name, name: file.name, mediaType: file.type || undefined, dataBase64: dataUri })
   }
 
+  // Multi-file intake — process sequentially so each AI classify/route + reload
+  // settles before the next, and one failure doesn't abort the rest.
+  async function ingestFiles(files: File[]) {
+    for (let i = 0; i < files.length; i++) {
+      if (files.length > 1) setIngestNote(`Ingesting ${i + 1} of ${files.length}: ${files[i].name}…`)
+      await ingestFile(files[i])
+    }
+    if (files.length > 1) setIngestNote(`Added ${files.length} files.`)
+  }
+
   async function ingestQuick() {
     const v = quickInput.trim()
     if (!v) return
@@ -304,6 +429,10 @@ export default function Vault() {
     }
   }
 
+  async function uploadDataFiles(files: File[]) {
+    for (const f of files) await uploadDataFile(f)
+  }
+
   async function uploadDocFile(file: File) {
     setDocDropping(true)
     setError(null)
@@ -339,6 +468,10 @@ export default function Vault() {
       setDocDropping(false)
       if (docFileRef.current) docFileRef.current.value = ''
     }
+  }
+
+  async function uploadDocFiles(files: File[]) {
+    for (const f of files) await uploadDocFile(f)
   }
 
   // Document preview state
@@ -400,6 +533,9 @@ export default function Vault() {
 
   // Analyse-URL modal target ({ url, title } or null when closed)
   const [analyzeTarget, setAnalyzeTarget] = useState<{ url: string; title?: string } | null>(null)
+  // Power BI "forensic scan" modal target.
+  const [scanReport, setScanReport] = useState<VaultPowerBI | null>(null)
+  const [dbAnalyze, setDbAnalyze] = useState<{ ref: string; name: string; supabase?: { url: string; key: string } } | null>(null)
 
   // Vault tabs — one section per tab to avoid a long cluttered scroll.
   // Remembered per org across reloads.
@@ -409,7 +545,7 @@ export default function Vault() {
   const [view, setView] = useStickyTab<'card' | 'list'>(`vault.view.${orgId}`, 'card', ['card', 'list'])
 
   function openAddConnector() {
-    setAddType('rest')
+    setAddType(vtab === 'databases' ? 'postgres' : vtab === 'mcp' ? 'mcp' : 'rest')
     setAddName('')
     setAddMeta({})
     setAddError(null)
@@ -496,12 +632,12 @@ export default function Vault() {
     }
   }
 
-  async function handleDelete(deleteRef: string, label: string) {
+  async function handleDelete(deleteRef: string, label: string, skipConfirm = false) {
     const isModel = deleteRef.startsWith('model:')
     const msg = isModel
       ? `Delete "${label}" and all its connectors? This cannot be undone.`
       : `Remove "${label}"? This cannot be undone.`
-    if (!confirm(msg)) return
+    if (!skipConfirm && !confirm(msg)) return
     setDeleting(deleteRef)
     setError(null)
     try {
@@ -630,10 +766,16 @@ export default function Vault() {
     )
   }, [connectors, q])
 
-  // Split connectors into databases vs everything else.
-  const databaseConnectors = useMemo(() => filteredConnectors.filter((c) => DB_KINDS.has(c.kind.toLowerCase())), [filteredConnectors])
-  const otherConnectors = useMemo(() => filteredConnectors.filter((c) => !DB_KINDS.has(c.kind.toLowerCase())), [filteredConnectors])
-  const connList = vtab === 'databases' ? databaseConnectors : otherConnectors
+  // Classify by the REAL connector type. The vault aggregation tags every
+  // context-library connector with kind 'mcp', so the true type lives in
+  // meta.connectorType (rest / mcp / postgres / …). Fall back to kind only when
+  // no connectorType is stored.
+  const realType = (c: VaultConnector) => (((c.meta as Record<string, string> | undefined)?.connectorType) || c.kind).toLowerCase()
+  const isMcp = (c: VaultConnector) => realType(c) === 'mcp'
+  const databaseConnectors = useMemo(() => filteredConnectors.filter((c) => DB_KINDS.has(realType(c))), [filteredConnectors])
+  const mcpConnectors = useMemo(() => filteredConnectors.filter((c) => isMcp(c) && !DB_KINDS.has(realType(c))), [filteredConnectors])
+  const otherConnectors = useMemo(() => filteredConnectors.filter((c) => !DB_KINDS.has(realType(c)) && !isMcp(c)), [filteredConnectors])
+  const connList = vtab === 'databases' ? databaseConnectors : vtab === 'mcp' ? mcpConnectors : otherConnectors
 
   const filteredDocuments = useMemo(() => {
     const s = q.trim().toLowerCase()
@@ -659,13 +801,79 @@ export default function Vault() {
   // Notes (kind 'note') are company/research write-ups (from Analyse, the
   // assistant, etc.) → they live under the Company tab. Docs/HTML stay under
   // Sources. Competitor notes (name-prefixed) live under the Competitors tab.
-  const notes = useMemo(() => otherDocs.filter((d) => d.kind === 'note'), [otherDocs])
-  const companyNotes = useMemo(() => notes.filter((d) => !d.name.startsWith(COMPETITOR_PREFIX)), [notes])
-  const competitorNoteCount = useMemo(() => notes.filter((d) => d.name.startsWith(COMPETITOR_PREFIX)).length, [notes])
   // Markdown docs (e.g. saved from the assistant chat) get their own tab.
-  const isMd = (name: string) => /\.md$/i.test(name)
-  const markdownDocs = useMemo(() => otherDocs.filter((d) => d.kind !== 'note' && isMd(d.name)), [otherDocs])
-  const sourceDocs = useMemo(() => otherDocs.filter((d) => d.kind !== 'note' && !isMd(d.name)), [otherDocs])
+  // Detect by `.md` filename OR the stored format flag (meta.format === 'md'),
+  // so markdown whose name lacks the extension still lands in the Markdown tab
+  // instead of leaking into Documents.
+  const isMd = (d: VaultDocument) => /\.md$/i.test(d.name) || (d.format ?? '').toLowerCase() === 'md'
+  const markdownDocs = useMemo(() => otherDocs.filter((d) => d.kind !== 'note' && isMd(d)), [otherDocs])
+  const sourceDocs = useMemo(() => otherDocs.filter((d) => d.kind !== 'note' && !isMd(d)), [otherDocs])
+
+  // Sortable Markdown table state.
+  const [mdSort, setMdSort] = useState<{ key: 'name' | 'category' | 'date'; dir: 'asc' | 'desc' }>({ key: 'date', dir: 'desc' })
+  const mdToggleSort = (key: 'name' | 'category' | 'date') =>
+    setMdSort((s) => (s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: key === 'date' ? 'desc' : 'asc' }))
+  const mdArrow = (key: string) => (mdSort.key === key ? (mdSort.dir === 'asc' ? '▲' : '▼') : '↕')
+  const sortedMd = useMemo(() => {
+    const dir = mdSort.dir === 'asc' ? 1 : -1
+    return [...markdownDocs].sort((a, b) => {
+      if (mdSort.key === 'name') return a.name.localeCompare(b.name) * dir
+      if (mdSort.key === 'category') return (a.category ?? '').localeCompare(b.category ?? '') * dir
+      return (new Date(a.createdAt ?? 0).getTime() - new Date(b.createdAt ?? 0).getTime()) * dir
+    })
+  }, [markdownDocs, mdSort])
+
+  // Markdown multi-select + bulk delete (keyed by deleteRef).
+  const [mdSelected, setMdSelected] = useState<Set<string>>(new Set())
+  const [bulkDeleting, setBulkDeleting] = useState(false)
+  const mdAllSelected = markdownDocs.length > 0 && markdownDocs.every((d) => mdSelected.has(d.deleteRef))
+
+  // Drop selections for rows that no longer exist (after delete/reload).
+  useEffect(() => {
+    setMdSelected((prev) => {
+      if (prev.size === 0) return prev
+      const live = new Set(markdownDocs.map((d) => d.deleteRef))
+      const next = new Set([...prev].filter((ref) => live.has(ref)))
+      return next.size === prev.size ? prev : next
+    })
+  }, [markdownDocs])
+
+  function toggleMdSelect(ref: string) {
+    setMdSelected((prev) => {
+      const next = new Set(prev)
+      next.has(ref) ? next.delete(ref) : next.add(ref)
+      return next
+    })
+  }
+
+  function toggleMdSelectAll() {
+    setMdSelected((prev) =>
+      prev.size === markdownDocs.length ? new Set() : new Set(markdownDocs.map((d) => d.deleteRef))
+    )
+  }
+
+  async function bulkDeleteMd() {
+    const refs = markdownDocs.filter((d) => mdSelected.has(d.deleteRef)).map((d) => d.deleteRef)
+    if (refs.length === 0) return
+    if (!confirm(`Delete ${refs.length} markdown file${refs.length > 1 ? 's' : ''}? This cannot be undone.`)) return
+    setBulkDeleting(true)
+    setError(null)
+    try {
+      const t = await getAccessToken()
+      if (!t) throw new Error('Session expired')
+      for (const ref of refs) {
+        try {
+          await deleteVaultEntry(t, orgId, ref)
+          setDocuments((prev) => prev.filter((d) => d.deleteRef !== ref))
+        } catch (e) {
+          setError(e instanceof Error ? e.message : 'Delete failed')
+        }
+      }
+      setMdSelected(new Set())
+    } finally {
+      setBulkDeleting(false)
+    }
+  }
 
   return (
     <main className={`wrap vault-page vault-view-${view}`}>
@@ -722,8 +930,8 @@ export default function Vault() {
         onDrop={(e) => {
           e.preventDefault()
           setAnyDragOver(false)
-          const f = e.dataTransfer.files?.[0]
-          if (f) void ingestFile(f)
+          const fs = e.dataTransfer.files
+          if (fs?.length) void ingestFiles(Array.from(fs))
         }}
       >
         <div className="vault-intake-main">
@@ -736,11 +944,12 @@ export default function Vault() {
             <input
               ref={anyFileRef}
               type="file"
+              multiple
               style={{ display: 'none' }}
-              onChange={(e) => { const f = e.target.files?.[0]; if (f) void ingestFile(f); if (anyFileRef.current) anyFileRef.current.value = '' }}
+              onChange={(e) => { const fs = e.target.files; if (fs?.length) void ingestFiles(Array.from(fs)); if (anyFileRef.current) anyFileRef.current.value = '' }}
               disabled={ingesting}
             />
-            {ingesting ? 'Working…' : 'Choose file'}
+            {ingesting ? 'Working…' : 'Choose files'}
           </label>
         </div>
         <div className="vault-intake-quick">
@@ -762,7 +971,10 @@ export default function Vault() {
       {/* Tabs — one section per tab */}
       <div className="vault-tabs">
         <button type="button" className={`vault-tab${vtab === 'connectors' ? ' active' : ''}`} onClick={() => setVtab('connectors')}>
-          Connectors<span className="vault-tab-count">{otherConnectors.length}</span>
+          API<span className="vault-tab-count">{otherConnectors.length}</span>
+        </button>
+        <button type="button" className={`vault-tab${vtab === 'mcp' ? ' active' : ''}`} onClick={() => setVtab('mcp')}>
+          🔌 MCP<span className="vault-tab-count">{mcpConnectors.length}</span>
         </button>
         <button type="button" className={`vault-tab${vtab === 'databases' ? ' active' : ''}`} onClick={() => setVtab('databases')}>
           🗄 Databases<span className="vault-tab-count">{databaseConnectors.length}</span>
@@ -779,18 +991,13 @@ export default function Vault() {
         <button type="button" className={`vault-tab${vtab === 'markdown' ? ' active' : ''}`} onClick={() => setVtab('markdown')}>
           Markdown<span className="vault-tab-count">{markdownDocs.length}</span>
         </button>
+        <button type="button" className={`vault-tab${vtab === 'employees' ? ' active' : ''}`} onClick={() => setVtab('employees')}>
+          👥 Employees
+        </button>
         <button type="button" className={`vault-tab${vtab === 'powerbi' ? ' active' : ''}`} onClick={() => setVtab('powerbi')}>
           📊 Power BI<span className="vault-tab-count">{powerbi.length}</span>
         </button>
-        <button type="button" className={`vault-tab${vtab === 'kpis' ? ' active' : ''}`} onClick={() => setVtab('kpis')}>
-          📈 KPIs<span className="vault-tab-count">{kpis.length}</span>
-        </button>
-        <button type="button" className={`vault-tab${vtab === 'company' ? ' active' : ''}`} onClick={() => setVtab('company')}>
-          🏢 Company<span className="vault-tab-count">{companyNotes.length}</span>
-        </button>
-        <button type="button" className={`vault-tab${vtab === 'competitors' ? ' active' : ''}`} onClick={() => setVtab('competitors')}>
-          ⚔ Competitors<span className="vault-tab-count">{competitorNoteCount}</span>
-        </button>
+        {/* KPIs tab hidden for now */}
       </div>
 
       {vtab === 'powerbi' && (
@@ -809,16 +1016,38 @@ export default function Vault() {
             const sourceSystems = p.inspection?.sourceSystems ?? []
             const sourceIds = new Set(sourceSystems.map((s) => s.connectorId))
             const otherConns = (p.inspection?.connectors ?? []).filter((c) => !sourceIds.has(c.id))
+            const open = !!pbiOpen[p.id]
             return (
-            <div className="vault-pbi-card" key={p.id}>
+            <div className={`vault-pbi-card${open ? ' is-open' : ''}`} key={p.id}>
               <div className="vault-pbi-head">
-                <span className="vault-pbi-name">📊 {p.name}</span>
+                <button
+                  type="button"
+                  className="vault-pbi-toggle"
+                  aria-expanded={open}
+                  title={open ? 'Collapse' : 'Expand details'}
+                  onClick={() => setPbiOpen((m) => ({ ...m, [p.id]: !open }))}
+                >
+                  <span className="vault-pbi-chev">{open ? '▾' : '▸'}</span>
+                  <span className="vault-pbi-name">📊 {p.name}</span>
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-xs btn-primary vault-pbi-analyse"
+                  title="Scan this report for connectors, KPIs, databases & risks"
+                  onClick={() => setScanReport(p)}
+                >
+                  🛰 Analyse
+                </button>
                 <button type="button" className="vault-pbi-del" title="Remove" onClick={() => void removePbi(p)}>✕</button>
               </div>
-              <div className="vault-pbi-stats">
+              <button type="button" className="vault-pbi-stats vault-pbi-stats--btn" onClick={() => setPbiOpen((m) => ({ ...m, [p.id]: !open }))}>
                 {p.tables.length} table{p.tables.length === 1 ? '' : 's'} · {connCount} connection{connCount === 1 ? '' : 's'} · {kpiCount} KPI{kpiCount === 1 ? '' : 's'}
                 {p.pages.length > 0 && <> · {p.pages.length} page{p.pages.length === 1 ? '' : 's'}</>}
-              </div>
+                {!open && <span className="vault-pbi-more"> · show details</span>}
+              </button>
+
+              {open && (<>
+              <PowerBiDescription orgId={orgId} report={p} />
 
               {sourceSystems.length > 0 && (
                 <div className="vault-pbi-sec">
@@ -876,11 +1105,11 @@ export default function Vault() {
                           const cryptic = meaning && meaning.toLowerCase() !== k.name.toLowerCase() && (/^[a-z]?[-+]?\d/i.test(k.name) || k.name.length <= 4)
                           return (
                             <span key={i} className="vault-pbi-kpi" title={[meaning && `≈ ${meaning}`, `source: ${k.source.replace(/_/g, ' ')}`, k.expression].filter(Boolean).join(' · ')}>
-                              ƒ {k.name}{cryptic && <span className="vault-pbi-kpi-meaning"> · {meaning}</span>}
+                              <span className="kpi-fx">fx</span>{k.name}{cryptic && <span className="vault-pbi-kpi-meaning"> · {meaning}</span>}
                             </span>
                           )
                         })
-                      : p.kpis.slice(0, 24).map((k, i) => <span key={i} className="vault-pbi-kpi">ƒ {k}</span>)}
+                      : p.kpis.slice(0, 24).map((k, i) => <span key={i} className="vault-pbi-kpi"><span className="kpi-fx">fx</span>{k}</span>)}
                   </div>
                 </div>
               )}
@@ -904,6 +1133,51 @@ export default function Vault() {
                 </div>
               )}
 
+              {(p.inspection?.queries?.length ?? 0) > 0 && (
+                <div className="vault-pbi-sec">
+                  <h4>Queries &amp; lineage ({p.inspection!.queries!.length})</h4>
+                  <ul className="vault-pbi-tables">
+                    {p.inspection!.queries!.slice(0, 24).map((q, i) => (
+                      <li key={i}>
+                        <div className="vault-pbi-trow">
+                          <span className="vault-pbi-tname">🧮 {q.name}</span>
+                          <span className="vault-pbi-tmeta">{q.steps} step{q.steps === 1 ? '' : 's'}</span>
+                        </div>
+                        {q.sourceTables.length > 0 && (
+                          <div className="vault-pbi-cols"><strong>from:</strong> {q.sourceTables.map((t) => `${t.schema ? `${t.schema}.` : ''}${t.name}`).slice(0, 8).join(', ')}</div>
+                        )}
+                        {q.selectedColumns.length > 0 && (
+                          <div className="vault-pbi-cols"><strong>columns:</strong> {q.selectedColumns.slice(0, 20).join(', ')}{q.selectedColumns.length > 20 ? ` +${q.selectedColumns.length - 20} more` : ''}</div>
+                        )}
+                        {q.sourceTables.length === 0 && q.selectedColumns.length === 0 && q.outputEntityGuess && (
+                          <div className="vault-pbi-cols">≈ {q.outputEntityGuess}</div>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {(p.inspection?.limitations?.length ?? 0) > 0 && (
+                <div className="vault-pbi-sec">
+                  <h4>Scan notes</h4>
+                  <ul className="vault-pbi-risks">
+                    {p.inspection!.limitations!.map((l, i) => (
+                      <li key={i} className="vault-pbi-risk sev-info"><span className="vault-pbi-risk-sev">note</span>{l}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {p.pages.length > 0 && (
+                <div className="vault-pbi-sec">
+                  <h4>Dashboard pages ({p.pages.length})</h4>
+                  <div className="vault-pbi-chips">
+                    {p.pages.map((pg, i) => <span key={i} className="vault-pbi-chip">📑 {pg}</span>)}
+                  </div>
+                </div>
+              )}
+
               {(p.inspection?.risks?.length ?? 0) > 0 && (
                 <div className="vault-pbi-sec">
                   <h4>Risk &amp; refresh flags</h4>
@@ -914,6 +1188,7 @@ export default function Vault() {
                   </ul>
                 </div>
               )}
+              </>)}
             </div>
           )})}
         </div>
@@ -933,7 +1208,7 @@ export default function Vault() {
                   <div className="vault-kpi-card" key={i}>
                     <button type="button" className="vault-kpi-del" title="Remove KPI" onClick={() => void removeKpi(k.name)}>✕</button>
                     <div className="vault-kpi-top">
-                      <span className="vault-kpi-name">ƒ {k.name}</span>
+                      <span className="vault-kpi-name"><span className="kpi-fx">fx</span>{k.name}</span>
                       <span className={`vault-kpi-conf conf-${k.confidence}`}>{k.confidence}</span>
                     </div>
                     {k.businessMeaning && k.businessMeaning.toLowerCase() !== k.name.toLowerCase() && (
@@ -955,77 +1230,10 @@ export default function Vault() {
         </div>
       )}
 
-      {vtab === 'competitors' && (
-        <Competitors orgId={orgId} getToken={async () => {
-          const t = await getAccessToken()
-          if (!t) throw new Error('Session expired — please sign in again.')
-          return t
-        }} onChange={() => void load()} />
-      )}
-
-      {vtab === 'company' && (
-      <>
-      {/* My Company — always-on grounding profile */}
-      <CompanyProfile orgId={orgId} getToken={async () => {
-        const t = await getAccessToken()
-        if (!t) throw new Error('Session expired — please sign in again.')
-        return t
-      }} onSaved={() => void load()} />
-
-      {/* Company research & notes */}
+      {(vtab === 'connectors' || vtab === 'databases' || vtab === 'mcp') && (
       <section className="vault-section">
         <div className="vault-section-head">
-          <h2>Company research &amp; notes</h2>
-          <span className="vault-count">{companyNotes.length}</span>
-        </div>
-        {loading ? (
-          <div className="vault-empty">Loading…</div>
-        ) : companyNotes.length === 0 ? (
-          <div className="vault-empty">
-            No notes yet — use <strong>⚡ Analyse</strong> on a URL or ask the assistant to research your
-            company or competitors, and the write-ups land here.
-          </div>
-        ) : (
-          <div className="vault-list">
-            {companyNotes.map((d) => (
-              <div className="vault-row" key={d.id}>
-                <span className="vault-ic">{ico(d.kind)}</span>
-                <div className="vault-row-main">
-                  <button
-                    type="button"
-                    className="vault-row-name vault-row-name--link"
-                    onClick={() => void openPreview(d)}
-                    disabled={previewLoading && previewRef === d.deleteRef}
-                  >
-                    {previewLoading && previewRef === d.deleteRef ? '…' : d.name}
-                  </button>
-                  <div className="vault-row-sub">
-                    {SOURCE_LABEL[d.sourceType]} · {d.sourceName}
-                    {d.scope ? ` · ${d.scope}` : ''}
-                  </div>
-                </div>
-                <span className="vault-kind">note</span>
-                <OwnerBadge email={d.ownerEmail} />
-                <button
-                  className="vault-del-btn"
-                  title="Remove"
-                  disabled={deleting === d.deleteRef}
-                  onClick={() => void handleDelete(d.deleteRef, d.name)}
-                >
-                  {deleting === d.deleteRef ? '…' : '✕'}
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
-      </>
-      )}
-
-      {(vtab === 'connectors' || vtab === 'databases') && (
-      <section className="vault-section">
-        <div className="vault-section-head">
-          <h2>{vtab === 'databases' ? 'Connected databases' : 'Connectors'}</h2>
+          <h2>{vtab === 'databases' ? 'Connected databases' : vtab === 'mcp' ? 'MCP servers' : 'APIs'}</h2>
           <span className="vault-count">{connList.length}</span>
           {connList.some((c) => c.url) && (
             <button
@@ -1039,7 +1247,7 @@ export default function Vault() {
             className="btn btn-primary btn-xs"
             onClick={openAddConnector}
           >
-            {vtab === 'databases' ? '+ Add database' : '+ Add connector'}
+            {vtab === 'databases' ? '+ Add database' : vtab === 'mcp' ? '+ Add MCP server' : '+ Add API'}
           </button>
         </div>
         {loading ? (
@@ -1048,81 +1256,73 @@ export default function Vault() {
           <div className="vault-empty">
             {vtab === 'databases'
               ? <>No databases connected yet — click <strong>+ Add database</strong> to connect Snowflake, SQL Server, Postgres, BigQuery and more.</>
-              : <>No connectors yet — click <strong>+ Add connector</strong> to add an API, MCP server, or integration.</>}
+              : vtab === 'mcp'
+              ? <>No MCP servers yet — click <strong>+ Add MCP server</strong> to connect a Model Context Protocol server.</>
+              : <>No APIs yet — click <strong>+ Add API</strong> to add an API or integration.</>}
           </div>
         ) : (
-          <div className="vault-grid">
-            {connList.map((c) => (
-              <div className="vault-card" key={c.id}>
-                <div className="vault-card-top">
-                  <span className="vault-ic">{ico(c.kind)}</span>
-                  <div className="vault-card-name">{c.name}</div>
-                  <span className="vault-kind">{c.kind}</span>
-                  <button
-                    className="vault-del-btn"
-                    title="Remove"
-                    disabled={deleting === c.deleteRef}
-                    onClick={() => void handleDelete(c.deleteRef, c.name)}
-                  >
-                    {deleting === c.deleteRef ? '…' : '✕'}
-                  </button>
-                </div>
-                {c.url && (
-                  <div className="vault-card-url">{c.url}</div>
-                )}
-                <div className="vault-card-meta">
-                  <OwnerBadge email={c.ownerEmail} />
-                </div>
-                <div className="vault-card-actions">
-                  {c.url && (
-                    <button
-                      className={`btn btn-xs vault-test-btn${
-                        testResults[c.id] === 'ok' ? ' vault-test-ok' :
-                        typeof testResults[c.id] === 'string' && testResults[c.id] !== 'testing' && testResults[c.id] !== 'ok' ? ' vault-test-fail' : ''
-                      }`}
-                      disabled={testResults[c.id] === 'testing'}
-                      onClick={() => void handleTest(c)}
-                    >
-                      {testResults[c.id] === 'testing' ? 'Testing…' :
-                       testResults[c.id] === 'ok' ? '✓ Connected' :
-                       typeof testResults[c.id] === 'string' && testResults[c.id].startsWith('fail:') ? '✕ Failed' :
-                       'Test'}
-                    </button>
-                  )}
-                  {c.url && (
-                    <button
-                      className="btn btn-xs btn-ghost"
-                      title="Analyse this URL with AI"
-                      onClick={() => setAnalyzeTarget({ url: c.url!, title: c.name })}
-                    >
-                      ⚡ Analyse
-                    </button>
-                  )}
-                  <button
-                    className="vault-edit-icon-btn"
-                    title="Edit connector"
-                    onClick={() => openEdit(c)}
-                  >
-                    ✎
-                  </button>
-                </div>
-                {(testLog[c.id]?.length ?? 0) > 0 && (
-                  <div className="vault-test-log">
-                    {testLog[c.id].map((line, i) => (
-                      <div
-                        key={i}
-                        className={`vault-test-log-line${
-                          line.startsWith('✓') || line === 'Connected' ? ' vault-test-log-ok' :
-                          line.startsWith('✕') || line === 'Connection failed' ? ' vault-test-log-fail' : ''
-                        }`}
+          <div className="vault-list">
+            {connList.map((c) => {
+              const t = realType(c)
+              const isDb = DB_KINDS.has(t)
+              const meta = (c.meta ?? {}) as Record<string, string>
+              const sub = isDb
+                ? `${t}${meta.host ? ` · ${meta.host}` : meta.url ? ` · ${meta.url.replace(/^https?:\/\//, '')}` : ''}`
+                : `${t}${c.url ? ` · ${c.url.replace(/^https?:\/\//, '')}` : ''}`
+              const tr = testResults[c.id]
+              return (
+                <div className="vault-row vault-row--wrap" key={c.id}>
+                  <div className="vault-row-line">
+                    <span className="vault-ic">{ico(t)}</span>
+                    <div className="vault-row-main">
+                      <div className="vault-row-name">{c.name}</div>
+                      <div className="vault-row-sub">{sub}</div>
+                    </div>
+                    {!isDb && c.url && (
+                      <button
+                        className={`btn btn-xs vault-test-btn${tr === 'ok' ? ' vault-test-ok' : typeof tr === 'string' && tr !== 'testing' && tr !== 'ok' ? ' vault-test-fail' : ''}`}
+                        disabled={tr === 'testing'}
+                        onClick={() => void handleTest(c)}
                       >
-                        {line}
-                      </div>
-                    ))}
+                        {tr === 'testing' ? 'Testing…' : tr === 'ok' ? '✓' : typeof tr === 'string' && tr.startsWith('fail:') ? '✕' : 'Test'}
+                      </button>
+                    )}
+                    {isDb ? (
+                      <button
+                        className="btn btn-xs btn-ghost"
+                        title="Discover tables, fields & KPI-worthy data, then build Blocks"
+                        onClick={() => {
+                          const supabase = t === 'supabase' && meta.url && (meta.publishableKey || meta.secretKey)
+                            ? { url: meta.url, key: meta.publishableKey || meta.secretKey } : undefined
+                          setDbAnalyze({ ref: c.deleteRef, name: c.name, supabase })
+                        }}
+                      >
+                        🔬 Analyze
+                      </button>
+                    ) : c.url ? (
+                      <button
+                        className="btn btn-xs btn-ghost"
+                        title="Analyze with AI & build a Block"
+                        onClick={() => setAnalyzeTarget({ url: c.url!, title: c.name })}
+                      >
+                        ⚡ Analyze
+                      </button>
+                    ) : null}
+                    <button className="vault-edit-icon-btn" title="Edit connector" onClick={() => openEdit(c)}>✎</button>
+                    <button className="vault-del-btn" title="Remove" disabled={deleting === c.deleteRef} onClick={() => void handleDelete(c.deleteRef, c.name)}>
+                      {deleting === c.deleteRef ? '…' : '✕'}
+                    </button>
                   </div>
-                )}
-              </div>
-            ))}
+                  {(testLog[c.id]?.length ?? 0) > 0 && (
+                    <div className="vault-test-log">
+                      {testLog[c.id].map((line, i) => (
+                        <div key={i} className={`vault-test-log-line${line.startsWith('✓') || line === 'Connected' ? ' vault-test-log-ok' : line.startsWith('✕') || line === 'Connection failed' ? ' vault-test-log-fail' : ''}`}>{line}</div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
           </div>
         )}
       </section>
@@ -1146,40 +1346,34 @@ export default function Vault() {
             fetched when generating reports.
           </div>
         ) : (
-          <div className="vault-grid">
+          <div className="vault-list">
             {websites.map((w) => (
-              <div className="vault-card" key={w.id}>
-                <div className="vault-card-top">
-                  <span className="vault-ic">{ico('website')}</span>
-                  <div className="vault-card-name">{w.name}</div>
+              <div className="vault-row" key={w.id}>
+                <span className="vault-ic">{ico('website')}</span>
+                <Link
+                  className="vault-row-name vault-row-name--link"
+                  style={{ flex: 1 }}
+                  to={`/app/${orgId}/site?url=${encodeURIComponent(w.url ?? '')}`}
+                >
+                  {(w.url ?? w.name).replace(/^https?:\/\//, '')}
+                </Link>
+                {w.url && (
                   <button
-                    className="vault-del-btn"
-                    title="Remove"
-                    disabled={deleting === w.deleteRef}
-                    onClick={() => void handleDelete(w.deleteRef, w.name)}
+                    className="btn btn-xs btn-ghost"
+                    title="Analyse this URL with AI"
+                    onClick={() => setAnalyzeTarget({ url: w.url!, title: w.name })}
                   >
-                    {deleting === w.deleteRef ? '…' : '✕'}
+                    ⚡ Analyse
                   </button>
-                </div>
-                {w.url && (
-                  <Link className="vault-card-url vault-card-url--link" to={`/app/${orgId}/site?url=${encodeURIComponent(w.url)}`}>
-                    {w.url} → insights
-                  </Link>
                 )}
-                <div className="vault-card-meta">
-                  <OwnerBadge email={w.ownerEmail} />
-                </div>
-                {w.url && (
-                  <div className="vault-card-actions">
-                    <button
-                      className="btn btn-xs btn-ghost"
-                      title="Analyse this URL with AI"
-                      onClick={() => setAnalyzeTarget({ url: w.url!, title: w.name })}
-                    >
-                      ⚡ Analyse
-                    </button>
-                  </div>
-                )}
+                <button
+                  className="vault-del-btn"
+                  title="Remove"
+                  disabled={deleting === w.deleteRef}
+                  onClick={() => void handleDelete(w.deleteRef, w.name)}
+                >
+                  {deleting === w.deleteRef ? '…' : '✕'}
+                </button>
               </div>
             ))}
           </div>
@@ -1198,8 +1392,9 @@ export default function Vault() {
               ref={dataFileRef}
               type="file"
               accept=".csv,.tsv,.json,.txt,.xlsx,.xls"
+              multiple
               style={{ display: 'none' }}
-              onChange={(e) => { const f = e.target.files?.[0]; if (f) void uploadDataFile(f) }}
+              onChange={(e) => { const fs = e.target.files; if (fs?.length) void uploadDataFiles(Array.from(fs)) }}
               disabled={dataUploading}
             />
             {dataUploading ? 'Uploading…' : '+ Upload data'}
@@ -1259,8 +1454,9 @@ export default function Vault() {
               ref={docFileRef}
               type="file"
               accept=".md,.txt,.html,.htm,.csv,.json,.xml,.yaml,.yml,.pdf"
+              multiple
               style={{ display: 'none' }}
-              onChange={(e) => { const f = e.target.files?.[0]; if (f) void uploadDocFile(f) }}
+              onChange={(e) => { const fs = e.target.files; if (fs?.length) void uploadDocFiles(Array.from(fs)) }}
               disabled={docDropping}
             />
             {docDropping ? 'Uploading…' : '+ Upload'}
@@ -1281,8 +1477,8 @@ export default function Vault() {
             onDrop={(e) => {
               e.preventDefault()
               setDocDragOver(false)
-              const f = e.dataTransfer.files?.[0]
-              if (f) void uploadDocFile(f)
+              const fs = e.dataTransfer.files
+              if (fs?.length) void uploadDocFiles(Array.from(fs))
             }}
           >
           {sourceDocs.length === 0 && !docDropping ? (
@@ -1337,6 +1533,17 @@ export default function Vault() {
         <div className="vault-section-head">
           <h2>Markdown</h2>
           <span className="vault-count">{markdownDocs.length}</span>
+          {mdSelected.size > 0 && (
+            <div className="vault-bulk">
+              <span className="vault-bulk-count">{mdSelected.size} selected</span>
+              <button type="button" className="btn btn-ghost btn-xs" onClick={() => setMdSelected(new Set())} disabled={bulkDeleting}>
+                Clear
+              </button>
+              <button type="button" className="btn btn-danger btn-xs" onClick={() => void bulkDeleteMd()} disabled={bulkDeleting}>
+                {bulkDeleting ? 'Deleting…' : `🗑 Delete ${mdSelected.size}`}
+              </button>
+            </div>
+          )}
         </div>
         {loading ? (
           <div className="vault-empty">Loading…</div>
@@ -1346,40 +1553,75 @@ export default function Vault() {
             research or report and it lands here.
           </div>
         ) : (
-          <div className="vault-list">
-            {markdownDocs.map((d) => (
-              <div className="vault-row" key={d.id}>
-                <span className="vault-ic">📝</span>
-                <div className="vault-row-main">
-                  <button
-                    type="button"
-                    className="vault-row-name vault-row-name--link"
-                    onClick={() => void openPreview(d)}
-                    disabled={previewLoading && previewRef === d.deleteRef}
-                  >
-                    {previewLoading && previewRef === d.deleteRef ? '…' : d.name}
-                  </button>
-                  <div className="vault-row-sub">
-                    {SOURCE_LABEL[d.sourceType]} · {d.sourceName}
-                    {d.scope ? ` · ${d.scope}` : ''}
-                  </div>
-                </div>
-                <span className="vault-kind">md</span>
-                <OwnerBadge email={d.ownerEmail} />
-                <button
-                  className="vault-del-btn"
-                  title="Remove"
-                  disabled={deleting === d.deleteRef}
-                  onClick={() => void handleDelete(d.deleteRef, d.name)}
-                >
-                  {deleting === d.deleteRef ? '…' : '✕'}
-                </button>
-              </div>
-            ))}
-          </div>
+          <table className="vault-table">
+            <thead>
+              <tr>
+                <th className="vault-th-sel">
+                  <input
+                    type="checkbox"
+                    className="vault-check"
+                    checked={mdAllSelected}
+                    ref={(el) => { if (el) el.indeterminate = mdSelected.size > 0 && !mdAllSelected }}
+                    onChange={toggleMdSelectAll}
+                    aria-label="Select all markdown files"
+                  />
+                </th>
+                <th className="vault-th-ic" />
+                <th><button type="button" className="vault-th" onClick={() => mdToggleSort('name')}>Name <span className="vault-th-arrow">{mdArrow('name')}</span></button></th>
+                <th><button type="button" className="vault-th" onClick={() => mdToggleSort('category')}>Category <span className="vault-th-arrow">{mdArrow('category')}</span></button></th>
+                <th><button type="button" className="vault-th" onClick={() => mdToggleSort('date')}>Added <span className="vault-th-arrow">{mdArrow('date')}</span></button></th>
+                <th />
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {sortedMd.map((d) => (
+                <tr className={`vault-trow${mdSelected.has(d.deleteRef) ? ' vault-trow--sel' : ''}`} key={d.id}>
+                  <td className="vault-td-sel">
+                    <input
+                      type="checkbox"
+                      className="vault-check"
+                      checked={mdSelected.has(d.deleteRef)}
+                      onChange={() => toggleMdSelect(d.deleteRef)}
+                      aria-label={`Select ${d.name}`}
+                    />
+                  </td>
+                  <td className="vault-td-ic">📝</td>
+                  <td>
+                    <button
+                      type="button"
+                      className="vault-row-name vault-row-name--link"
+                      onClick={() => void openPreview(d)}
+                      disabled={previewLoading && previewRef === d.deleteRef}
+                    >
+                      {previewLoading && previewRef === d.deleteRef ? '…' : d.name}
+                    </button>
+                    <div className="vault-row-sub">{SOURCE_LABEL[d.sourceType]} · {d.sourceName}{d.scope ? ` · ${d.scope}` : ''}</div>
+                  </td>
+                  <td><span className="vault-cat">{d.category ?? 'Document'}</span></td>
+                  <td className="vault-td-date">
+                    {d.createdAt ? new Date(d.createdAt).toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : '—'}
+                  </td>
+                  <td><OwnerBadge email={d.ownerEmail} /></td>
+                  <td>
+                    <button
+                      className="vault-del-btn"
+                      title="Delete"
+                      disabled={deleting === d.deleteRef}
+                      onClick={() => void handleDelete(d.deleteRef, d.name, true)}
+                    >
+                      {deleting === d.deleteRef ? '…' : '🗑'}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         )}
       </section>
       )}
+
+      {vtab === 'employees' && <Employees orgId={orgId} />}
 
       {/* Document preview modal */}
       {(preview || (previewLoading && previewRef)) && (
@@ -1457,30 +1699,38 @@ export default function Vault() {
 
       {showAdd && (() => {
         const fields = CONNECTOR_FIELDS[addType] ?? DEFAULT_FIELDS
+        const typeChoices = vtab === 'databases'
+          ? CONNECTOR_TYPES.filter((t) => DB_TYPE_IDS.has(t.id))
+          : vtab === 'mcp'
+          ? []
+          : CONNECTOR_TYPES.filter((t) => !DB_TYPE_IDS.has(t.id) && t.id !== 'mcp')
+        const modalTitle = vtab === 'databases' ? 'Connect a database' : vtab === 'mcp' ? 'Add MCP server' : 'Add connector'
         return (
           <div className="vault-modal-backdrop" onClick={() => !addSaving && setShowAdd(false)}>
             <form className="vault-modal vault-add-modal" onClick={(e) => e.stopPropagation()} onSubmit={(e) => void handleAddSave(e)}>
               <div className="vault-modal-head">
-                <h2>Add connector</h2>
+                <h2>{modalTitle}</h2>
                 <button type="button" className="vault-modal-close" onClick={() => setShowAdd(false)}>✕</button>
               </div>
 
-              <label className="vault-modal-field">
-                <span>Type</span>
-                <div className="vault-type-grid">
-                  {CONNECTOR_TYPES.map((t) => (
-                    <button
-                      key={t.id}
-                      type="button"
-                      className={`vault-type-btn${addType === t.id ? ' selected' : ''}`}
-                      onClick={() => { setAddType(t.id); setAddMeta({}) }}
-                    >
-                      <span className="vault-type-icon">{t.icon}</span>
-                      {t.label}
-                    </button>
-                  ))}
-                </div>
-              </label>
+              {typeChoices.length > 0 && (
+                <label className="vault-modal-field">
+                  <span>{vtab === 'databases' ? 'Database type' : 'Type'}</span>
+                  <div className="vault-type-grid">
+                    {typeChoices.map((t) => (
+                      <button
+                        key={t.id}
+                        type="button"
+                        className={`vault-type-btn${addType === t.id ? ' selected' : ''}`}
+                        onClick={() => { setAddType(t.id); setAddMeta({}) }}
+                      >
+                        <span className="vault-type-icon">{t.icon}</span>
+                        {t.label}
+                      </button>
+                    ))}
+                  </div>
+                </label>
+              )}
 
               <label className="vault-modal-field">
                 <span>Name</span>
@@ -1513,7 +1763,7 @@ export default function Vault() {
               <div className="vault-modal-actions">
                 <button type="button" className="btn btn-ghost btn-xs" onClick={() => setShowAdd(false)} disabled={addSaving}>Cancel</button>
                 <button type="submit" className="btn btn-primary btn-xs" disabled={addSaving || !addName.trim()}>
-                  {addSaving ? 'Saving…' : 'Add connector'}
+                  {addSaving ? 'Saving…' : vtab === 'databases' ? 'Add database' : vtab === 'mcp' ? 'Add MCP server' : 'Add connector'}
                 </button>
               </div>
             </form>
@@ -1587,6 +1837,14 @@ export default function Vault() {
           onClose={() => setAnalyzeTarget(null)}
           onCreated={() => void load()}
         />
+      )}
+
+      {scanReport && (
+        <PowerBiScanModal orgId={orgId} report={scanReport} onClose={() => setScanReport(null)} />
+      )}
+
+      {dbAnalyze && (
+        <DbAnalyzeModal orgId={orgId} deleteRef={dbAnalyze.ref} name={dbAnalyze.name} supabase={dbAnalyze.supabase} onClose={() => setDbAnalyze(null)} />
       )}
     </main>
   )

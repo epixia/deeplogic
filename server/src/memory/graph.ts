@@ -17,6 +17,45 @@ export function normalizeName(s: string): string {
   return s.toLowerCase().trim().replace(/\s+/g, ' ').slice(0, 200);
 }
 
+const uniq = (a: string[]): string[] => [...new Set(a.filter(Boolean))];
+
+// A looser key than normalizeName: drops corporate suffixes + punctuation so
+// "Acme Inc." / "Acme Corporation" / "Acme" collapse to "acme". Stored as an
+// alias so name variants resolve to one entity even without embeddings.
+const CORP_SUFFIX = /\b(inc|incorporated|corp|corporation|co|company|llc|llp|lp|ltd|limited|plc|gmbh|s\.?a|ag|nv|bv|group|holdings?|technologies|technology|labs?|software|systems|solutions)\b/g;
+function canonicalKey(s: string): string {
+  const k = normalizeName(s).replace(/[.,'"()]/g, '').replace(CORP_SUFFIX, '').replace(/\s+/g, ' ').trim();
+  return k || normalizeName(s);
+}
+
+// Canonical predicate: strip copulas/articles/aux verbs, then map common business
+// synonyms to one form so "is CEO of" / "serves as CEO of" / "heads" all unify.
+const PRED_SYNONYMS: Record<string, string> = {
+  'ceo of': 'leads', 'cto of': 'leads', 'cfo of': 'leads', 'head of': 'leads', 'president of': 'leads',
+  'leads': 'leads', 'runs': 'leads', 'heads': 'leads', 'manages': 'leads', 'director of': 'leads',
+  'competes with': 'competes with', 'competitor of': 'competes with', 'rival of': 'competes with', 'rivals': 'competes with',
+  'based in': 'based in', 'headquartered in': 'based in', 'located in': 'based in', 'hq in': 'based in',
+  'acquired': 'acquired', 'bought': 'acquired', 'purchased': 'acquired',
+  'founded': 'founded', 'established': 'founded', 'cofounded': 'founded', 'co-founded': 'founded',
+  'raised': 'raised', 'secured': 'raised',
+  'partners with': 'partners with', 'partnered with': 'partners with', 'partnership with': 'partners with',
+  'owns': 'owns', 'owner of': 'owns', 'parent of': 'owns',
+  'subsidiary of': 'subsidiary of', 'part of': 'subsidiary of', 'owned by': 'subsidiary of',
+};
+function canonPredicate(p: string): string {
+  const s = p.toLowerCase().trim()
+    .replace(/[.,;:]+$/, '')
+    .replace(/\b(is|are|was|were|be|being|been|has|have|had|having|the|a|an|currently|now|serves?|served|works?|worked|as)\b/g, ' ')
+    .replace(/\s+/g, ' ').trim();
+  return PRED_SYNONYMS[s] ?? s;
+}
+
+// Predicates that hold ONE object at a time → a new object supersedes the old.
+// Everything else is multi-valued (a company competes with / partners with / owns
+// MANY things), so a different object is an ADDITION, never a contradiction.
+const SINGLE_VALUED = new Set(['leads', 'based in', 'subsidiary of']);
+const canonObject = (t: string | null): string => (t ?? '').toLowerCase().replace(/[.,'"]/g, '').trim();
+
 interface ExtractedEntity { name: string; type: string; summary?: string }
 interface ExtractedFact { subject: string; predicate: string; object: string; statement: string }
 interface Extraction { entities: ExtractedEntity[]; facts: ExtractedFact[] }
@@ -87,42 +126,70 @@ export async function extractKnowledge(ai: AiConfig, title: string, text: string
   }
 }
 
-interface EntityRow { id: string; type: string }
+// Bump mention_count and (optionally) fold name variants into the entity's
+// aliases, so future lookups resolve the same node without re-embedding.
+async function reuseEntity(db: SupabaseClient, id: string, addAliases: string[] = []): Promise<string> {
+  const { data } = await db.from('memory_entities')
+    .select('aliases, mention_count').eq('id', id).maybeSingle();
+  const row = data as { aliases: string[] | null; mention_count: number } | null;
+  // Keep all variant keys (incl. ones equal to the normalized name) — a canonical
+  // key that matches the normalized name is exactly what later suffix-variants hit.
+  const aliases = uniq([...(row?.aliases ?? []), ...addAliases]);
+  const patch: Record<string, unknown> = {
+    mention_count: (row?.mention_count ?? 1) + 1,
+    updated_at: new Date().toISOString(),
+  };
+  if (aliases.length !== (row?.aliases ?? []).length) patch.aliases = aliases;
+  await db.from('memory_entities').update(patch).eq('id', id);
+  return id;
+}
 
-// Find an existing entity (by normalized name, then by embedding similarity) or
-// create one. Bumps mention_count on reuse.
+// Resolve an extracted entity to a graph node, fighting fragmentation in layers:
+//   1) exact normalized name           2) alias / canonical-key overlap (same type)
+//   3) embedding similarity (type-aware threshold; records the variant as an alias)
+//   4) otherwise create — seeded with its canonical key as an alias.
 async function resolveEntity(
   db: SupabaseClient, orgId: string, ent: ExtractedEntity, embedKey: string | null,
 ): Promise<string | null> {
   const normalized = normalizeName(ent.name);
   if (!normalized) return null;
+  const canonical = canonicalKey(ent.name);
   const type = (ENTITY_TYPES as readonly string[]).includes(ent.type) ? ent.type : 'concept';
 
+  // 1) exact normalized name (any type — an exact string match is authoritative).
+  //    Seed the canonical key into aliases so suffix-variants resolve here later
+  //    (self-heals entities created before alias matching existed).
   const { data: exact } = await db.from('memory_entities')
-    .select('id, type, mention_count').eq('org_id', orgId).eq('normalized_name', normalized).maybeSingle();
-  if (exact) {
-    const row = exact as EntityRow & { mention_count: number };
-    await db.from('memory_entities')
-      .update({ mention_count: (row.mention_count ?? 1) + 1, updated_at: new Date().toISOString() })
-      .eq('id', row.id);
-    return row.id;
-  }
+    .select('id').eq('org_id', orgId).eq('normalized_name', normalized).maybeSingle();
+  if (exact) return reuseEntity(db, (exact as { id: string }).id, [canonical]);
 
+  // 2) alias / canonical-key overlap — same type only, to avoid merging e.g.
+  //    the company "Apple" with the concept "apple".
+  const { data: aliasHit } = await db.from('memory_entities')
+    .select('id').eq('org_id', orgId).eq('type', type)
+    .overlaps('aliases', uniq([normalized, canonical])).limit(1).maybeSingle();
+  if (aliasHit) return reuseEntity(db, (aliasHit as { id: string }).id, [normalized, canonical]);
+
+  // 3) embedding similarity — accept a high match outright, or a slightly looser
+  //    match when the entity types agree.
   let embedding: number[] | null = null;
   if (embedKey) {
     embedding = await embedText(`${ent.name}\n${ent.summary ?? ''}`, embedKey);
     if (embedding) {
       const { data: near } = await db.rpc('match_memory_entities', {
-        p_org_id: orgId, p_embedding: toVectorLiteral(embedding), p_count: 1,
+        p_org_id: orgId, p_embedding: toVectorLiteral(embedding), p_count: 3,
       });
-      const top = Array.isArray(near) ? (near[0] as { id: string; similarity: number } | undefined) : undefined;
-      if (top && top.similarity > 0.9) return top.id;
+      const rows = (near ?? []) as { id: string; type: string; similarity: number }[];
+      const hit = rows.find((r) => r.similarity > 0.9 || (r.similarity > 0.84 && r.type === type));
+      if (hit) return reuseEntity(db, hit.id, [normalized, canonical]);
     }
   }
 
+  // 4) create — seed aliases with the canonical key so suffix variants resolve here next time.
   const { data: created, error } = await db.from('memory_entities').insert({
     org_id: orgId, name: ent.name.slice(0, 200), normalized_name: normalized, type,
     summary: (ent.summary ?? '').slice(0, 1000),
+    aliases: uniq([canonical]),
     embedding: embedding ? toVectorLiteral(embedding) : null,
   }).select('id').single();
   if (error) return null;
@@ -164,17 +231,25 @@ export async function ingestEpisode(
     const objId = idByNorm.get(normalizeName(f.object)) ?? null;
     const objText = objId ? null : (f.object ?? '').slice(0, 400) || null;
     const predicate = f.predicate.trim().slice(0, 120);
+    const canonPred = canonPredicate(predicate);
 
-    // Temporal supersession: invalidate prior valid facts with the same
-    // subject+predicate but a DIFFERENT object (knowledge changed over time).
+    // Temporal supersession, predicate-aware: compare against ALL of the subject's
+    // valid facts by CANONICAL predicate (so "is CEO of" == "serves as CEO of").
+    //  - same object  → duplicate, skip.
+    //  - different object on a SINGLE-VALUED predicate (role, location, parent)
+    //    → the world changed: supersede the old fact.
+    //  - different object on a multi-valued predicate (competes with, owns, …)
+    //    → an addition; keep both.
     const { data: priors } = await db.from('memory_facts')
-      .select('id, object_id, object_text')
-      .eq('org_id', orgId).eq('subject_id', subjId).eq('predicate', predicate)
+      .select('id, predicate, object_id, object_text')
+      .eq('org_id', orgId).eq('subject_id', subjId)
       .is('valid_to', null).is('invalid_at', null);
     let duplicate = false;
-    for (const p of (priors ?? []) as { id: string; object_id: string | null; object_text: string | null }[]) {
-      const sameObj = (objId && p.object_id === objId) || (!objId && p.object_text === objText);
+    for (const p of (priors ?? []) as { id: string; predicate: string; object_id: string | null; object_text: string | null }[]) {
+      if (canonPredicate(p.predicate) !== canonPred) continue;
+      const sameObj = (objId && p.object_id === objId) || (!objId && canonObject(p.object_text) === canonObject(objText));
       if (sameObj) { duplicate = true; continue; }
+      if (!SINGLE_VALUED.has(canonPred)) continue; // multi-valued: coexist
       await db.from('memory_facts').update({ valid_to: now, invalid_at: now }).eq('id', p.id);
       superseded++;
     }
@@ -196,41 +271,105 @@ export async function ingestEpisode(
   return { episodeId, entities: idByNorm.size, facts, superseded };
 }
 
-// Semantic recall over currently-valid facts — for grounding the assistant/agents.
+interface FactRow {
+  id: string; statement: string; predicate: string;
+  subject_id: string | null; object_id: string | null;
+  valid_from: string; valid_to: string | null;
+}
+const FACT_COLS = 'id, statement, predicate, subject_id, object_id, valid_from, valid_to';
+
+// Graph-aware recall (GraphRAG): instead of returning a flat list of facts that
+// each look like the query, we (1) SEED with the most relevant facts AND entities,
+// then (2) EXPAND one hop along the graph to pull in the connected neighborhood,
+// then (3) assemble a subgraph that leads with relevance. The assistant gets
+// facts that hang together (an entity + what it's connected to), not isolated hits.
 export async function recallMemory(
   db: SupabaseClient, orgId: string, query: string, k: number, embedKey: string | null,
   opts?: { includeStale?: boolean },
 ): Promise<{ statement: string; predicate: string; validFrom: string; validTo: string | null }[]> {
   const includeStale = opts?.includeStale ?? false;
-  // Preferred path: pgvector semantic recall (needs OpenAI embeddings).
+
+  // ---- 1) Seed: semantically relevant facts + entities -------------------
+  let seedFacts: FactRow[] = [];
+  const seedEntityIds = new Set<string>();
+
   if (embedKey) {
     const emb = await embedText(query, embedKey);
     if (emb) {
-      const { data, error } = await db.rpc('match_memory_facts', {
-        p_org_id: orgId, p_embedding: toVectorLiteral(emb), p_count: k, p_include_stale: includeStale,
+      const vec = toVectorLiteral(emb);
+      const { data: fData } = await db.rpc('match_memory_facts', {
+        p_org_id: orgId, p_embedding: vec, p_count: Math.max(k, 8), p_include_stale: includeStale,
       });
-      if (!error && Array.isArray(data) && data.length) {
-        return (data as { statement: string; predicate: string; valid_from: string; valid_to: string | null }[])
-          .map((r) => ({ statement: r.statement, predicate: r.predicate, validFrom: r.valid_from, validTo: r.valid_to }));
+      seedFacts = ((fData ?? []) as FactRow[]).map((r) => ({
+        id: r.id, statement: r.statement, predicate: r.predicate,
+        subject_id: r.subject_id, object_id: r.object_id, valid_from: r.valid_from, valid_to: r.valid_to,
+      }));
+      // Entity seeds catch "tell me about <entity>" where no single fact text matches.
+      const { data: eData } = await db.rpc('match_memory_entities', {
+        p_org_id: orgId, p_embedding: vec, p_count: 5,
+      });
+      for (const e of (eData ?? []) as { id: string; similarity: number }[]) {
+        if (e.similarity > 0.35) seedEntityIds.add(e.id);
       }
     }
   }
-  // Fallback: keyword overlap over currently-valid fact statements (no embeddings).
-  let q = db.from('memory_facts').select('statement, predicate, valid_from, valid_to').eq('org_id', orgId);
-  if (!includeStale) q = q.is('valid_to', null).is('invalid_at', null);
-  const { data } = await q.limit(1000);
-  const rows = (data ?? []) as { statement: string; predicate: string; valid_from: string; valid_to: string | null }[];
-  const terms = query.toLowerCase().split(/[^a-z0-9]+/).filter((t) => t.length >= 3);
-  const scored = rows
-    .map((r) => ({ r, score: terms.reduce((s, t) => s + (r.statement.toLowerCase().includes(t) ? 1 : 0), 0) }))
-    .filter((s) => s.score > 0)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, k);
-  return scored.map((s) => ({ statement: s.r.statement, predicate: s.r.predicate, validFrom: s.r.valid_from, validTo: s.r.valid_to }));
+
+  // Keyword fallback (no embeddings, or the vector seed came back empty).
+  if (seedFacts.length === 0) {
+    let fq = db.from('memory_facts').select(FACT_COLS).eq('org_id', orgId);
+    if (!includeStale) fq = fq.is('valid_to', null).is('invalid_at', null);
+    const { data } = await fq.limit(1000);
+    const terms = query.toLowerCase().split(/[^a-z0-9]+/).filter((t) => t.length >= 3);
+    seedFacts = ((data ?? []) as FactRow[])
+      .map((r) => ({ r, score: terms.reduce((s, t) => s + (r.statement.toLowerCase().includes(t) ? 1 : 0), 0) }))
+      .filter((s) => s.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, Math.max(k, 8))
+      .map((s) => s.r);
+  }
+
+  // Top seed facts contribute their endpoints as expansion roots.
+  for (const f of seedFacts.slice(0, 6)) {
+    if (f.subject_id) seedEntityIds.add(f.subject_id);
+    if (f.object_id) seedEntityIds.add(f.object_id);
+  }
+
+  // ---- 2) Expand one hop: facts touching any seed entity -----------------
+  const seedFactIds = new Set(seedFacts.map((f) => f.id));
+  let neighborhood: FactRow[] = [];
+  const ids = [...seedEntityIds].slice(0, 12);
+  if (ids.length) {
+    const list = ids.join(',');
+    let nq = db.from('memory_facts').select(FACT_COLS).eq('org_id', orgId)
+      .or(`subject_id.in.(${list}),object_id.in.(${list})`);
+    if (!includeStale) nq = nq.is('valid_to', null).is('invalid_at', null);
+    const { data } = await nq.limit(80);
+    const inSeed = (id: string | null) => !!id && seedEntityIds.has(id);
+    neighborhood = ((data ?? []) as FactRow[])
+      .filter((f) => !seedFactIds.has(f.id))
+      .sort((a, b) => {
+        // Bridges between two seed entities first; then most recent.
+        const sb = (inSeed(b.subject_id) ? 1 : 0) + (inSeed(b.object_id) ? 1 : 0);
+        const sa = (inSeed(a.subject_id) ? 1 : 0) + (inSeed(a.object_id) ? 1 : 0);
+        return sb !== sa ? sb - sa : (b.valid_from ?? '').localeCompare(a.valid_from ?? '');
+      });
+  }
+
+  // ---- 3) Assemble a connected subgraph, leading with relevance ----------
+  const lead = Math.min(seedFacts.length, Math.max(2, Math.ceil(k * 0.6)));
+  const chosen: FactRow[] = [];
+  const seen = new Set<string>();
+  const push = (f: FactRow) => { if (!seen.has(f.id)) { seen.add(f.id); chosen.push(f); } };
+  seedFacts.slice(0, lead).forEach(push);
+  for (const f of neighborhood) { if (chosen.length >= k) break; push(f); }
+  for (const f of seedFacts) { if (chosen.length >= k) break; push(f); } // fill any leftover slots
+  return chosen.slice(0, k).map((f) => ({
+    statement: f.statement, predicate: f.predicate, validFrom: f.valid_from, validTo: f.valid_to,
+  }));
 }
 
 export interface MemoryGraph {
-  entities: { id: string; name: string; type: string; summary: string }[];
+  entities: { id: string; name: string; type: string; summary: string; mentionCount: number }[];
   facts: { id: string; subjectId: string; objectId: string | null; objectText: string | null; predicate: string; statement: string; validTo: string | null }[];
 }
 
@@ -238,14 +377,105 @@ export interface MemoryGraph {
 // (greyed) edges too, for a temporal view.
 export async function getMemoryGraph(db: SupabaseClient, orgId: string, includeStale = false): Promise<MemoryGraph> {
   const { data: ents } = await db.from('memory_entities')
-    .select('id, name, type, summary').eq('org_id', orgId).order('mention_count', { ascending: false }).limit(500);
+    .select('id, name, type, summary, mention_count').eq('org_id', orgId).order('mention_count', { ascending: false }).limit(500);
   let q = db.from('memory_facts')
     .select('id, subject_id, object_id, object_text, predicate, statement, valid_to').eq('org_id', orgId);
   if (!includeStale) q = q.is('valid_to', null).is('invalid_at', null);
   const { data: fs } = await q.limit(2000);
   return {
-    entities: ((ents ?? []) as { id: string; name: string; type: string; summary: string }[]),
+    entities: ((ents ?? []) as { id: string; name: string; type: string; summary: string; mention_count: number }[])
+      .map((e) => ({ id: e.id, name: e.name, type: e.type, summary: e.summary, mentionCount: e.mention_count ?? 1 })),
     facts: ((fs ?? []) as { id: string; subject_id: string; object_id: string | null; object_text: string | null; predicate: string; statement: string; valid_to: string | null }[])
       .map((f) => ({ id: f.id, subjectId: f.subject_id, objectId: f.object_id, objectText: f.object_text, predicate: f.predicate, statement: f.statement, validTo: f.valid_to })),
   };
+}
+
+// ---------------------------------------------------------------------------
+// Curation — manual fixes for the Memory page: merge duplicate entities, rename,
+// delete bad extractions. Everything is RLS-scoped to the caller's org.
+// ---------------------------------------------------------------------------
+
+export async function deleteFact(db: SupabaseClient, orgId: string, id: string): Promise<void> {
+  await db.from('memory_facts').delete().eq('org_id', orgId).eq('id', id);
+}
+
+// Entity FKs cascade (subject_id / object_id ON DELETE CASCADE), so its facts go too.
+export async function deleteEntity(db: SupabaseClient, orgId: string, id: string): Promise<void> {
+  await db.from('memory_entities').delete().eq('org_id', orgId).eq('id', id);
+}
+
+export async function updateEntity(
+  db: SupabaseClient, orgId: string, id: string,
+  patch: { name?: string; type?: string; summary?: string },
+): Promise<{ ok: boolean; error?: string }> {
+  const { data: cur } = await db.from('memory_entities')
+    .select('name, normalized_name, aliases').eq('org_id', orgId).eq('id', id).maybeSingle();
+  if (!cur) return { ok: false, error: 'Entity not found.' };
+  const c = cur as { name: string; normalized_name: string; aliases: string[] | null };
+  const set: Record<string, unknown> = { updated_at: new Date().toISOString() };
+
+  if (typeof patch.name === 'string' && patch.name.trim() && normalizeName(patch.name) !== c.normalized_name) {
+    const nn = normalizeName(patch.name);
+    const { data: clash } = await db.from('memory_entities')
+      .select('id').eq('org_id', orgId).eq('normalized_name', nn).neq('id', id).maybeSingle();
+    if (clash) return { ok: false, error: 'Another entity already has that name — use Merge instead.' };
+    set.name = patch.name.trim().slice(0, 200);
+    set.normalized_name = nn;
+    // keep the old name resolvable
+    set.aliases = uniq([...(c.aliases ?? []), c.normalized_name, canonicalKey(c.name)]);
+  }
+  if (typeof patch.type === 'string' && (ENTITY_TYPES as readonly string[]).includes(patch.type)) set.type = patch.type;
+  if (typeof patch.summary === 'string') set.summary = patch.summary.slice(0, 1000);
+
+  const { error } = await db.from('memory_entities').update(set).eq('org_id', orgId).eq('id', id);
+  return error ? { ok: false, error: error.message } : { ok: true };
+}
+
+// Drop exact-duplicate VALID facts for a subject (same canonical predicate + object),
+// keeping the earliest. Used after a merge folds two nodes together.
+async function dedupeSubjectFacts(db: SupabaseClient, orgId: string, subjId: string): Promise<number> {
+  const { data } = await db.from('memory_facts')
+    .select('id, predicate, object_id, object_text')
+    .eq('org_id', orgId).eq('subject_id', subjId).is('valid_to', null).is('invalid_at', null)
+    .order('created_at', { ascending: true });
+  const facts = (data ?? []) as { id: string; predicate: string; object_id: string | null; object_text: string | null }[];
+  const seen = new Set<string>(); const dups: string[] = [];
+  for (const f of facts) {
+    const key = `${canonPredicate(f.predicate)}|${f.object_id ?? canonObject(f.object_text)}`;
+    if (seen.has(key)) dups.push(f.id); else seen.add(key);
+  }
+  if (dups.length) await db.from('memory_facts').delete().in('id', dups);
+  return dups.length;
+}
+
+// Fold `sourceId` into `targetId`: repoint every fact, merge identity (name →
+// aliases, mention counts, summary), delete the source, then dedupe.
+export async function mergeEntities(
+  db: SupabaseClient, orgId: string, sourceId: string, targetId: string,
+): Promise<{ ok: boolean; error?: string; deduped?: number }> {
+  if (!sourceId || !targetId || sourceId === targetId) return { ok: false, error: 'Pick two different entities.' };
+  const { data: ents } = await db.from('memory_entities')
+    .select('id, name, normalized_name, aliases, mention_count, summary').eq('org_id', orgId).in('id', [sourceId, targetId]);
+  const rows = (ents ?? []) as { id: string; name: string; normalized_name: string; aliases: string[] | null; mention_count: number; summary: string }[];
+  const src = rows.find((r) => r.id === sourceId);
+  const tgt = rows.find((r) => r.id === targetId);
+  if (!src || !tgt) return { ok: false, error: 'Entity not found.' };
+
+  // Repoint edges, then drop any self-loops the merge created.
+  await db.from('memory_facts').update({ subject_id: targetId }).eq('org_id', orgId).eq('subject_id', sourceId);
+  await db.from('memory_facts').update({ object_id: targetId }).eq('org_id', orgId).eq('object_id', sourceId);
+  await db.from('memory_facts').delete().eq('org_id', orgId).eq('subject_id', targetId).eq('object_id', targetId);
+
+  // Fold identity into the target.
+  const aliases = uniq([...(tgt.aliases ?? []), ...(src.aliases ?? []), src.normalized_name, canonicalKey(src.name)]);
+  await db.from('memory_entities').update({
+    aliases,
+    mention_count: (tgt.mention_count ?? 1) + (src.mention_count ?? 0),
+    summary: (tgt.summary ?? '').trim() ? tgt.summary : src.summary,
+    updated_at: new Date().toISOString(),
+  }).eq('id', targetId);
+
+  await db.from('memory_entities').delete().eq('org_id', orgId).eq('id', sourceId);
+  const deduped = await dedupeSubjectFacts(db, orgId, targetId);
+  return { ok: true, deduped };
 }

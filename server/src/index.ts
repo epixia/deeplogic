@@ -17,15 +17,20 @@ import { missionRouter } from './routes/mission.js';
 import { studioRouter, onboardingPublicRouter } from './routes/studio.js';
 import { billingRouter, stripeWebhookHandler } from './routes/billing.js';
 import { adminRouter } from './routes/admin.js';
+import { platformRouter } from './routes/platform.js';
 import { sandboxRouter } from './routes/sandbox.js';
+import { innovationRouter } from './routes/innovation.js';
+import { interviewRouter, vapiWebhookRouter } from './routes/interview.js';
+import { employeesRouter } from './routes/employees.js';
 import { dashboardsRouter } from './routes/dashboards.js';
 import { agentsRouter, agentCallbackRouter } from './routes/agents.js';
 import { integrationsRouter } from './routes/integrations.js';
 import { memoryRouter } from './routes/memory.js';
-import { alertsRouter } from './routes/alerts.js';
+import { alertsRouter, checkAllActiveAlerts } from './routes/alerts.js';
 import { goalsRouter } from './routes/goals.js';
 import { searchRouter } from './routes/search.js';
 import { webhookIngestRouter } from './routes/webhooks.js';
+import { openDataRouter } from './routes/openData.js';
 
 // Platform AI (onboarding/anonymous) uses a server env key, kept separate from
 // per-client workspace keys (org_ai_settings) — see serverFallbackAi().
@@ -58,6 +63,9 @@ app.use('/api', inviteRouter);   // GET /invite/:token + POST /invite/:token/acc
 app.use('/api', agentCallbackRouter);  // POST /agent-callback/:id — VM→central, token-authed
 app.use('/api', onboardingPublicRouter);  // POST /onboarding/analyze — anonymous, pre-account
 app.use('/api', webhookIngestRouter);  // POST /webhooks/:orgId/ingest — external→DataVault, token-authed
+app.use('/api', vapiWebhookRouter);    // POST /webhooks/vapi — Vapi phone-interview transcript → DataVault
+app.use('/api', openDataRouter);  // GET /open-data/ckan — public open-data proxy for Blocks
+app.use('/api', platformRouter);  // GET /platform/appearance — public global appearance
 
 // Everything else under /api requires authentication.
 app.use('/api', requireAuth);
@@ -72,6 +80,9 @@ app.use('/api', studioRouter);
 app.use('/api', billingRouter);
 app.use('/api', adminRouter);
 app.use('/api', sandboxRouter);
+app.use('/api', innovationRouter);
+app.use('/api', interviewRouter);
+app.use('/api', employeesRouter);
 app.use('/api', dashboardsRouter);
 app.use('/api', agentsRouter);
 app.use('/api', integrationsRouter);
@@ -83,3 +94,8 @@ app.use('/api', searchRouter);
 app.listen(PORT, () => {
   console.log(`DeepLogic API listening on http://localhost:${PORT}`);
 });
+
+// Alert scheduler — evaluate active alerts every 3 minutes (structured triggers
+// each tick; AI conditions self-throttle to ~30 min). Best-effort, never crashes.
+const ALERT_TICK_MS = 3 * 60 * 1000;
+setInterval(() => { void checkAllActiveAlerts().catch((e) => console.error('[alerts] tick error', e)); }, ALERT_TICK_MS);

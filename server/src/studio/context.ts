@@ -55,7 +55,14 @@ async function renderVault(vault: VaultItem[]): Promise<string[]> {
   if (files.length) {
     parts.push('### Attached files');
     for (const f of files) {
-      parts.push(`#### ${f.name}`);
+      const meta = (f.meta ?? {}) as Record<string, unknown>;
+      const cat = typeof meta.category === 'string' ? meta.category : '';
+      const tags = Array.isArray(meta.tags)
+        ? (meta.tags as unknown[]).filter((t): t is string => typeof t === 'string')
+        : [];
+      const label = [cat ? `type: ${cat}` : '', tags.length ? `tags: ${tags.join(', ')}` : '']
+        .filter(Boolean).join(' · ');
+      parts.push(`#### ${f.name}${label ? ` — ${label}` : ''}`);
       if (f.content) parts.push('```\n' + f.content + '\n```');
     }
   }
@@ -95,7 +102,17 @@ async function renderVault(vault: VaultItem[]): Promise<string[]> {
   if (notes.length) {
     parts.push('### Vault notes');
     for (const n of notes) {
+      const meta = (n.meta ?? {}) as Record<string, unknown>;
+      const who = typeof meta.interviewee === 'string' ? meta.interviewee : '';
+      const role = typeof meta.role === 'string' ? meta.role : '';
+      const date = typeof meta.date === 'string' ? meta.date : '';
       parts.push(`#### ${n.name}`);
+      if (who) {
+        parts.push(
+          `Source: ${who}${role ? `, ${role}` : ''}${date ? ` (${date})` : ''}. ` +
+            'Expert/tribal knowledge captured in an interview — attribute to this source when used.'
+        );
+      }
       if (n.content) parts.push(n.content);
     }
   }

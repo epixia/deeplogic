@@ -4,6 +4,24 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>DeepLogic — Agentic Mission Control for Your Company Data</title>
+    <script>
+      // Pre-paint theme: apply the saved theme (default dark) and color the root
+      // BEFORE React mounts, so the page never flashes dark→white on load.
+      // ThemeManager re-applies the full skin/brand palette after mount.
+      (function () {
+        try {
+          var t = localStorage.getItem('dl-theme');
+          if (t !== 'light' && t !== 'dark') t = 'dark';
+          var root = document.documentElement;
+          root.setAttribute('data-theme', t);
+          var bg = t === 'light' ? '#faf9f8' : '#070b12';
+          var ink = t === 'light' ? '#201f1e' : '#eaf3fb';
+          root.style.setProperty('--bg', bg);
+          root.style.setProperty('--ink', ink);
+          root.style.backgroundColor = bg; // paint immediately, before CSS loads
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

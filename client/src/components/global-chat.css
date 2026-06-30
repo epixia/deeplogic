@@ -57,9 +57,9 @@
 
 .gchat-body { flex: 1; overflow-y: auto; padding: 14px; }
 
-.gchat-welcome { text-align: center; padding: 18px 8px; color: var(--mut); }
-.gchat-welcome-ic { font-size: 30px; color: var(--cyan); }
-.gchat-welcome h4 { font-size: 16px; font-weight: 800; color: var(--ink); margin: 8px 0 4px; }
+.gchat-welcome { text-align: center; padding: 4px 8px 14px; color: var(--mut); }
+.gchat-welcome-ic { font-size: 28px; color: var(--cyan); }
+.gchat-welcome h4 { font-size: 16px; font-weight: 800; color: var(--ink); margin: 4px 0 4px; }
 .gchat-welcome p { font-size: 12.5px; line-height: 1.5; margin-bottom: 12px; }
 .gchat-quick { display: flex; flex-direction: column; gap: 7px; }
 .gchat-quick-btn {
@@ -235,6 +235,25 @@
 .gchat-trace summary::-webkit-details-marker { display: none; }
 .gchat-trace[open] summary { margin-bottom: 6px; }
 .gchat-trace .gchat-step { padding: 2px 0; }
+
+/* "Read from your Data Vault" provenance chips */
+.gchat-readdocs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--mut);
+}
+.gchat-readdocs-label { font-weight: 600; }
+.gchat-readdoc {
+  font-weight: 600;
+  color: var(--cyan);
+  background: rgba(111, 227, 240, .1);
+  border: 1px solid rgba(111, 227, 240, .25);
+  border-radius: 99px;
+  padding: 1px 8px;
+}
 
 .gchat-working { display: inline-flex; align-items: center; gap: 8px; color: var(--mut); }
 .gchat-dots { display: inline-flex; gap: 3px; }

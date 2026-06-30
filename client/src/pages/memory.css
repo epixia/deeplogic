@@ -1,11 +1,13 @@
 /* Memory — Obsidian-style markdown knowledge base. */
 
 .mem { padding: 40px 0 80px; }
+.wrap.mem { max-width: 1560px; }
 .btn.mem-on { border-color: var(--cyan); color: var(--cyan); }
 
 .mem-grid {
   display: grid;
-  grid-template-columns: 240px 1fr 250px;
+  /* list | markdown (grows) | rail (collapses when there are no tags) */
+  grid-template-columns: 280px minmax(0, 1fr) auto;
   gap: 16px;
   align-items: start;
 }
@@ -36,12 +38,13 @@
   background: rgba(111, 227, 240, .08); border: 1px solid rgba(111, 227, 240, .35);
   border-radius: 99px; padding: 2px 9px; cursor: pointer;
 }
-.mem-list-items { display: flex; flex-direction: column; gap: 2px; max-height: 60vh; overflow-y: auto; }
+.mem-list-items { display: flex; flex-direction: column; gap: 4px; max-height: 66vh; overflow-y: auto; padding-right: 3px; }
 .mem-list-item {
-  text-align: left; padding: 8px 10px; border-radius: 8px; border: none;
-  background: transparent; color: var(--ink); font-size: 13px; cursor: pointer;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  text-align: left; padding: 10px 12px; border-radius: 9px; border: 1px solid transparent;
+  background: transparent; color: var(--ink); font-size: 13px; line-height: 1.4; cursor: pointer;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: break-word;
 }
+.mem-list-item:hover { border-color: var(--line); }
 .mem-list-item:hover { background: rgba(255, 255, 255, .05); }
 [data-theme='light'] .mem-list-item:hover { background: rgba(20, 55, 90, .05); }
 .mem-list-item.active { background: rgba(111, 227, 240, .1); color: var(--cyan); font-weight: 600; }
@@ -121,7 +124,7 @@
   padding: 6px;
   overflow: hidden;
 }
-.mem-graph-svg { width: 100%; height: auto; display: block; }
+.mem-graph-svg { width: 100%; height: 78vh; min-height: 560px; display: block; }
 .mem-edge { stroke: rgba(120, 180, 220, 0.22); stroke-width: 1; transition: stroke .12s, opacity .12s; }
 .mem-edge.lit { stroke: var(--cyan); stroke-width: 1.6; }
 .mem-node { cursor: pointer; transition: opacity .15s; }
@@ -150,12 +153,63 @@
 .mem-kg-bar .btn:last-child { margin-left: auto; }
 .mem-kg-note { font-size: 12.5px; color: var(--mut); background: var(--bg2); border: 1px solid var(--line); border-radius: 8px; padding: 7px 11px; }
 
-.mem-kg-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; }
-.mem-kg-leg { font-size: 11.5px; color: var(--mut); display: flex; align-items: center; gap: 5px; text-transform: capitalize; }
+.mem-kg-legend { display: flex; flex-wrap: wrap; gap: 5px 8px; }
+.mem-kg-leg {
+  font-size: 11.5px; color: var(--mut); display: inline-flex; align-items: center; gap: 5px;
+  text-transform: capitalize; background: var(--card); border: 1px solid var(--line);
+  border-radius: 999px; padding: 3px 9px; cursor: pointer; font-family: inherit; transition: .12s;
+}
+.mem-kg-leg:hover { border-color: var(--cyan); color: var(--ink); }
+.mem-kg-leg.is-off { opacity: .4; text-decoration: line-through; }
 .mem-kg-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; display: inline-block; }
 
-.mem-kg-stage { position: relative; }
-.mem-kg-edgelabel { fill: var(--cyan); font-size: 10px; text-anchor: middle; pointer-events: none; }
+/* graph toolbar: search + type filters + focus chip */
+.mem-kg-controls { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.mem-kg-searchbox {
+  display: inline-flex; align-items: center; gap: 6px; background: var(--card);
+  border: 1px solid var(--line); border-radius: 9px; padding: 5px 10px; min-width: 200px;
+}
+.mem-kg-searchbox:focus-within { border-color: var(--cyan); box-shadow: 0 0 0 3px rgba(111,227,240,.12); }
+.mem-kg-search-ic { color: var(--mut); font-size: 14px; }
+.mem-kg-search { flex: 1; min-width: 0; background: none; border: none; outline: none; color: var(--ink); font: inherit; font-size: 13px; }
+.mem-kg-search-clear { background: none; border: none; color: var(--mut); cursor: pointer; font-size: 11px; padding: 0 2px; }
+.mem-kg-search-clear:hover { color: var(--ink); }
+.mem-kg-focus-exit {
+  margin-left: auto; font-size: 12px; font-weight: 600; color: var(--cyan); cursor: pointer;
+  background: rgba(111,227,240,.1); border: 1px solid rgba(111,227,240,.3); border-radius: 999px; padding: 4px 11px;
+}
+.mem-kg-focus-exit:hover { background: rgba(111,227,240,.18); }
+
+.mem-kg-stage {
+  position: relative;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse at center, rgba(111, 227, 240, 0.05), transparent 70%),
+    var(--bg);
+}
+[data-theme='light'] .mem-kg-stage { background: radial-gradient(ellipse at center, rgba(15, 108, 189, 0.05), transparent 70%), var(--bg); }
+.mem-kg-stage .mem-graph-svg { height: calc(100vh - 200px); min-height: 600px; }
+
+/* Zoom controls overlay (wheel to zoom, drag empty space to pan) */
+.mem-kg-zoom { position: absolute; top: 12px; right: 12px; z-index: 2; display: flex; flex-direction: column; gap: 6px; }
+.mem-kg-zoom button { width: 32px; height: 32px; border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 8px; font-size: 17px; line-height: 1; cursor: pointer; display: grid; place-items: center; box-shadow: 0 2px 8px rgba(0,0,0,.2); }
+.mem-kg-zoom button:hover { border-color: var(--cyan); color: var(--cyan); }
+
+.mem-kg-edgelabel { fill: var(--cyan); font-size: 10px; text-anchor: middle; pointer-events: none; paint-order: stroke; stroke: var(--bg); stroke-width: 3px; }
+/* KG node labels: readable, with a subtle halo so they don't clash with edges */
+.mem-kg-stage .mem-node text { fill: var(--ink); font-size: 11px; font-weight: 600; paint-order: stroke; stroke: var(--bg); stroke-width: 3px; }
+.mem-kg-stage .mem-node circle { stroke: rgba(0,0,0,.25); stroke-width: 1.5; }
+
+/* directional edge arrowheads */
+.mem-arrow { fill: rgba(120, 180, 220, 0.4); }
+.mem-arrow-lit { fill: var(--cyan); }
+[data-theme='light'] .mem-arrow { fill: rgba(20, 55, 90, 0.32); }
+/* fat invisible hit-area so thin edges are hoverable */
+.mem-edge-hit { stroke: transparent; stroke-width: 12; cursor: default; }
+/* search-matched nodes get a bright ring */
+.mem-node.match circle { stroke: var(--cyan); stroke-width: 3; filter: drop-shadow(0 0 5px rgba(111,227,240,.7)); }
 
 .mem-kg-panel {
   position: absolute; top: 10px; right: 10px; width: 290px; max-height: 92%;
@@ -170,8 +224,36 @@
 .mem-kg-summary { font-size: 12.5px; color: var(--mut); line-height: 1.5; margin: 8px 0; }
 .mem-kg-panel h5 { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--mut); margin: 6px 0; }
 .mem-kg-facts { list-style: none; display: flex; flex-direction: column; gap: 7px; margin: 0; padding: 0; }
-.mem-kg-facts li { font-size: 12.5px; line-height: 1.45; color: var(--ink); padding-left: 11px; position: relative; }
+.mem-kg-facts li { font-size: 12.5px; line-height: 1.45; color: var(--ink); padding-left: 11px; position: relative; display: flex; align-items: flex-start; gap: 6px; }
 .mem-kg-facts li::before { content: '•'; position: absolute; left: 0; color: var(--cyan); }
 .mem-kg-facts li.is-stale { color: var(--mut); text-decoration: line-through; }
 .mem-kg-facts li.is-stale em { text-decoration: none; font-style: normal; }
+.mem-kg-fact-txt { flex: 1; min-width: 0; }
+.mem-kg-fact-del { flex: none; background: none; border: none; color: var(--mut); cursor: pointer; font-size: 11px; padding: 0 3px; opacity: 0; transition: opacity .12s, color .12s; }
+.mem-kg-facts li:hover .mem-kg-fact-del { opacity: 1; }
+.mem-kg-fact-del:hover:not(:disabled) { color: var(--bad); }
 .mem-kg-empty { color: var(--mut); }
+
+/* curation */
+.mem-kg-tools { display: flex; gap: 6px; margin: 10px 0 8px; }
+.mem-kg-danger:hover:not(:disabled) { color: var(--bad); border-color: var(--bad); }
+.mem-kg-merge { border-top: 1px solid var(--line); padding-top: 10px; margin-bottom: 6px; }
+.mem-kg-merge > label, .mem-kg-edit > label { display: block; font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; color: var(--mut); margin-bottom: 4px; }
+.mem-kg-merge-row { display: flex; gap: 6px; }
+.mem-kg-merge-row select { flex: 1; min-width: 0; }
+.mem-kg-merge select, .mem-kg-edit input, .mem-kg-edit select, .mem-kg-edit textarea {
+  width: 100%; background: var(--card2, var(--card)); color: var(--ink);
+  border: 1px solid var(--line); border-radius: 7px; padding: 6px 8px; font: inherit; font-size: 12.5px;
+}
+.mem-kg-edit { display: flex; flex-direction: column; gap: 8px; margin: 10px 0; }
+.mem-kg-edit label { display: flex; flex-direction: column; gap: 4px; }
+.mem-kg-edit textarea { resize: vertical; line-height: 1.45; }
+.mem-kg-edit-actions { display: flex; justify-content: flex-end; gap: 6px; }
+.mem-kg-err { color: var(--bad); font-size: 12px; margin: 8px 0; }
+
+/* Notes sidebar pagination */
+.mem-pager { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 8px 4px 2px; }
+.mem-pager-btn { width: 28px; height: 26px; border: 1px solid var(--line); background: var(--bg2); color: var(--ink); border-radius: 7px; cursor: pointer; font-size: 14px; line-height: 1; }
+.mem-pager-btn:hover:not(:disabled) { border-color: var(--cyan); color: var(--cyan); }
+.mem-pager-btn:disabled { opacity: .4; cursor: default; }
+.mem-pager-info { font-size: 12px; color: var(--mut); font-variant-numeric: tabular-nums; }

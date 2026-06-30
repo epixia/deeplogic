@@ -264,3 +264,7 @@
   font-size: 12px;
   padding: 4px 8px;
 }
+
+/* Generate-skills button in the Tools section */
+.agents-tools-label { display: flex; align-items: center; gap: 8px; }
+.agents-gen-skills { margin-left: auto; }

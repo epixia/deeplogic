@@ -9,7 +9,6 @@ import {
   listGoals,
   createGoal,
   updateGoal,
-  deleteGoal,
   draftGoal,
   runGoalStream,
   type Goal,
@@ -36,7 +35,6 @@ export default function Goals() {
   const [goals, setGoals] = useState<Goal[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [busyId, setBusyId] = useState<string | null>(null)
 
   // create / edit modal
   const [showModal, setShowModal] = useState(false)
@@ -132,20 +130,6 @@ export default function Goals() {
     }
   }
 
-  async function setStatus(g: Goal, status: Goal['status']) {
-    setBusyId(g.id)
-    try {
-      const t = await getAccessToken()
-      if (!t) throw new Error('Session expired')
-      const updated = await updateGoal(t, orgId, g.id, { status })
-      setGoals((prev) => prev.map((x) => (x.id === updated.id ? updated : x)))
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Update failed.')
-    } finally {
-      setBusyId(null)
-    }
-  }
-
   // Spin up & run the goal's agents, streaming live thoughts to the toast.
   async function runGoal(g: Goal) {
     if (runningGoal) return
@@ -177,21 +161,6 @@ export default function Goals() {
       endActivity(actId, 'Failed', '✗')
     } finally {
       setRunningGoal(null)
-    }
-  }
-
-  async function remove(g: Goal) {
-    if (!confirm(`Delete the goal "${g.title}"? This cannot be undone.`)) return
-    setBusyId(g.id)
-    try {
-      const t = await getAccessToken()
-      if (!t) throw new Error('Session expired')
-      await deleteGoal(t, orgId, g.id)
-      setGoals((prev) => prev.filter((x) => x.id !== g.id))
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Delete failed.')
-    } finally {
-      setBusyId(null)
     }
   }
 
@@ -281,12 +250,6 @@ export default function Goals() {
                   {runningGoal === g.id ? '⏳ Running…' : '▶ Run'}
                 </button>
                 <button type="button" className="btn btn-ghost btn-xs" onClick={() => openEdit(g)}>Edit</button>
-                {g.status !== 'done' ? (
-                  <button type="button" className="btn btn-ghost btn-xs" disabled={busyId === g.id} onClick={() => void setStatus(g, 'done')}>Mark done</button>
-                ) : (
-                  <button type="button" className="btn btn-ghost btn-xs" disabled={busyId === g.id} onClick={() => void setStatus(g, 'active')}>Reopen</button>
-                )}
-                <button type="button" className="goal-del" title="Delete goal" disabled={busyId === g.id} onClick={() => void remove(g)}>✕</button>
               </div>
             </article>
           ))}

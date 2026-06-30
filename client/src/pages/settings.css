@@ -651,3 +651,24 @@
 .dl-skin-name { font-size: 14px; font-weight: 700; display: flex; align-items: center; gap: 7px; color: var(--ink); }
 .dl-skin-check { color: var(--cyan); }
 .dl-skin-desc { font-size: 12px; line-height: 1.4; color: var(--mut); }
+
+/* Branding (accent + logo colour) */
+.dl-brand-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+  margin-top: 6px;
+}
+.dl-brand-card {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px; border-radius: 14px; border: 1px solid var(--line);
+  background: var(--bg2); cursor: pointer; text-align: left;
+  transition: border-color .12s, transform .08s;
+}
+.dl-brand-card:hover { border-color: rgba(120, 180, 220, .4); }
+.dl-brand-card:active { transform: translateY(1px); }
+.dl-brand-card.selected { border-color: var(--cyan); box-shadow: 0 0 0 2px rgba(111, 227, 240, .18); }
+.dl-brand-swatch { width: 40px; height: 40px; border-radius: 10px; flex: none; box-shadow: 0 4px 12px rgba(0, 0, 0, .25); }
+.dl-brand-meta { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.dl-brand-name { font-size: 14px; font-weight: 700; display: flex; align-items: center; gap: 7px; color: var(--ink); }
+.dl-brand-desc { font-size: 12px; line-height: 1.4; color: var(--mut); }

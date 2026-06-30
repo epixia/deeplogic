@@ -3,7 +3,7 @@
 
 import { useEffect } from 'react'
 import { useAppTheme } from './studio/reportTheme'
-import { applySkin, readSkin, SKIN_EVENT, type ThemeMode } from '../styles/skins'
+import { applySkin, applyBrand, readSkin, readBrand, SKIN_EVENT, BRAND_EVENT, type ThemeMode } from '../styles/skins'
 
 export default function ThemeManager() {
   const theme = useAppTheme() // re-renders on data-theme AND skin changes
@@ -11,18 +11,21 @@ export default function ThemeManager() {
   useEffect(() => {
     const mode: ThemeMode = theme === 'light' ? 'light' : 'dark'
     applySkin(readSkin(), mode)
+    applyBrand(readBrand(), mode) // brand accent/logo layered on top of the skin
   }, [theme])
 
-  // Also re-apply immediately on skin change (independent of theme).
+  // Also re-apply immediately on skin OR brand change (independent of theme).
   useEffect(() => {
     const apply = () => {
       const mode: ThemeMode =
         (document.documentElement.getAttribute('data-theme') || 'dark') === 'light' ? 'light' : 'dark'
       applySkin(readSkin(), mode)
+      applyBrand(readBrand(), mode)
     }
     apply()
     window.addEventListener(SKIN_EVENT, apply)
-    return () => window.removeEventListener(SKIN_EVENT, apply)
+    window.addEventListener(BRAND_EVENT, apply)
+    return () => { window.removeEventListener(SKIN_EVENT, apply); window.removeEventListener(BRAND_EVENT, apply) }
   }, [])
 
   return null

@@ -10,6 +10,13 @@ import { useAuth } from '../auth/AuthContext'
 import { getBillingSubscription, getOpenRouterBalance, type OpenRouterBalance } from '../lib/api'
 import { NAV_PREFS_EVENT, readHiddenNav, readNavOrder, saveNavOrder, orderedVisibleNav } from '../lib/navPrefs'
 
+// Odoo CRM runs as its own instance outside DeepLogic — the dropdown opens it
+// directly in a new tab, deep-linked to the CRM pipeline (not Odoo's home).
+// Override the base per-device via localStorage('dl-crm-odoo-url').
+const ODOO_BASE =
+  (typeof localStorage !== 'undefined' && localStorage.getItem('dl-crm-odoo-url')) || 'http://localhost:8069'
+const ODOO_CRM_URL = `${ODOO_BASE.replace(/\/+$/, '')}/web#action=crm.crm_lead_action_pipeline&menu_id=239`
+
 // ---------------------------------------------------------------------------
 // TrialBadge — shows days remaining in the org's trial. Fetches billing once
 // per orgId and caches in module state so re-renders don't re-fetch.
@@ -209,6 +216,12 @@ function UserMenu({
               <Link className="dl-user-dropdown-item dl-user-dropdown-item--admin" to="/admin">
                 Admin dashboard
               </Link>
+              <a className="dl-user-dropdown-item dl-user-dropdown-item--admin" href={ODOO_CRM_URL} target="_blank" rel="noopener noreferrer">
+                📇 CRM ↗
+              </a>
+              <a className="dl-user-dropdown-item dl-user-dropdown-item--admin" href="/admin/cannara-demo" target="_blank" rel="noopener noreferrer">
+                🌿 Cannara Demo ↗
+              </a>
             </>
           )}
           <div className="dl-user-dropdown-divider" />

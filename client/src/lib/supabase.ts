@@ -5,10 +5,10 @@
 
 import { createClient } from '@supabase/supabase-js'
 
-const url = import.meta.env.VITE_SUPABASE_URL as string | undefined
+const envUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined
 const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
 
-if (!url || !anonKey) {
+if (!envUrl || !anonKey) {
   // Surface a clear error during dev rather than failing deep inside the client.
   // eslint-disable-next-line no-console
   console.error(
@@ -16,7 +16,15 @@ if (!url || !anonKey) {
   )
 }
 
-export const supabase = createClient(url ?? '', anonKey ?? '', {
+// In dev, route Supabase through the Vite `/sb` proxy so it's SAME-ORIGIN as the
+// app (no CORS). Local Supabase sends `Access-Control-Allow-Origin: *` with
+// `Allow-Credentials: true`, which browsers reject for credentialed requests
+// (password reset/update). Production uses the real, CORS-correct Supabase URL.
+const url = import.meta.env.DEV && typeof window !== 'undefined'
+  ? `${window.location.origin}/sb`
+  : (envUrl ?? '')
+
+export const supabase = createClient(url, anonKey ?? '', {
   auth: {
     persistSession: true,
     autoRefreshToken: true,

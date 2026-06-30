@@ -18,6 +18,7 @@ export type ConnectorCategory =
   | 'support'
   | 'productivity'
   | 'files'
+  | 'data'
   | 'custom'
 
 export type ConnectorAuthType =
@@ -26,6 +27,8 @@ export type ConnectorAuthType =
   | 'webhook'
   | 'database'
   | 'file_upload'
+  | 'mcp'
+  | 'rest'
 
 export interface Connector {
   id: string
@@ -53,6 +56,7 @@ export const CONNECTOR_CATEGORIES: { id: ConnectorCategory; label: string }[] = 
   { id: 'support', label: 'Support' },
   { id: 'productivity', label: 'Productivity' },
   { id: 'files', label: 'Files' },
+  { id: 'data', label: 'Open Data' },
   { id: 'custom', label: 'Custom' },
 ]
 
@@ -62,6 +66,8 @@ export const CONNECTOR_AUTH_LABEL: Record<ConnectorAuthType, string> = {
   webhook: 'Webhook',
   database: 'Database',
   file_upload: 'File Upload',
+  mcp: 'MCP',
+  rest: 'REST API',
 }
 
 // ---------------------------------------------------------------------------
@@ -252,6 +258,20 @@ export const CONNECTORS: Connector[] = [
     isActive: true,
   },
   {
+    id: 'open-canada',
+    name: 'Open Canada — Datastore Search API',
+    slug: 'open-canada',
+    category: 'data',
+    authType: 'rest',
+    icon: '🇨🇦',
+    description:
+      'Query Government of Canada open datasets via the CKAN Datastore Search API. Search any published resource by id and pull live records straight into your DataVault — no API key required.',
+    supportedEntities: ['Datasets', 'Resources', 'Records', 'Fields'],
+    recommendedBlocks: ['Table Block', 'KPI Block', 'Chart Block', 'Insight Block'],
+    isNative: true,
+    isActive: true,
+  },
+  {
     id: 'powerbi',
     name: 'Power BI',
     slug: 'powerbi',
@@ -280,6 +300,7 @@ const CONNECTOR_DOCS: Record<string, string> = {
   webhook: 'https://en.wikipedia.org/wiki/Webhook',
   'custom-api': 'https://developer.mozilla.org/en-US/docs/Web/HTTP',
   powerbi: 'https://learn.microsoft.com/en-us/rest/api/power-bi/',
+  'open-canada': 'https://open.canada.ca/data/en/api/3/action/datastore_search?resource_id=2f960711-2447-472d-81b0-731fdfbf59a1',
 }
 for (const c of CONNECTORS) c.docsUrl = CONNECTOR_DOCS[c.id]
 

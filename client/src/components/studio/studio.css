@@ -1426,6 +1426,7 @@
   transform-origin: top left;
   pointer-events: none;
   display: block;
+  background: transparent;
 }
 .studio-thumb-empty {
   display: grid;

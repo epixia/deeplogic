@@ -69,6 +69,9 @@
 .cp-web { font-size: 13px; color: var(--cyan); text-decoration: none; }
 .cp-web:hover { text-decoration: underline; }
 .cp-tagline { font-size: 14px; color: var(--ink); font-style: italic; }
+.cp-contact { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 13px; color: var(--mut); }
+.cp-contact a { color: var(--cyan); text-decoration: none; }
+.cp-contact a:hover { text-decoration: underline; }
 
 .cp-sections {
   display: grid;

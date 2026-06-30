@@ -30,7 +30,7 @@ export interface AuthContextValue {
   orgs: OrgMembership[]
   refreshOrgs: () => Promise<void>
   signIn: (email: string, password: string) => Promise<{ error?: string }>
-  signUp: (email: string, password: string, name?: string) => Promise<{ error?: string }>
+  signUp: (email: string, password: string, name?: string, phone?: string) => Promise<{ error?: string }>
   resetPassword: (email: string) => Promise<{ error?: string }>
   updatePassword: (password: string) => Promise<{ error?: string }>
   updateProfile: (patch: { name?: string; avatarUrl?: string }) => Promise<{ error?: string }>
@@ -119,10 +119,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   )
 
   const signUp = useCallback(
-    async (email: string, password: string, name?: string): Promise<{ error?: string }> => {
+    async (email: string, password: string, name?: string, phone?: string): Promise<{ error?: string }> => {
+      const meta: Record<string, string> = {}
+      if (name) meta.full_name = name
+      if (phone) meta.phone = phone
       const { data, error } = await supabase.auth.signUp({
         email, password,
-        options: name ? { data: { full_name: name } } : undefined,
+        options: Object.keys(meta).length ? { data: meta } : undefined,
       })
       if (error) return { error: error.message }
       if (!data.session) {

@@ -53,5 +53,8 @@ export function applyReportTheme(html: string, theme: string): string {
   } else {
     out = out.replace(/<html([^>]*)>/i, (m) => `${m}<head>${styleTag}</head>`)
   }
+  // 3) external links (http/https) open in a new tab, not inside the platform.
+  const linkScript = `<script>(function(){function fix(){var a=document.querySelectorAll('a[href]');for(var i=0;i<a.length;i++){var h=a[i].getAttribute('href')||'';if(/^https?:\\/\\//i.test(h)){a[i].target='_blank';a[i].rel='noopener noreferrer';}}}if(document.readyState!=='loading')fix();else document.addEventListener('DOMContentLoaded',fix);try{new MutationObserver(fix).observe(document.documentElement,{childList:true,subtree:true});}catch(e){}})();</script>`
+  out = /<\/body>/i.test(out) ? out.replace(/<\/body>/i, `${linkScript}</body>`) : out + linkScript
   return out
 }

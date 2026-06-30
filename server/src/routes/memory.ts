@@ -8,7 +8,7 @@ import { Router, type Request, type Response } from 'express';
 import { requireMember } from '../auth.js';
 import { loadAiConfig } from './studio.js';
 import { resolveEmbeddingKey } from '../studio/embeddings.js';
-import { ingestEpisode, recallMemory, getMemoryGraph } from '../memory/graph.js';
+import { ingestEpisode, recallMemory, getMemoryGraph, mergeEntities, updateEntity, deleteEntity, deleteFact } from '../memory/graph.js';
 
 export const memoryRouter = Router();
 
@@ -83,6 +83,55 @@ memoryRouter.get('/orgs/:orgId/memory/graph', requireMember(), async (req: Reque
   } catch (err) {
     console.error('memory graph failed', err);
     res.status(500).json({ error: 'Failed to load memory graph' });
+  }
+});
+
+// POST /memory/entities/merge { sourceId, targetId } — fold source into target
+memoryRouter.post('/orgs/:orgId/memory/entities/merge', requireMember(), async (req: Request, res: Response) => {
+  const { orgId } = req.params;
+  const { sourceId, targetId } = (req.body || {}) as { sourceId?: string; targetId?: string };
+  try {
+    const r = await mergeEntities(req.db!, orgId, String(sourceId ?? ''), String(targetId ?? ''));
+    if (!r.ok) { res.status(400).json({ error: r.error ?? 'Merge failed' }); return; }
+    res.json(r);
+  } catch (err) {
+    console.error('memory merge failed', err);
+    res.status(500).json({ error: 'Merge failed' });
+  }
+});
+
+// PATCH /memory/entities/:id { name?, type?, summary? } — rename / retype / re-summarize
+memoryRouter.patch('/orgs/:orgId/memory/entities/:id', requireMember(), async (req: Request, res: Response) => {
+  const { orgId, id } = req.params;
+  try {
+    const r = await updateEntity(req.db!, orgId, id, (req.body || {}) as { name?: string; type?: string; summary?: string });
+    if (!r.ok) { res.status(400).json({ error: r.error ?? 'Update failed' }); return; }
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('memory entity update failed', err);
+    res.status(500).json({ error: 'Update failed' });
+  }
+});
+
+// DELETE /memory/entities/:id — removes the entity and its facts (FK cascade)
+memoryRouter.delete('/orgs/:orgId/memory/entities/:id', requireMember(), async (req: Request, res: Response) => {
+  try {
+    await deleteEntity(req.db!, req.params.orgId, req.params.id);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('memory entity delete failed', err);
+    res.status(500).json({ error: 'Delete failed' });
+  }
+});
+
+// DELETE /memory/facts/:id — remove a single fact (bad extraction)
+memoryRouter.delete('/orgs/:orgId/memory/facts/:id', requireMember(), async (req: Request, res: Response) => {
+  try {
+    await deleteFact(req.db!, req.params.orgId, req.params.id);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('memory fact delete failed', err);
+    res.status(500).json({ error: 'Delete failed' });
   }
 });
 

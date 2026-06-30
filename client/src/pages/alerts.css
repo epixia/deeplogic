@@ -136,3 +136,10 @@
   height: 12px;
   border-width: 2px;
 }
+
+/* Trigger kind selector + badge */
+.studio-seg--wrap { flex-wrap: wrap; }
+.alerts-threshold-row { display: flex; gap: 8px; }
+.alerts-threshold-row select { flex: 1; }
+.alerts-threshold-row input { width: 110px; }
+.alert-kind-badge { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; color: var(--cyan); background: rgba(111,227,240,.1); border: 1px solid rgba(111,227,240,.28); border-radius: 99px; padding: 1px 7px; }
